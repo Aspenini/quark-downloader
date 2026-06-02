@@ -1,1 +1,18 @@
+# Build outputs
 /build/
+/bin/
+/installer/output/
+
+# Runtime tool cache (next to executable)
+/tools/
+
+# Crystal
+*.dwarf
+/.crystal/
+/.shards/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~

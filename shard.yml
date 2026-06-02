@@ -1,14 +1,10 @@
 name: quark-downloader
 version: 0.1.0
 
-description: |
-  Quark Downloader — interactive CLI wrapper for yt-dlp
+description: Interactive CLI wrapper for yt-dlp
 
 license: MIT
 
-# Prefer `just build` (release + UPX → build/).
-# shards build still targets bin/ unless you pass -o manually.
-
 targets:
   quark-downloader:
-    main: quark-downloader.cr
+    main: src/quark-downloader.cr
