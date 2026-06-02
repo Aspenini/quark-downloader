@@ -3,6 +3,9 @@ version: 0.1.0
 
 description: Interactive CLI wrapper for yt-dlp
 
+homepage: https://github.com/Aspenini/quark-downloader
+repository: https://github.com/Aspenini/quark-downloader
+
 license: MIT
 
 targets:
