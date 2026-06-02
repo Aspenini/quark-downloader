@@ -5,7 +5,6 @@
     </td>
     <td align="right">
       <h1>Quark Downloader</h1>
-      <h3 style="margin-top: -10px;">Interactive CLI for <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>.</h3>
     </td>
   </tr>
 </table>
