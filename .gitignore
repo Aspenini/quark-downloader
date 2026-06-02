@@ -1,3 +1,7 @@
+# Windows ffmpeg binaries (place locally; not in git)
+/bundled-tools/*
+!/bundled-tools/.gitkeep
+
 # Build outputs
 /build/
 /bin/
