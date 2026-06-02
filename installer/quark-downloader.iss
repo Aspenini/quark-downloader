@@ -4,23 +4,62 @@
 ;
 ; Build the application first:
 ;   just build
-;
-; Compile:
-;   "C:\Program Files\Inno Setup 7\ISCC.exe" installer\quark-downloader.iss
-;
-; Output:
-;   installer\output\quark-downloader-0.1.0-setup.exe
+
 
 #define MyAppName       "Quark Downloader"
 #define MyAppVersion    "0.1.0"
 #define MyAppPublisher  "Quark Downloader"
 #define MyAppExeName    "quark-downloader.exe"
 
-#define BuildSource     "..\build\" + MyAppExeName
+#define BuildDir        "..\build"
+#define BuildSource     BuildDir + "\" + MyAppExeName
+#define AppIcon         "..\icons\icon.ico"
+
+#define GcDll           BuildDir + "\gc.dll"
+#define IconvDll        BuildDir + "\iconv-2.dll"
+#define CryptoDll       BuildDir + "\libcrypto-3-x64.dll"
+#define SslDll          BuildDir + "\libssl-3-x64.dll"
+#define PcreDll         BuildDir + "\pcre2-8.dll"
+#define ZlibDll         BuildDir + "\zlib1.dll"
 
 #ifexist BuildSource
 #else
   #pragma error "Run `just build` first — expected ..\build\quark-downloader.exe"
+#endif
+
+#ifexist AppIcon
+#else
+  #pragma error "Expected icons\icon.ico"
+#endif
+
+#ifexist GcDll
+#else
+  #pragma error "Missing required runtime DLL: gc.dll"
+#endif
+
+#ifexist IconvDll
+#else
+  #pragma error "Missing required runtime DLL: iconv-2.dll"
+#endif
+
+#ifexist CryptoDll
+#else
+  #pragma error "Missing required runtime DLL: libcrypto-3-x64.dll"
+#endif
+
+#ifexist SslDll
+#else
+  #pragma error "Missing required runtime DLL: libssl-3-x64.dll"
+#endif
+
+#ifexist PcreDll
+#else
+  #pragma error "Missing required runtime DLL: pcre2-8.dll"
+#endif
+
+#ifexist ZlibDll
+#else
+  #pragma error "Missing required runtime DLL: zlib1.dll"
 #endif
 
 [Setup]
@@ -29,6 +68,8 @@ AppId={{8F3C2A1B-4D5E-6F70-8A9B-0C1D2E3F4A5B}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+
+SetupIconFile={#AppIcon}
 
 ; Per-user install location.
 ; Writable by the current user, so the app can download/update tools in {app}\tools.
@@ -48,13 +89,11 @@ LZMAUseSeparateProcess=yes
 ; Automatically follows Windows light/dark mode.
 WizardStyle=modern dynamic windows11
 
-SetupArchitecture=x64
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
-; No admin prompt.
+; Per-user install only. No admin prompt.
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
 
 DisableProgramGroupPage=no
 
@@ -76,9 +115,21 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[Dirs]
+; Tool directory used by bundled and downloaded subprocess tools.
+Name: "{app}\tools"
+
 [Files]
 ; Main app executable
 Source: "{#BuildSource}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
+
+; Required runtime DLLs
+Source: "{#GcDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
+Source: "{#IconvDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
+Source: "{#CryptoDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
+Source: "{#SslDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
+Source: "{#PcreDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
+Source: "{#ZlibDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
 
 ; Optional bundled tools.
 ; If present, they get included.
@@ -95,10 +146,6 @@ Source: "..\build\tools\ffprobe.exe"; DestDir: "{app}\tools"; Flags: ignoreversi
 Source: "..\build\tools\yt-dlp.exe"; DestDir: "{app}\tools"; Flags: ignoreversion restartreplace uninsrestartdelete
 #endif
 
-[Dirs]
-; Tool directory used by bundled and downloaded subprocess tools.
-Name: "{app}\tools"
-
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
