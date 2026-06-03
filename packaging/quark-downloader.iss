@@ -246,7 +246,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "gui"; Description: "Create a &desktop shortcut for the GUI"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+Name: "cli"; Description: "Create a &desktop shortcut for the CLI"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 
 
@@ -324,5 +326,7 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppGuiExeName}"; IconFilename
 
 Name: "{group}\{#MyAppName} (CLI)"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppGuiExeName}"; IconFilename: "{app}\{#MyAppGuiExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppGuiExeName}"; IconFilename: "{app}\{#MyAppGuiExeName}"; WorkingDir: "{app}"; Tasks: gui
+
+Name: "{autodesktop}\{#MyAppName} (CLI)"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: cli
 
