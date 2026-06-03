@@ -28,7 +28,7 @@
 | **ffmpeg** | PATH, `bundled-tools/` → `build/tools/` on build, or auto-download | PATH (`brew install ffmpeg`, etc.) |
 | **GUI (optional)** | Built-in Win32 dialog | [Tk](https://www.tcl.tk/) / `wish` (`apt install tk`, `brew install tcl-tk`) |
 
-**YouTube:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
+**Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
 **Build:** [Crystal](https://crystal-lang.org/) · [just](https://github.com/casey/just) · Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss`
 
