@@ -45,29 +45,124 @@ module FfmpegTools
   VERSION_FILE      = ".ffmpeg-version"
   {% end %}
 
+  @@detected = false
+
+  def self.bundled? : Bool
+    {% if flag?(:windows) %}
+      File.exists?(bundled_path.to_s)
+    {% else %}
+      false
+    {% end %}
+  end
+
+  def self.path_executable : String?
+    Process.find_executable("ffmpeg")
+  end
+
+  def self.locate : Tuple(Bool, String)?
+    source = {% if flag?(:windows) %} QuarkConfig.ffmpeg_source {% else %} QuarkConfig::ToolSource::Auto {% end %}
+
+    if source.path? || source.auto?
+      if exe = path_executable
+        return {true, exe}
+      end
+    end
+
+    if {% if flag?(:windows) %} source.bundled? || source.auto? {% else %} false {% end %}
+      if bundled?
+        return {false, bundled_path.to_s}
+      end
+    end
+
+    nil
+  end
+
+  def self.detect! : Nil
+    if location = locate
+      from_path, path = location
+      if from_path
+        puts "Using ffmpeg from PATH: #{path}"
+      else
+        puts "Using ffmpeg from: #{path}"
+      end
+    else
+      warn_not_found
+    end
+
+    @@detected = true
+  end
+
   # Directory for yt-dlp's --ffmpeg-location (PATH first; on Windows, tools/ then download).
   def self.ensure! : String
-    if exe = Process.find_executable("ffmpeg")
-      puts "Using ffmpeg from PATH: #{exe}"
+    {% if flag?(:windows) %}
+      case QuarkConfig.ffmpeg_source
+      when .path?
+        ensure_path_only!
+      when .bundled?
+        ensure_bundled!
+      else
+        if exe = path_executable
+          puts "Using ffmpeg from PATH: #{exe}" unless @@detected
+          return Path[exe].parent.to_s
+        end
+        ensure_bundled!
+      end
+    {% else %}
+      if exe = path_executable
+        puts "Using ffmpeg from PATH: #{exe}" unless @@detected
+        return Path[exe].parent.to_s
+      end
+
+      raise_not_found
+    {% end %}
+  end
+
+  {% if flag?(:windows) %}
+  def self.ensure_path_only! : String
+    if exe = path_executable
+      puts "Using ffmpeg from PATH: #{exe}" unless @@detected
       return Path[exe].parent.to_s
     end
 
-    {% if flag?(:windows) %}
-      Dir.mkdir_p(tools_dir.to_s)
+    raise Error.new(<<-MSG)
+      ffmpeg not found on PATH (quark-downloader.conf: ffmpeg = path).
+      Install ffmpeg and add it to PATH, or set ffmpeg = auto or bundled.
+      MSG
+  end
 
-      if File.exists?(bundled_path.to_s)
-        puts "Using ffmpeg from: #{bundled_path}"
-        return tools_dir.to_s
-      end
+  def self.ensure_bundled! : String
+    Dir.mkdir_p(tools_dir.to_s)
 
-      unless skip_download?
-        puts "Downloading ffmpeg..."
-        download_latest!
-        return tools_dir.to_s
-      end
+    if bundled?
+      puts "Using ffmpeg from: #{bundled_path}" unless @@detected
+      return tools_dir.to_s
+    end
+
+    unless skip_download?
+      puts "Downloading ffmpeg..."
+      download_latest!
+      return tools_dir.to_s
+    end
+
+    raise Error.new(<<-MSG)
+      ffmpeg not found in tools/ (quark-downloader.conf: ffmpeg = bundled).
+      Place ffmpeg.exe in tools/ or allow a network download when converting formats.
+      MSG
+  end
+  {% end %}
+
+  def self.warn_not_found
+    puts
+    puts "Warning: ffmpeg not found on PATH."
+    {% if flag?(:darwin) %}
+      puts "  Install with Homebrew: brew install ffmpeg"
+    {% elsif flag?(:linux) %}
+      puts "  Install with your package manager, e.g. apt install ffmpeg"
+    {% else %}
+      puts "  Install ffmpeg, add it to PATH, place binaries in bundled-tools/ and rebuild,"
+      puts "  or allow a network download when converting formats."
     {% end %}
-
-    raise_not_found
+    puts "  Original-format downloads may still work; conversion requires ffmpeg."
   end
 
   def self.append_to_cmd!(cmd : Array(String))

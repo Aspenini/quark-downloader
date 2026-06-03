@@ -1,3 +1,4 @@
+require "./config"
 require "./ytdlp_tools"
 require "./ffmpeg_tools"
 
@@ -32,16 +33,14 @@ def xdg_download_dir? : String?
 end
 
 def press_any_key(message = "Press any key to exit...")
-  puts
-  puts message
   {% if flag?(:windows) %}
+    puts
+    puts message
     begin
       STDIN.raw { |io| io.read_byte }
     rescue IO::Error
       gets
     end
-  {% else %}
-    gets
   {% end %}
 end
 
@@ -115,6 +114,8 @@ rescue File::NotFoundError
 end
 
 def main
+  QuarkConfig.load!
+
   puts "Quark Downloader"
   puts "----------------"
 
@@ -123,6 +124,8 @@ def main
   rescue ex : YtDlpTools::Error
     exit_with_message(ex.message || ex.to_s)
   end
+
+  FfmpegTools.detect!
 
   puts
   url = prompt_nonempty("Enter Video URL: ")
@@ -133,7 +136,7 @@ def main
     default: "video",
   ).downcase
 
-  default_path = File.expand_path(default_downloads_dir)
+  default_path = QuarkConfig.download_dir(default_downloads_dir)
 
   output_dir = prompt_nonempty(
     "Enter output directory",

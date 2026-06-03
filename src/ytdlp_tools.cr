@@ -3,6 +3,7 @@ require "json"
 require "digest/sha256"
 require "./tool_http"
 {% end %}
+require "./config"
 
 module YtDlpTools
   {% if flag?(:windows) %}
@@ -25,11 +26,7 @@ module YtDlpTools
   end
 
   def self.app_dir : Path
-    if exe = Process.executable_path
-      Path[exe].parent
-    else
-      Path[Dir.current]
-    end
+    QuarkConfig.app_dir
   end
 
   def self.tools_dir : Path
@@ -51,38 +48,69 @@ module YtDlpTools
   MIN_YOUTUBE_YTDLP = "2025.01.26"
 
   def self.ensure! : String
-    if path = path_executable
-      puts "Using yt-dlp from PATH: #{path}"
-      {% unless flag?(:windows) %}
+    {% if flag?(:windows) %}
+      case QuarkConfig.yt_dlp_source
+      when .path?
+        ensure_path_only!
+      when .bundled?
+        ensure_bundled!
+      else
+        if path = path_executable
+          puts "Using yt-dlp from PATH: #{path}"
+          return path
+        end
+        ensure_bundled!
+      end
+    {% else %}
+      if path = path_executable
+        puts "Using yt-dlp from PATH: #{path}"
         warn_if_stale(path)
         warn_youtube_js_runtime
-      {% end %}
+        return path
+      end
+
+      raise_not_found
+    {% end %}
+  end
+
+  {% if flag?(:windows) %}
+  def self.ensure_path_only! : String
+    if path = path_executable
+      puts "Using yt-dlp from PATH: #{path}"
       return path
     end
 
-    {% unless flag?(:windows) %}
-      raise_not_found
-    {% else %}
-      Dir.mkdir_p(tools_dir.to_s)
-
-      if skip_update?
-        return bundled_path.to_s if File.exists?(bundled_path.to_s)
-        raise_not_found
-      end
-
-      if !File.exists?(bundled_path.to_s)
-        puts "Downloading yt-dlp..."
-        download_latest!
-        return bundled_path.to_s
-      end
-
-      if check_due?
-        check_and_update_if_needed
-      end
-
-      bundled_path.to_s
-    {% end %}
+    raise Error.new(<<-MSG)
+      yt-dlp not found on PATH (quark-downloader.conf: yt_dlp = path).
+      Install yt-dlp and add it to PATH, or set yt_dlp = auto or bundled.
+      MSG
   end
+
+  def self.ensure_bundled! : String
+    Dir.mkdir_p(tools_dir.to_s)
+
+    unless File.exists?(bundled_path.to_s)
+      if skip_update?
+        raise Error.new(<<-MSG)
+          yt-dlp not found in tools/ (quark-downloader.conf: yt_dlp = bundled).
+          Place yt-dlp.exe in tools/ or unset QUARK_SKIP_YTDLP_UPDATE to allow download.
+          MSG
+      end
+
+      puts "Downloading yt-dlp..."
+      download_latest!
+      return bundled_path.to_s
+    end
+
+    puts "Using yt-dlp from: #{bundled_path}"
+
+    if check_due?
+      check_and_update_if_needed
+    end
+
+    bundled_path.to_s
+  end
+  {% end %}
 
   def self.raise_not_found
     message = {% if flag?(:darwin) %}

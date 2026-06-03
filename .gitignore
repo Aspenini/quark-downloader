@@ -9,6 +9,7 @@
 
 # Runtime tool cache (next to executable)
 /tools/
+quark-downloader.conf
 
 # Crystal
 *.dwarf
