@@ -5,4 +5,4 @@ Comment=Download videos and audio with yt-dlp
 Exec=quark-downloader-gui
 Icon=quark-downloader
 Categories=Network;AudioVideo;
-Terminal=true
+Terminal=false
