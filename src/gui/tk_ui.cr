@@ -5,8 +5,41 @@ module QuarkGui
   module TkUi
     TCL_SCRIPT = "quark-downloader-gui.tcl"
 
+    {% if flag?(:darwin) %}
+    DARWIN_WISH_CANDIDATES = [
+      "/opt/homebrew/opt/tcl-tk/bin/wish",
+      "/opt/homebrew/opt/tcl-tk/bin/wish9.0",
+      "/usr/local/opt/tcl-tk/bin/wish",
+      "/usr/local/opt/tcl-tk/bin/wish9.0",
+    ]
+    {% end %}
+
     def self.wish_path : String?
+      {% if flag?(:darwin) %}
+      # macOS ships a broken Tk 8.5 wish at /usr/bin/wish; Homebrew tcl-tk must win.
+      if brew = Process.find_executable("brew")
+        output = IO::Memory.new
+        if Process.run(brew, args: ["--prefix", "tcl-tk"], output: output, error: Process::Redirect::Close).try(&.success?)
+          prefix = output.to_s.strip
+          unless prefix.empty?
+            ["#{prefix}/bin/wish", "#{prefix}/bin/wish9.0"].each do |candidate|
+              return candidate if File::Info.executable?(candidate)
+            end
+          end
+        end
+      end
+
+      DARWIN_WISH_CANDIDATES.each do |candidate|
+        return candidate if File::Info.executable?(candidate)
+      end
+
+      path = Process.find_executable("wish")
+      return nil if path == "/usr/bin/wish"
+
+      path
+      {% else %}
       Process.find_executable("wish")
+      {% end %}
     end
 
     def self.tcl_script_path : Path
@@ -65,6 +98,9 @@ module QuarkGui
         error: Process::Redirect::Pipe,
       )
       code = status.try(&.exit_code) || 1
+      unless code == 0 || code == 1
+        tk_error("Tk GUI failed to start (exit code #{code}).\nOn macOS: brew install tcl-tk")
+      end
       {code, output.to_s}
     end
 

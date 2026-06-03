@@ -45,13 +45,19 @@ build: copy-bundled-tools embed-icon embed-icon-gui
     @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1
 
 [group('dev')]
+[unix]
+run:
+    @bash -c 'source scripts/crystal-env.sh && crystal run src/quark-downloader.cr'
+
+[group('dev')]
+[windows]
 run:
     @crystal run src/quark-downloader.cr
 
 [group('dev')]
 [unix]
 run-gui:
-    @crystal run src/gui/quark-downloader-gui.cr
+    @bash -c 'source scripts/crystal-env.sh && crystal run src/gui/quark-downloader-gui.cr'
 
 [group('dev')]
 [windows]

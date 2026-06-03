@@ -7,7 +7,7 @@ set AUDIO_FORMATS {original mp3 m4a flac wav opus vorbis}
 set VIDEO_FORMATS {original mp4 mkv webm}
 
 proc show_message {kind title body} {
-    set icon ok
+    set icon info
     if {$kind eq "error"} {
         set icon error
     }
