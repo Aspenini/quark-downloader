@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Quark Downloader (CLI)
+Comment=Download videos and audio with yt-dlp in a terminal
+Exec=quark-downloader
+Icon=quark-downloader-cli
+Categories=Network;AudioVideo;
+Terminal=true
+
