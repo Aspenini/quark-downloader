@@ -24,13 +24,7 @@ module QuarkGui
     params = {% if flag?(:windows) %} Win32Ui.collect_params(cli) {% else %} TkUi.collect_params(cli) {% end %}
     return unless params
 
-    exit_code = run_download(cli, params)
-
-    {% if flag?(:windows) %}
-    Win32Ui.show_result(exit_code == 0, exit_code)
-    {% else %}
-    TkUi.show_result(exit_code == 0, exit_code)
-    {% end %}
+    run_download(cli, params)
   end
 end
 

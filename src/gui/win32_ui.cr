@@ -283,43 +283,46 @@ module QuarkGui
       LibComctl32.InitCommonControlsEx(pointerof(icc))
     end
 
+    def self.module_handle : Void*
+      LibKernel32.GetModuleHandleW(Pointer(UInt16).null)
+    end
+
+    def self.load_dialog_template(dialog_id : Int32) : Void*?
+      hmodule = module_handle
+      name = int_resource(dialog_id)
+      type = int_resource(RT_DIALOG)
+      lang = ((LANG_NEUTRAL.to_u32 << 10) | SUBLANG_NEUTRAL.to_u32).to_u16
+
+      res_info = LibUser32.FindResourceExW(hmodule, type, name, lang)
+      res_info = LibUser32.FindResourceW(hmodule, name, type) if res_info.null?
+      return nil if res_info.null?
+
+      res_data = LibUser32.LoadResource(hmodule, res_info)
+      return nil if res_data.null?
+
+      template = LibUser32.LockResource(res_data)
+      return nil if template.null?
+
+      template
+    end
+
     def self.collect_params(cli : String) : DownloadParams?
       @@confirmed = false
       @@default_output = QuarkGui.default_output_dir(cli)
 
       ensure_common_controls!
 
-      hmodule = LibKernel32.GetModuleHandleW(Pointer(UInt16).null)
-      name = int_resource(IDD_MAIN)
-      type = int_resource(RT_DIALOG)
-      lang = ((LANG_NEUTRAL.to_u32 << 10) | SUBLANG_NEUTRAL.to_u32).to_u16
-
-      res_info = LibUser32.FindResourceExW(hmodule, type, name, lang)
-      res_info = LibUser32.FindResourceW(hmodule, name, type) if res_info.null?
-
-      if res_info.null?
+      template = load_dialog_template(IDD_MAIN)
+      unless template
         err = LibUser32.GetLastError()
         message_box(resource_error_message(err, "template not found"), true)
         return nil
       end
 
-      res_data = LibUser32.LoadResource(hmodule, res_info)
-      if res_data.null?
-        err = LibUser32.GetLastError()
-        message_box(resource_error_message(err, "template data not found"), true)
-        return nil
-      end
-
-      template = LibUser32.LockResource(res_data)
-      if template.null?
-        err = LibUser32.GetLastError()
-        message_box(resource_error_message(err, "template could not be loaded"), true)
-        return nil
-      end
-
+      hmodule = module_handle
       result = LibUser32.DialogBoxIndirectParamW(
         hmodule,
-        template,
+        template.not_nil!,
         Pointer(Void).null,
         dialog_proc_callback,
         0,

@@ -7,11 +7,13 @@ set AUDIO_FORMATS {original mp3 m4a flac wav opus vorbis}
 set VIDEO_FORMATS {original mp4 mkv webm}
 
 proc show_message {kind title body} {
+    wm withdraw .
+    update idletasks
     set icon info
     if {$kind eq "error"} {
         set icon error
     }
-    tk_messageBox -title $title -message $body -type ok -icon $icon
+    tk_messageBox -parent . -title $title -message $body -type ok -icon $icon
     exit 0
 }
 
@@ -21,7 +23,78 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         exit 2
     }
     show_message [lindex $argv 1] [lindex $argv 2] [join [lrange $argv 3 end]]
-}
+} elseif {[llength $argv] > 0 && [lindex $argv 0] eq "--progress"} {
+    set logs_dir ""
+    if {[llength $argv] > 1} {
+        set logs_dir [lindex $argv 1]
+    }
+
+    set ::download_finished 0
+
+    proc truncate_status {text {max 72}} {
+        if {[string length $text] > $max} {
+            return "[string range $text 0 [expr {$max - 3}]]..."
+        }
+        return $text
+    }
+
+    wm title . "Quark Downloader"
+    wm resizable . 0 0
+    wm geometry . 400x110
+
+    ttk::label .status_lbl -text "Starting download..." -wraplength 376 -justify left
+    ttk::progressbar .bar -mode determinate -maximum 100 -length 376
+    grid .status_lbl -row 0 -column 0 -sticky ew -padx 12 -pady {12 6}
+    grid .bar -row 1 -column 0 -sticky ew -padx 12 -pady {0 12}
+    grid columnconfigure . 0 -minsize 376 -weight 0
+
+    proc finish_download {exit_code logs_dir} {
+        if {$::download_finished} {
+            return
+        }
+        set ::download_finished 1
+        destroy .
+        exit $exit_code
+    }
+
+    proc apply_progress_line {line logs_dir} {
+        set parts [split $line "\t"]
+        set kind [lindex $parts 0]
+        set payload [join [lrange $parts 1 end] "\t"]
+        if {$kind eq "PROGRESS"} {
+            if {[string is double -strict $payload]} {
+                .bar configure -value $payload
+            }
+        } elseif {$kind eq "STATUS"} {
+            .status_lbl configure -text [truncate_status $payload]
+        } elseif {$kind eq "DONE"} {
+            if {![string is integer -strict $payload]} {
+                set payload 1
+            }
+            finish_download $payload $logs_dir
+        }
+    }
+
+    proc on_stdin {logs_dir} {
+        if {$::download_finished} {
+            return
+        }
+        if {[gets stdin line] < 0} {
+            if {[eof stdin]} {
+                finish_download 1 $logs_dir
+            }
+            return
+        }
+        apply_progress_line $line $logs_dir
+    }
+
+    fconfigure stdin -blocking 0 -buffering line
+    fileevent stdin readable [list on_stdin $logs_dir]
+
+    wm protocol . WM_DELETE_WINDOW { finish_download 1 $logs_dir }
+    bind . <Escape> { finish_download 1 $logs_dir }
+} else {
+    # Main download form (default when argv is output-dir path only)
 
 set default_dir [file normalize "~/Downloads"]
 if {[llength $argv] > 0} {
@@ -141,3 +214,5 @@ set_formats
 
 bind . <Return> on_download
 bind . <Escape> on_cancel
+
+}

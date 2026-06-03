@@ -1,5 +1,6 @@
 {% unless flag?(:windows) %}
 require "../config"
+require "./gui_logs"
 
 module QuarkGui
   module TkUi
@@ -104,14 +105,12 @@ module QuarkGui
       {code, output.to_s}
     end
 
-    def self.show_result(success : Bool, exit_code : Int32) : Nil
-      kind = success ? "ok" : "error"
-      body = if success
-               "Download finished successfully."
-             else
-               "Download failed (exit code #{exit_code}).\nCheck the terminal window for details."
-             end
-      run_wish(["--message", kind, APP_TITLE, body])
+    def self.show_completion(success : Bool, _exit_code : Int32 = 0) : Nil
+      if success
+        run_wish(["--message", "ok", APP_TITLE, "Download Complete!"])
+      else
+        run_wish(["--message", "error", APP_TITLE, "Download failed.\n\nLogs: #{GuiLogs.logs_dir}"])
+      end
     end
 
     def self.collect_params(cli : String) : DownloadParams?

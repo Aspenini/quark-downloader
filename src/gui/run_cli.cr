@@ -1,7 +1,10 @@
 require "../config"
+require "./gui_logs"
 
 {% if flag?(:windows) %}
-require "./win32_spawn"
+require "./win32_progress"
+{% else %}
+require "./tk_ui"
 {% end %}
 
 module QuarkGui
@@ -52,55 +55,113 @@ module QuarkGui
     args = build_cli_args(cli, params)
     command = args.first
     cmd_args = args[1..]? || [] of String
+    run_download_with_progress(command, cmd_args)
+  end
 
+  PROGRESS_RE = /\[download\]\s+(\d+(?:\.\d+)?)%/
+  STATUS_MAX = 120
+
+  def self.run_download_with_progress(command : String, cmd_args : Array(String)) : Int32
     {% if flag?(:windows) %}
-      Win32Spawn.run_cmd_start_wait("Quark Downloader", command, cmd_args)
+      Win32Progress.run(command, cmd_args)
     {% else %}
-      if terminal = find_terminal
-        run_in_terminal(terminal, command, cmd_args)
-      else
-        status = Process.run(
-          command: command,
-          args: cmd_args,
-          output: Process::Redirect::Inherit,
-          error: Process::Redirect::Inherit,
-        )
-        status.try(&.exit_code) || 1
-      end
+      run_download_with_progress_unix(command, cmd_args)
     {% end %}
   end
 
   {% unless flag?(:windows) %}
-  TERMINAL_CANDIDATES = [
-    {"x-terminal-emulator", ["-e"]},
-    {"gnome-terminal", ["--wait", "--"]},
-    {"konsole", ["-e"]},
-    {"xfce4-terminal", ["-e"]},
-    {"alacritty", ["-e"]},
-    {"foot", ["-e"]},
-  ] of {String, Array(String)}
+  def self.run_download_with_progress_unix(command : String, cmd_args : Array(String)) : Int32
+    log_file, _log_path = GuiLogs.open_log
 
-  def self.find_terminal : Tuple(String, Array(String))?
-    TERMINAL_CANDIDATES.each do |name, prefix|
-      if path = Process.find_executable(name)
-        return {path, prefix}
+    wish = TkUi.ensure_wish!
+    script = TkUi.ensure_script!
+
+    progress = Process.new(
+      wish,
+      args: [script, "--progress", GuiLogs.logs_dir.to_s],
+      input: Process::Redirect::Pipe,
+      output: Process::Redirect::Close,
+      error: Process::Redirect::Close,
+    )
+    prog_in = progress.input.not_nil!
+
+    env = ENV.to_h.merge({"QUARK_GUI" => "1"})
+    cli_process = Process.new(
+      command: command,
+      args: cmd_args,
+      env: env,
+      output: Process::Redirect::Pipe,
+      error: Process::Redirect::Pipe,
+    )
+
+    done = Channel(Nil).new(2)
+
+    if stdout = cli_process.output
+      spawn do
+        stdout.each_line do |line|
+          relay_output_line(line, log_file, prog_in)
+        end
+        done.send(nil)
       end
+    else
+      done.send(nil)
     end
-    nil
+
+    if stderr = cli_process.error
+      spawn do
+        stderr.each_line do |line|
+          relay_output_line(line, log_file, prog_in)
+        end
+        done.send(nil)
+      end
+    else
+      done.send(nil)
+    end
+
+    2.times { done.receive }
+    status = cli_process.wait
+    exit_code = if status.success?
+                  0
+                else
+                  status.exit_code || 1
+                end
+
+    prog_in.puts("DONE\t#{exit_code}")
+    prog_in.flush
+    prog_in.close
+
+    progress.wait
+    if cli_process.exists?
+      cli_process.terminate
+      cli_process.wait
+    end
+    log_file.close
+
+    TkUi.show_completion(exit_code == 0, exit_code)
+    exit_code
   end
 
-  def self.shell_escape(s : String) : String
-    "'" + s.gsub("'", "'\\''") + "'"
-  end
+  def self.relay_output_line(line : String, log_file : File, prog_in : IO) : Nil
+    log_file.puts(line)
+    log_file.flush
 
-  def self.run_in_terminal(terminal : Tuple(String, Array(String)), command : String, args : Array(String)) : Int32
-    path, prefix = terminal
-    inner = ([command] + args).map { |a| shell_escape(a) }.join(" ")
-    inner += "; echo; read -r -p 'Press Enter to close...' _"
+    if m = line.match(PROGRESS_RE)
+      prog_in.puts("PROGRESS\t#{m[1]}")
+      prog_in.flush
+      return
+    end
 
-    status = Process.run(path, args: prefix + ["sh", "-c", inner])
+    stripped = line.strip
+    return if stripped.empty?
+    return if stripped == "Done."
 
-    status.try(&.exit_code) || 1
+    if stripped.size > STATUS_MAX
+      stripped = stripped[0, STATUS_MAX - 3] + "..."
+    end
+    return if stripped.starts_with?("Deleting original file")
+
+    prog_in.puts("STATUS\t#{stripped}")
+    prog_in.flush
   end
   {% end %}
 

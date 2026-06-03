@@ -100,6 +100,10 @@ module QuarkDownload
       end
     end
 
+    if ENV["QUARK_GUI"]? == "1"
+      cmd.concat(["--newline", "--no-color"])
+    end
+
     cmd.concat(YtDlpTools.extra_args(url))
     cmd << url
 
