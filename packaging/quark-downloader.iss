@@ -38,6 +38,12 @@
 
 #define AppIcon         "..\icons\icon.ico"
 
+#define CliAppIcon      "..\icons\icon-cli.ico"
+
+#define GuiIconName     "icon.ico"
+
+#define CliIconName     "icon-cli.ico"
+
 
 
 #define GcDll           BuildDir + "\gc.dll"
@@ -79,6 +85,16 @@
 #else
 
   #pragma error "Expected icons\icon.ico"
+
+#endif
+
+
+
+#ifexist CliAppIcon
+
+#else
+
+  #pragma error "Expected icons\icon-cli.ico"
 
 #endif
 
@@ -214,7 +230,7 @@ DisableProgramGroupPage=no
 
 
 
-UninstallDisplayIcon={app}\{#MyAppGuiExeName}
+UninstallDisplayIcon={app}\{#GuiIconName}
 
 UninstallDisplayName={#MyAppName}
 
@@ -274,6 +290,14 @@ Source: "{#BuildGuiSource}"; DestDir: "{app}"; Flags: ignoreversion restartrepla
 
 
 
+; Shortcut / uninstall icons (distinct GUI vs CLI)
+
+Source: "{#AppIcon}"; DestDir: "{app}"; DestName: "{#GuiIconName}"; Flags: ignoreversion
+
+Source: "{#CliAppIcon}"; DestDir: "{app}"; DestName: "{#CliIconName}"; Flags: ignoreversion
+
+
+
 ; Required runtime DLLs
 
 Source: "{#GcDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
@@ -322,11 +346,11 @@ Source: "..\build\tools\yt-dlp.exe"; DestDir: "{app}\tools"; Flags: ignoreversio
 
 [Icons]
 
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppGuiExeName}"; IconFilename: "{app}\{#MyAppGuiExeName}"; WorkingDir: "{app}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppGuiExeName}"; IconFilename: "{app}\{#GuiIconName}"; WorkingDir: "{app}"
 
-Name: "{group}\{#MyAppName} (CLI)"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{group}\{#MyAppName} (CLI)"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#CliIconName}"; WorkingDir: "{app}"
 
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppGuiExeName}"; IconFilename: "{app}\{#MyAppGuiExeName}"; WorkingDir: "{app}"; Tasks: gui
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppGuiExeName}"; IconFilename: "{app}\{#GuiIconName}"; WorkingDir: "{app}"; Tasks: gui
 
-Name: "{autodesktop}\{#MyAppName} (CLI)"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: cli
+Name: "{autodesktop}\{#MyAppName} (CLI)"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#CliIconName}"; WorkingDir: "{app}"; Tasks: cli
 
