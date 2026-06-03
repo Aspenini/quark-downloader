@@ -5,6 +5,17 @@
     </td>
     <td align="right">
       <h1>Quark Downloader</h1>
+      <p>
+        <a href="https://github.com/Aspenini/quark-downloader/releases">
+          <img alt="GitHub release" src="https://img.shields.io/github/v/release/Aspenini/quark-downloader?label=release" />
+        </a>
+        <a href="shard.yml">
+          <img alt="Version 0.2.0" src="https://img.shields.io/badge/version-0.2.0-blue" />
+        </a>
+        <a href="https://aur.archlinux.org/packages/quark-downloader">
+          <img alt="AUR version" src="https://img.shields.io/aur/version/quark-downloader?label=AUR" />
+        </a>
+      </p>
     </td>
   </tr>
 </table>
