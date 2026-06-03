@@ -1,44 +1,72 @@
 name := "quark-downloader"
+gui_name := "quark-downloader-gui"
 build_dir := "build"
-installer_output := "installer/output"
+installer_output := "packaging/output"
 bundled_tools := "bundled-tools"
 tools_dir := build_dir + "/tools"
 exe_ext := if os() == "windows" { ".exe" } else { "" }
 binary := build_dir + "/" + name + exe_ext
+gui_binary := build_dir + "/" + gui_name + exe_ext
 
 set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
+set quiet := true
 
+[default]
 default:
     @just --list
 
-# Release build into build/, then UPX compress.
+# Release build into build/, then UPX compress (CLI only on Windows; GUI must not be UPXed).
+[group('build')]
+[private]
 [windows]
 embed-icon:
-    if (-not (Test-Path {{build_dir}})) { New-Item -ItemType Directory -Force -Path {{build_dir}} | Out-Null }; $res = "{{build_dir}}/app.res"; $kitsRc = Get-ChildItem "$env:ProgramFiles(x86)\Windows Kits\10\bin\*\x64\rc.exe" -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1; if ($kitsRc) { & $kitsRc.FullName /nologo /fo $res win32/app.rc } elseif (Get-Command rc -ErrorAction SilentlyContinue) { rc /nologo /fo $res win32/app.rc } elseif (Get-Command windres -ErrorAction SilentlyContinue) { windres -O coff win32/app.rc $res } else { throw "Windows SDK rc.exe or windres required to embed icons/icon.ico" }
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/embed-app-res.ps1
 
+[group('build')]
+[private]
+[windows]
+embed-icon-gui:
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/embed-gui-res.ps1
+
+[group('build')]
+[private]
 [windows]
 copy-bundled-tools:
-    if (-not (Test-Path {{tools_dir}})) { New-Item -ItemType Directory -Force -Path {{tools_dir}} | Out-Null }
-    foreach ($tool in @('ffmpeg.exe','ffprobe.exe')) { if (Test-Path "{{bundled_tools}}/$tool") { Copy-Item "{{bundled_tools}}/$tool" "{{tools_dir}}/" -Force } }
+    @powershell -NoProfile -Command "if (-not (Test-Path '{{tools_dir}}')) { New-Item -ItemType Directory -Force -Path '{{tools_dir}}' | Out-Null }; foreach ($t in @('ffmpeg.exe','ffprobe.exe')) { $s = Join-Path '{{bundled_tools}}' $t; if (Test-Path $s) { Copy-Item $s '{{tools_dir}}' -Force } }"
 
+[group('build')]
 [unix]
 build:
-    mkdir -p {{build_dir}}
-    crystal build --release src/quark-downloader.cr -o {{binary}}
-    command -v upx >/dev/null && upx --best --lzma {{binary}} || true
+    @mkdir -p {{build_dir}}
+    @crystal build --release src/quark-downloader.cr -o {{binary}}
+    @crystal build --release src/gui/quark-downloader-gui.cr -o {{gui_binary}}
+    @command -v upx >/dev/null && upx --best --lzma {{binary}} || true
 
+[group('build')]
 [windows]
-build: copy-bundled-tools embed-icon
-    if (-not (Test-Path {{build_dir}})) { New-Item -ItemType Directory -Force -Path {{build_dir}} | Out-Null }; $iconRes = (Resolve-Path "{{build_dir}}/app.res").Path; crystal build --release src/quark-downloader.cr -o {{binary}} --link-flags="$iconRes"; upx --best --lzma {{binary}}
+build:
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1
 
+[group('dev')]
 run:
-    crystal run src/quark-downloader.cr
+    @crystal run src/quark-downloader.cr
 
+[group('dev')]
+[unix]
+run-gui:
+    @crystal run src/gui/quark-downloader-gui.cr
+
+[group('dev')]
+[windows]
+run-gui:
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-gui-windows.ps1
+
+[group('clean')]
 [unix]
 clean:
-    rm -rf {{build_dir}} {{installer_output}}
+    @rm -rf {{build_dir}} {{installer_output}}
 
+[group('clean')]
 [windows]
 clean:
-    if (Test-Path {{build_dir}}) { Remove-Item -Recurse -Force {{build_dir}} }
-    if (Test-Path {{installer_output}}) { Remove-Item -Recurse -Force {{installer_output}} }
+    @powershell -NoProfile -Command "if (Test-Path '{{build_dir}}') { Remove-Item -Recurse -Force '{{build_dir}}' }; if (Test-Path '{{installer_output}}') { Remove-Item -Recurse -Force '{{installer_output}}' }; Write-Host 'Cleaned build/ and packaging/output/'"

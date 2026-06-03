@@ -40,11 +40,11 @@ module QuarkConfig
     Dir.mkdir_p(config_dir.to_s)
   end
 
-  def self.load! : Nil
+  def self.load!(quiet : Bool = false) : Nil
     ensure_config_dir!
     path = config_path
     unless File.exists?(path.to_s)
-      create_default!(path)
+      create_default!(path, announce: !quiet)
     end
     parse_file(path)
   end
@@ -79,7 +79,7 @@ module QuarkConfig
     File.expand_path(expanded)
   end
 
-  def self.create_default!(path : Path)
+  def self.create_default!(path : Path, announce : Bool = true)
     contents = <<-CONF
 # Quark Downloader configuration
 # Save and restart to apply changes.
@@ -96,7 +96,7 @@ ffmpeg = auto
 CONF
 
     File.write(path.to_s, contents)
-    puts "Created config: #{path}"
+    puts "Created config: #{path}" if announce
   end
 
   def self.parse_file(path : Path)

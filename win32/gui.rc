@@ -1,0 +1,34 @@
+#include <windows.h>
+
+#define IDI_APP_ICON 1
+#define IDD_MAIN 101
+#define IDC_URL 1001
+#define IDC_AUDIO 1002
+#define IDC_VIDEO 1003
+#define IDC_FORMAT 1004
+#define IDC_OUTPUT 1005
+#define IDC_BROWSE 1006
+
+IDI_APP_ICON ICON "../icons/icon.ico"
+
+IDD_MAIN DIALOGEX 0, 0, 320, 200
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Quark Downloader"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT           "Video URL:", -1, 10, 10, 50, 8
+    EDITTEXT        IDC_URL, 10, 22, 300, 14, ES_AUTOHSCROLL
+
+    CONTROL         "Audio", IDC_AUDIO, "Button", BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 10, 48, 45, 10
+    CONTROL         "Video", IDC_VIDEO, "Button", BS_AUTORADIOBUTTON | WS_TABSTOP, 60, 48, 45, 10
+
+    LTEXT           "Format:", -1, 10, 68, 35, 8
+    COMBOBOX        IDC_FORMAT, 10, 80, 140, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+
+    LTEXT           "Output folder:", -1, 10, 108, 60, 8
+    EDITTEXT        IDC_OUTPUT, 10, 120, 235, 14, ES_AUTOHSCROLL
+    PUSHBUTTON      "Browse...", IDC_BROWSE, 252, 118, 58, 14
+
+    DEFPUSHBUTTON   "Download", IDOK, 200, 170, 55, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 260, 170, 50, 14
+END

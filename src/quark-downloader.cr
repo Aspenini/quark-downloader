@@ -1,54 +1,6 @@
+require "option_parser"
 require "./config"
-require "./ytdlp_tools"
-require "./ffmpeg_tools"
-
-def user_home : String
-  ENV["USERPROFILE"]? || ENV["HOME"]? || "."
-end
-
-def default_downloads_dir : String
-  {% if flag?(:windows) %}
-    return File.join(user_home, "Downloads")
-  {% else %}
-    if xdg = xdg_download_dir?
-      return xdg
-    end
-  {% end %}
-
-  File.join(user_home, "Downloads")
-end
-
-def xdg_download_dir? : String?
-  config = Path[user_home] / ".config" / "user-dirs.dirs"
-  return nil unless File.exists?(config.to_s)
-
-  File.each_line(config.to_s) do |line|
-    next unless line.starts_with?("XDG_DOWNLOAD_DIR=")
-    if m = line.match(/^XDG_DOWNLOAD_DIR="(.+)"\s*$/)
-      return File.expand_path(m[1].gsub("$HOME", user_home))
-    end
-  end
-
-  nil
-end
-
-def press_any_key(message = "Press any key to exit...")
-  {% if flag?(:windows) %}
-    puts
-    puts message
-    begin
-      STDIN.raw { |io| io.read_byte }
-    rescue IO::Error
-      gets
-    end
-  {% end %}
-end
-
-def exit_with_message(message : String, code = 1) : Nil
-  puts message
-  press_any_key
-  exit(code)
-end
+require "./download"
 
 def prompt_choice(prompt : String, choices : Array(String), default : String? = nil) : String
   choices_lower = choices.map(&.downcase)
@@ -88,46 +40,12 @@ def prompt_nonempty(prompt : String, default : String? = nil) : String
   end
 end
 
-def require_ffmpeg(cmd : Array(String))
-  begin
-    FfmpegTools.append_to_cmd!(cmd)
-  rescue ex : FfmpegTools::Error
-    exit_with_message(ex.message || ex.to_s)
-  end
-end
-
-def run_command(cmd : Array(String)) : Int32
-  puts "\nRunning:"
-  puts cmd.map { |x| x.includes?(' ') ? %("#{x}") : x }.join(' ')
-  puts
-
-  status = Process.run(
-    command: cmd.first,
-    args: cmd[1..]?,
-    output: Process::Redirect::Inherit,
-    error: Process::Redirect::Inherit,
-  )
-  status.try(&.exit_code) || 127
-rescue File::NotFoundError
-  puts "Error: #{cmd.first} was not found."
-  127
-end
-
-def main
+def interactive_main
   QuarkConfig.load!
 
   puts "Quark Downloader"
   puts "----------------"
 
-  ytdlp = begin
-    YtDlpTools.ensure!
-  rescue ex : YtDlpTools::Error
-    exit_with_message(ex.message || ex.to_s)
-  end
-
-  FfmpegTools.detect!
-
-  puts
   url = prompt_nonempty("Enter Video URL: ")
 
   media_type = prompt_choice(
@@ -136,82 +54,69 @@ def main
     default: "video",
   ).downcase
 
-  default_path = QuarkConfig.download_dir(default_downloads_dir)
+  default_path = QuarkConfig.download_dir(QuarkDownload.default_downloads_dir)
 
   output_dir = prompt_nonempty(
     "Enter output directory",
     default: default_path,
   )
 
-  output_path = Path[File.expand_path(output_dir)]
+  format = if media_type == "audio"
+             puts "\nAudio formats:"
+             puts "  original / default.original"
+             puts "  mp3, m4a, flac, wav, opus, vorbis"
+             print "Choose audio format [default: original]: "
+             (gets.try(&.strip) || "").downcase
+           else
+             puts "\nVideo formats:"
+             puts "  original / default.original"
+             puts "  mp4, mkv, webm"
+             print "Choose video format [default: original]: "
+             (gets.try(&.strip) || "").downcase
+           end
 
-  begin
-    Dir.mkdir_p(output_path.to_s)
-  rescue ex
-    exit_with_message("Error creating output directory:\n#{ex}")
-  end
+  format = "original" if format.empty?
 
-  outtmpl = (output_path / "%(title)s [%(id)s].%(ext)s").to_s
-
-  cmd = [ytdlp, "--no-playlist", "-o", outtmpl]
-
-  if media_type == "audio"
-    puts "\nAudio formats:"
-    puts "  original / default.original"
-    puts "  mp3, m4a, flac, wav, opus, vorbis"
-
-    print "Choose audio format [default: original]: "
-    audio_format = (gets.try(&.strip) || "").downcase
-    audio_format = "original" if audio_format.empty?
-
-    cmd.concat(["-f", "bestaudio/best"])
-
-    unless {"original", "default.original"}.includes?(audio_format)
-      require_ffmpeg(cmd)
-      cmd.concat(["-x", "--audio-format", audio_format])
-    end
-  else
-    puts "\nVideo formats:"
-    puts "  original / default.original"
-    puts "  mp4, mkv, webm"
-
-    print "Choose video format [default: original]: "
-    video_format = (gets.try(&.strip) || "").downcase
-    video_format = "original" if video_format.empty?
-
-    unless {"original", "default.original"}.includes?(video_format)
-      require_ffmpeg(cmd)
-      cmd.concat(["-f", "bv*+ba/b", "--merge-output-format", video_format])
-      case video_format
-      when "webm"
-        cmd.concat(["--recode-video", "webm"])
-      when "mp4"
-        cmd.concat(["--remux-video", "mp4"])
-      end
-    end
-  end
-
-  cmd.concat(YtDlpTools.extra_args(url))
-  cmd << url
-
-  exit_code = run_command(cmd)
-
-  if exit_code == 0
-    puts "Done."
-    press_any_key
-  else
-    message = "Failed with exit code #{exit_code}."
-    message += "\n\n#{YtDlpTools.youtube_failure_hints}" if YtDlpTools.youtube_url?(url)
-    exit_with_message(message, exit_code)
-  end
+  exit QuarkDownload.run(url, media_type, format, output_dir)
 end
 
 {% unless flag?(:windows) %}
 Signal::INT.trap do
   puts "\nCancelled."
-  press_any_key
+  QuarkDownload.press_any_key(false)
   exit(130)
 end
 {% end %}
 
-main
+url = nil
+media_type = "video"
+format = "original"
+output_dir = nil
+no_pause = false
+print_default_dir = false
+
+OptionParser.parse do |parser|
+  parser.banner = "Usage: quark-downloader [options]\n\nInteractive when run with no options."
+
+  parser.on("--url URL", "Video URL to download") { |v| url = v }
+  parser.on("--type TYPE", "audio or video (default: video)") { |v| media_type = v }
+  parser.on("--format FORMAT", "Output format (default: original)") { |v| format = v }
+  parser.on("--output-dir DIR", "Output directory") { |v| output_dir = v }
+  parser.on("--no-pause", "Do not wait for a key press before exiting (Windows)") { no_pause = true }
+  parser.on("--print-default-output-dir", "Print default output directory and exit") { print_default_dir = true }
+  parser.on("-h", "--help", "Show help") {
+    puts parser
+    exit
+  }
+end
+
+if print_default_dir
+  puts QuarkDownload.default_output_dir
+  exit 0
+end
+
+if u = url
+  exit QuarkDownload.run(u, media_type, format, output_dir, no_pause: no_pause)
+else
+  interactive_main
+end

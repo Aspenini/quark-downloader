@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Quark Downloader
+Comment=Download videos and audio with yt-dlp
+Exec=quark-downloader-gui
+Icon=quark-downloader
+Categories=Network;AudioVideo;
+Terminal=false
