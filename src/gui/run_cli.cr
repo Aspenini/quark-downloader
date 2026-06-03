@@ -1,5 +1,9 @@
 require "../config"
 
+{% if flag?(:windows) %}
+require "./win32_spawn"
+{% end %}
+
 module QuarkGui
   struct DownloadParams
     property url : String
@@ -50,12 +54,7 @@ module QuarkGui
     cmd_args = args[1..]? || [] of String
 
     {% if flag?(:windows) %}
-      status = Process.run(
-        "cmd",
-        args: ["/c", "start", "/wait", "Quark Downloader", command] + cmd_args,
-        shell: false,
-      )
-      status.try(&.exit_code) || 1
+      Win32Spawn.run_cmd_start_wait("Quark Downloader", command, cmd_args)
     {% else %}
       if terminal = find_terminal
         run_in_terminal(terminal, command, cmd_args)
