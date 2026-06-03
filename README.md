@@ -13,7 +13,7 @@
           <img alt="Version 0.2.0" src="https://img.shields.io/badge/version-0.2.0-blue" />
         </a>
         <a href="https://aur.archlinux.org/packages/quark-downloader">
-          <img alt="AUR version" src="https://img.shields.io/aur/version/quark-downloader?label=AUR" />
+          <img alt="AUR version" src="https://img.shields.io/aur/version/quark-downloader?label=AUR&amp;logo=archlinux&amp;cacheSeconds=3600" />
         </a>
       </p>
     </td>
