@@ -53,6 +53,12 @@ module QuarkDownload
       abort_with(ex.message || ex.to_s, no_pause)
     end
 
+    begin
+      YtDlpTools.preflight_youtube!(url)
+    rescue ex : YtDlpTools::Error
+      abort_with(ex.message || ex.to_s, no_pause)
+    end
+
     FfmpegTools.detect!
 
     media_type = media_type.downcase

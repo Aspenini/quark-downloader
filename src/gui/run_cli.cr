@@ -1,3 +1,5 @@
+require "../config"
+
 module QuarkGui
   struct DownloadParams
     property url : String
@@ -23,10 +25,8 @@ module QuarkGui
   def self.default_output_dir(cli : String) : String
     {% if flag?(:windows) %}
       # Avoid spawning the console CLI during GUI startup (visible flash).
-      if dir = config_download_dir?
-        return expand_path(dir)
-      end
-      return File.join(ENV["USERPROFILE"]? || ".", "Downloads")
+      QuarkConfig.load!(quiet: true)
+      QuarkConfig.download_dir(File.join(ENV["USERPROFILE"]? || ".", "Downloads"))
     {% else %}
       output = IO::Memory.new
       status = Process.run(
@@ -42,35 +42,6 @@ module QuarkGui
       home = ENV["HOME"]? || "."
       File.join(home, "Downloads")
     {% end %}
-  end
-
-  def self.config_download_dir? : String?
-    config = Path[ENV["APPDATA"]? || ENV["HOME"]? || "."] / "quark-downloader" / "quark-downloader.conf"
-    return nil unless File.exists?(config.to_s)
-
-    File.each_line(config.to_s) do |line|
-      line = line.strip
-      next if line.empty? || line.starts_with?('#')
-      next unless line.includes?('=')
-
-      key, value = line.split('=', limit: 2).map(&.strip)
-      next unless key.downcase == "download_dir"
-      return value if !value.empty?
-    end
-
-    nil
-  end
-
-  def self.expand_path(path : String) : String
-    home = ENV["USERPROFILE"]? || ENV["HOME"]? || "."
-    expanded = if path.starts_with?("~/")
-                 File.join(home, path[2..])
-               elsif path == "~"
-                 home
-               else
-                 path
-               end
-    File.expand_path(expanded)
   end
 
   def self.run_download(cli : String, params : DownloadParams) : Int32
@@ -102,13 +73,13 @@ module QuarkGui
 
   {% unless flag?(:windows) %}
   TERMINAL_CANDIDATES = [
-    {"x-terminal-emulator", {"-e"}},
-    {"gnome-terminal", {"--wait", "--"}},
-    {"konsole", {"-e"}},
-    {"xfce4-terminal", {"-e"}},
-    {"alacritty", {"-e"}},
-    {"foot", {"-e"}},
-  ]
+    {"x-terminal-emulator", ["-e"]},
+    {"gnome-terminal", ["--wait", "--"]},
+    {"konsole", ["-e"]},
+    {"xfce4-terminal", ["-e"]},
+    {"alacritty", ["-e"]},
+    {"foot", ["-e"]},
+  ] of {String, Array(String)}
 
   def self.find_terminal : Tuple(String, Array(String))?
     TERMINAL_CANDIDATES.each do |name, prefix|

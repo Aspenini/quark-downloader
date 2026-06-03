@@ -32,19 +32,16 @@ embed-icon-gui:
 [private]
 [windows]
 copy-bundled-tools:
-    @powershell -NoProfile -Command "if (-not (Test-Path '{{tools_dir}}')) { New-Item -ItemType Directory -Force -Path '{{tools_dir}}' | Out-Null }; foreach ($t in @('ffmpeg.exe','ffprobe.exe')) { $s = Join-Path '{{bundled_tools}}' $t; if (Test-Path $s) { Copy-Item $s '{{tools_dir}}' -Force } }"
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-bundled-tools.ps1
 
 [group('build')]
 [unix]
 build:
-    @mkdir -p {{build_dir}}
-    @crystal build --release src/quark-downloader.cr -o {{binary}}
-    @crystal build --release src/gui/quark-downloader-gui.cr -o {{gui_binary}}
-    @command -v upx >/dev/null && upx --best --lzma {{binary}} || true
+    @bash scripts/build-unix.sh
 
 [group('build')]
 [windows]
-build:
+build: copy-bundled-tools embed-icon embed-icon-gui
     @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1
 
 [group('dev')]
@@ -65,6 +62,7 @@ run-gui:
 [unix]
 clean:
     @rm -rf {{build_dir}} {{installer_output}}
+    @echo "Cleaned build/ and packaging/output/"
 
 [group('clean')]
 [windows]

@@ -87,7 +87,7 @@ module QuarkConfig
 # Default folder offered at the output prompt (~ = your home directory)
 download_dir = ~/Downloads
 
-# How to locate yt-dlp and ffmpeg (Windows only; Linux/macOS always use PATH)
+# How to locate yt-dlp and ffmpeg
 #   auto    - PATH first, then bundled tools beside the app
 #   path    - PATH only
 #   bundled - bundled tools beside the app only (may download if missing)

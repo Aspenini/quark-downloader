@@ -1,17 +1,13 @@
-{% if flag?(:windows) %}
 require "json"
 require "digest/sha256"
 require "./tool_http"
-{% end %}
 require "./config"
 
 module YtDlpTools
-  {% if flag?(:windows) %}
   GITHUB_LATEST_URL = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
   CHECK_INTERVAL      = 24.hours
   VERSION_FILE        = ".yt-dlp-version"
   CHECK_AT_FILE       = ".yt-dlp-check-at"
-  {% end %}
 
   class Error < Exception; end
 
@@ -48,35 +44,37 @@ module YtDlpTools
   MIN_YOUTUBE_YTDLP = "2025.01.26"
 
   def self.ensure! : String
-    {% if flag?(:windows) %}
-      case QuarkConfig.yt_dlp_source
-      when .path?
-        ensure_path_only!
-      when .bundled?
-        ensure_bundled!
-      else
-        if path = path_executable
-          puts "Using yt-dlp from PATH: #{path}"
-          return path
-        end
-        ensure_bundled!
-      end
-    {% else %}
-      if path = path_executable
-        puts "Using yt-dlp from PATH: #{path}"
-        warn_if_stale(path)
-        warn_youtube_js_runtime
-        return path
-      end
-
-      raise_not_found
-    {% end %}
+    case QuarkConfig.yt_dlp_source
+    when .path?
+      ensure_path_only!
+    when .bundled?
+      ensure_bundled!
+    else
+      ensure_auto!
+    end
   end
 
-  {% if flag?(:windows) %}
+  def self.ensure_auto! : String
+    if path = path_executable
+      if version = read_version(path)
+        if version_at_least?(version, MIN_YOUTUBE_YTDLP)
+          puts "Using yt-dlp from PATH: #{path}"
+          warn_youtube_js_runtime
+          return path
+        end
+
+        puts "yt-dlp on PATH (#{version}) is too old for YouTube; using bundled copy."
+      end
+    end
+
+    ensure_bundled!
+  end
+
   def self.ensure_path_only! : String
     if path = path_executable
       puts "Using yt-dlp from PATH: #{path}"
+      warn_if_stale(path)
+      warn_youtube_js_runtime
       return path
     end
 
@@ -93,7 +91,7 @@ module YtDlpTools
       if skip_update?
         raise Error.new(<<-MSG)
           yt-dlp not found in tools/ (quark-downloader.conf: yt_dlp = bundled).
-          Place yt-dlp.exe in tools/ or unset QUARK_SKIP_YTDLP_UPDATE to allow download.
+          Place #{asset_name} in tools/ or unset QUARK_SKIP_YTDLP_UPDATE to allow download.
           MSG
       end
 
@@ -108,9 +106,9 @@ module YtDlpTools
       check_and_update_if_needed
     end
 
+    warn_youtube_js_runtime
     bundled_path.to_s
   end
-  {% end %}
 
   def self.raise_not_found
     message = {% if flag?(:darwin) %}
@@ -120,11 +118,12 @@ module YtDlpTools
         yt-dlp not found on PATH.
         Distro packages (apt install yt-dlp) are often too old for YouTube.
         Prefer a current build: pipx install yt-dlp   or   pip install -U yt-dlp
+        Or set yt_dlp = auto in quark-downloader.conf to download a bundled copy.
         MSG
     {% else %}
       <<-MSG
         yt-dlp not found on PATH.
-        Install yt-dlp, add it to PATH, or allow a network download on next run.
+        Install yt-dlp, add it to PATH, or set yt_dlp = auto in quark-downloader.conf.
         MSG
     {% end %}
 
@@ -142,6 +141,17 @@ module YtDlpTools
     nil
   end
 
+  def self.preflight_youtube!(url : String)
+    return unless youtube_url?(url)
+    return if js_runtime
+
+    raise Error.new(<<-MSG)
+      YouTube requires a JavaScript runtime for yt-dlp (EJS).
+        • Node.js: sudo apt install nodejs   (or your distro equivalent)
+        • Deno: see https://github.com/yt-dlp/yt-dlp/wiki/EJS
+      MSG
+  end
+
   def self.extra_args(url : String) : Array(String)
     return [] of String unless youtube_url?(url)
 
@@ -153,11 +163,21 @@ module YtDlpTools
   end
 
   def self.youtube_failure_hints : String
-    <<-HINT
-      YouTube download failed. On Linux/macOS this is usually an outdated yt-dlp or missing JS runtime:
-        • Update yt-dlp: pipx install -U yt-dlp   (or brew upgrade yt-dlp)
-        • Install Node.js: sudo apt install nodejs   (see https://github.com/yt-dlp/yt-dlp/wiki/EJS)
+    hints = <<-HINT
+      YouTube download failed. Common fixes:
+        • Let quark-downloader use a bundled yt-dlp (yt_dlp = auto in quark-downloader.conf)
+        • Or update PATH: pipx install -U yt-dlp   (or brew upgrade yt-dlp)
       HINT
+
+    unless js_runtime
+      hints += <<-HINT
+
+        • Install a JS runtime for YouTube: sudo apt install nodejs
+          https://github.com/yt-dlp/yt-dlp/wiki/EJS
+      HINT
+    end
+
+    hints
   end
 
   def self.read_version(path : String) : String?
@@ -186,7 +206,6 @@ module YtDlpTools
     parse_version(installed) >= parse_version(minimum)
   end
 
-  {% unless flag?(:windows) %}
   def self.warn_if_stale(path : String)
     version = read_version(path)
     return unless version
@@ -202,9 +221,7 @@ module YtDlpTools
 
     puts "Warning: No Node.js or Deno on PATH — YouTube may fail until you install one (yt-dlp EJS wiki)."
   end
-  {% end %}
 
-  {% if flag?(:windows) %}
   def self.check_due? : Bool
     check_file = tools_dir / CHECK_AT_FILE
     return true unless File.exists?(check_file.to_s)
@@ -315,10 +332,15 @@ module YtDlpTools
 
   def self.install_binary(tmp : Path, dest : Path)
     File.delete?(dest.to_s) if File.exists?(dest.to_s)
-    File.rename(tmp.to_s, dest.to_s)
-  rescue
-    File.copy(tmp.to_s, dest.to_s)
-    File.delete?(tmp.to_s)
+    begin
+      File.rename(tmp.to_s, dest.to_s)
+    rescue
+      File.copy(tmp.to_s, dest.to_s)
+      File.delete?(tmp.to_s)
+    end
+    {% unless flag?(:windows) %}
+    File.chmod(dest.to_s, 0o755)
+    {% end %}
   end
 
   def self.installed_version : String?
@@ -330,21 +352,10 @@ module YtDlpTools
 
     return nil unless File.exists?(bundled_path.to_s)
 
-    stdout = IO::Memory.new
-    status = Process.run(
-      command: bundled_path.to_s,
-      args: ["--version"],
-      output: stdout,
-      error: Process::Redirect::Close,
-    )
-
-    return nil unless status.try(&.success?)
-
-    stdout.to_s.chomp.split(/\s+/).first
+    read_version(bundled_path.to_s)
   end
 
   def self.version_newer?(latest : String, installed : String) : Bool
     parse_version(latest) > parse_version(installed)
   end
-  {% end %}
 end

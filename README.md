@@ -15,7 +15,7 @@
 |---|---------|----------------|
 | **yt-dlp** | PATH or auto-download to `tools/` | PATH — keep it current for YouTube |
 | **ffmpeg** | PATH, `bundled-tools/` → `build/tools/` on build, or auto-download | PATH (`brew install ffmpeg`, etc.) |
-| **GUI (optional)** | Built-in Win32 dialog | [zenity](https://github.com/nco/zenity) (`apt install zenity`, `brew install zenity`) |
+| **GUI (optional)** | Built-in Win32 dialog | [Tk](https://www.tcl.tk/) / `wish` (`apt install tk`, `brew install tcl-tk`) |
 
 **YouTube:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
@@ -28,7 +28,7 @@
 | `quark-downloader` | Full CLI — interactive in a terminal, or scriptable with flags |
 | `quark-downloader-gui` | Thin UI that collects options and runs the CLI as a subprocess |
 
-Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop), and depends on **zenity** (Linux/macOS).
+Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, `quark-downloader-gui.tcl` (same directory), [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop), and depends on **Tk** / `wish` (Linux/macOS).
 
 Windows shortcuts from the installer open the GUI; the CLI remains in the install folder as **Quark Downloader (CLI)**.
 

@@ -3,22 +3,11 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $buildDir = Join-Path $Root "build"
-$toolsDir = Join-Path $buildDir "tools"
 $binary = Join-Path $buildDir "quark-downloader.exe"
 $guiBinary = Join-Path $buildDir "quark-downloader-gui.exe"
-$bundled = Join-Path $Root "bundled-tools"
 
 Write-Host "quark-downloader (Windows build)"
 Write-Host ""
-
-New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
-foreach ($tool in @("ffmpeg.exe", "ffprobe.exe")) {
-  $src = Join-Path $bundled $tool
-  if (Test-Path $src) { Copy-Item $src $toolsDir -Force }
-}
-
-& (Join-Path $PSScriptRoot "embed-app-res.ps1")
-& (Join-Path $PSScriptRoot "embed-gui-res.ps1")
 
 $iconRes = (Resolve-Path (Join-Path $buildDir "app.res")).Path
 if (Test-Path (Join-Path $buildDir "gui_rc.o")) {

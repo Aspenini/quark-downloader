@@ -4,7 +4,7 @@ require "./run_cli"
 {% if flag?(:windows) %}
 require "./win32_ui"
 {% else %}
-require "./zenity_ui"
+require "./tk_ui"
 {% end %}
 
 module QuarkGui
@@ -16,12 +16,12 @@ module QuarkGui
       {% if flag?(:windows) %}
       Win32Ui.message_box("quark-downloader was not found.\nInstall it next to this program or on PATH.", true)
       {% else %}
-      zenity_error("quark-downloader was not found.\nInstall it next to this program or on PATH.")
+      TkUi.tk_error("quark-downloader was not found.\nInstall it next to this program or on PATH.")
       {% end %}
       return
     end
 
-    params = {% if flag?(:windows) %} Win32Ui.collect_params(cli) {% else %} collect_params(cli) {% end %}
+    params = {% if flag?(:windows) %} Win32Ui.collect_params(cli) {% else %} TkUi.collect_params(cli) {% end %}
     return unless params
 
     exit_code = run_download(cli, params)
@@ -29,7 +29,7 @@ module QuarkGui
     {% if flag?(:windows) %}
     Win32Ui.show_result(exit_code == 0, exit_code)
     {% else %}
-    show_result(exit_code == 0, exit_code)
+    TkUi.show_result(exit_code == 0, exit_code)
     {% end %}
   end
 end
