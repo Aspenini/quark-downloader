@@ -7,7 +7,7 @@
       <h1>Quark Downloader</h1>
       <p>
         <a href="shard.yml">
-          <img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-black" />
+          <img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-purple" />
         </a>
         <a href="https://github.com/Aspenini/quark-downloader/releases">
           <img alt="GitHub release" src="https://img.shields.io/github/v/release/Aspenini/quark-downloader?label=release" />
