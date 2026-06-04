@@ -26,6 +26,41 @@
         LibUser32.SendMessageW(combo, CB_SETCURSEL, selected_index.to_u64, 0)
       end
 
+      def self.set_dialog_title(hdlg : WinHWND, title : String)
+        LibUser32.SetWindowTextW(hdlg, wide(title).to_unsafe)
+      end
+
+      def self.set_view_visible(hdlg : WinHWND, ids : Array(Int32), visible : Bool)
+        cmd = visible ? SW_SHOW : SW_HIDE
+        ids.each do |id|
+          child = LibUser32.GetDlgItem(hdlg, id)
+          next if child.null?
+
+          LibUser32.ShowWindow(child, cmd)
+        end
+      end
+
+      def self.populate_settings_fields(hdlg : WinHWND, settings : QuarkConfig::Settings)
+        set_dlg_text(hdlg, IDC_SET_DOWNLOAD_DIR, settings.download_dir)
+        populate_combo(hdlg, IDC_SET_YTDLP, TOOL_SOURCE_VALUES, settings.yt_dlp.to_config)
+        populate_combo(hdlg, IDC_SET_FFMPEG, TOOL_SOURCE_VALUES, settings.ffmpeg.to_config)
+        populate_combo(hdlg, IDC_SET_GUI_MODE, GUI_MODE_VALUES, settings.gui_download_mode.to_config)
+        LibUser32.CheckDlgButton(hdlg, IDC_SET_LOGS, settings.download_logs ? 1 : 0)
+      end
+
+      def self.read_settings_form(hdlg : WinHWND) : SettingsForm?
+        download_dir = get_dlg_text(hdlg, IDC_SET_DOWNLOAD_DIR).strip
+        return nil if download_dir.empty?
+
+        SettingsForm.new(
+          download_dir,
+          combo_text(hdlg, IDC_SET_YTDLP),
+          combo_text(hdlg, IDC_SET_FFMPEG),
+          combo_text(hdlg, IDC_SET_GUI_MODE),
+          LibUser32.IsDlgButtonChecked(hdlg, IDC_SET_LOGS) != 0,
+        )
+      end
+
       def self.combo_text(hdlg : WinHWND, id : Int32) : String
         combo = LibUser32.GetDlgItem(hdlg, id)
         sel = LibUser32.SendMessageW(combo, CB_GETCURSEL, 0, 0)

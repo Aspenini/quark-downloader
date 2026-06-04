@@ -19,6 +19,33 @@
       IDC_SET_FFMPEG       = 1013
       IDC_SET_GUI_MODE     = 1014
       IDC_SET_LOGS         = 1015
+      IDC_MAIN_URL_LABEL   = 1016
+      IDC_MAIN_FORMAT_LABEL = 1017
+      IDC_MAIN_OUTPUT_LABEL = 1018
+      IDC_SET_DOWNLOAD_LABEL = 1019
+      IDC_SET_YTDLP_LABEL  = 1020
+      IDC_SET_FFMPEG_LABEL = 1021
+      IDC_SET_GUI_MODE_LABEL = 1022
+      IDC_SET_SAVE         = 1023
+      IDC_SET_CANCEL       = 1024
+
+      SW_HIDE = 0
+      SW_SHOW = 5
+
+      MAIN_VIEW_IDS = [
+        IDC_MAIN_URL_LABEL, IDC_URL, IDC_AUDIO, IDC_VIDEO,
+        IDC_MAIN_FORMAT_LABEL, IDC_FORMAT,
+        IDC_MAIN_OUTPUT_LABEL, IDC_OUTPUT, IDC_BROWSE,
+        IDC_SETTINGS, 1, 2,
+      ]
+
+      SETTINGS_VIEW_IDS = [
+        IDC_SET_DOWNLOAD_LABEL, IDC_SET_DOWNLOAD_DIR, IDC_SET_BROWSE,
+        IDC_SET_YTDLP_LABEL, IDC_SET_YTDLP,
+        IDC_SET_FFMPEG_LABEL, IDC_SET_FFMPEG,
+        IDC_SET_GUI_MODE_LABEL, IDC_SET_GUI_MODE, IDC_SET_LOGS,
+        IDC_SET_SAVE, IDC_SET_CANCEL,
+      ]
 
       AUDIO_FORMATS      = ["original", "mp3", "m4a", "flac", "wav", "opus", "vorbis"]
       VIDEO_FORMATS      = ["original", "mp4", "mkv", "webm"]
@@ -84,6 +111,8 @@
         fun CheckDlgButton(hDlg : WinHWND, nIDButton : Int32, uCheck : UInt32) : WinBOOL
         fun IsDlgButtonChecked(hDlg : WinHWND, nIDButton : Int32) : UInt32
         fun MessageBoxW(hWnd : WinHWND, lpText : UInt16*, lpCaption : UInt16*, uType : UInt32) : Int32
+        fun ShowWindow(hWnd : WinHWND, nCmdShow : Int32) : WinBOOL
+        fun SetWindowTextW(hWnd : WinHWND, lpString : UInt16*) : WinBOOL
       end
 
       lib LibShell32

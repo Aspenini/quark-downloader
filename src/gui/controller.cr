@@ -15,8 +15,16 @@ module QuarkGui
 
       loop do
         QuarkConfig.load!(quiet: true)
-        action = PlatformUi.collect_main_action(QuarkGui.default_output_dir(cli))
+        session = PlatformUi.collect_main_session(
+          QuarkGui.default_output_dir(cli),
+          QuarkConfig.settings,
+        )
 
+        if form = session.settings_form
+          next unless save_settings(form)
+        end
+
+        action = session.action
         case action
         when MainAction::Download
           QuarkGui.run_download(cli, action.params)
@@ -29,7 +37,7 @@ module QuarkGui
       end
     end
 
-    def self.edit_settings : Nil
+    def self.edit_settings : Bool
       QuarkConfig.load!(quiet: true)
       action = PlatformUi.collect_settings_action(QuarkConfig.settings)
 
@@ -37,18 +45,23 @@ module QuarkGui
       when SettingsAction::Save
         save_settings(action.form)
       when SettingsAction::Cancel
+        false
+      else
+        false
       end
     rescue ex
       PlatformUi.show_error("Could not save settings:\n#{ex.message}")
+      false
     end
 
-    def self.save_settings(form : SettingsForm) : Nil
+    def self.save_settings(form : SettingsForm) : Bool
       if form.download_dir.strip.empty?
         PlatformUi.show_error("Please choose a default download folder.")
-        return
+        return false
       end
 
       QuarkConfig.save!(form.to_settings)
+      true
     end
   end
 end

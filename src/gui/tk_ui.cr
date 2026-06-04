@@ -120,6 +120,65 @@ module QuarkGui
       run_wish(["--message", "error", APP_TITLE, message])
     end
 
+    def self.collect_main_session(default_dir : String, settings : QuarkConfig::Settings) : MainSessionResult
+      code, text = run_wish([
+        "--session",
+        default_dir,
+        settings.download_dir,
+        settings.yt_dlp.to_config,
+        settings.ffmpeg.to_config,
+        settings.gui_download_mode.to_config,
+        settings.download_logs.to_s,
+      ])
+      return MainSessionResult.new(MainAction::Cancel.new) unless code == 0
+
+      parse_main_session_response(text)
+    end
+
+    def self.parse_main_session_response(text : String) : MainSessionResult
+      lines = text.lines.map(&.strip)
+      return MainSessionResult.new(MainAction::Cancel.new) if lines.empty?
+      return MainSessionResult.new(MainAction::Cancel.new) unless lines.first == "__SESSION__"
+
+      action : MainAction::Type = MainAction::Cancel.new
+      settings_form : SettingsForm? = nil
+      i = 1
+
+      while i < lines.size
+        case lines[i]
+        when "__SETTINGS__"
+          break unless i + 5 < lines.size
+
+          settings_form = SettingsForm.from_strings(
+            lines[i + 1],
+            lines[i + 2],
+            lines[i + 3],
+            lines[i + 4],
+            lines[i + 5],
+          )
+          i += 6
+        when "__DOWNLOAD__"
+          break unless i + 4 < lines.size
+
+          url = lines[i + 1]
+          media_type = lines[i + 2]
+          format = lines[i + 3]
+          output_dir = lines[i + 4]
+          unless url.empty? || output_dir.empty?
+            action = MainAction::Download.new(DownloadParams.new(url, media_type, format, output_dir))
+          end
+          i += 5
+        when "__CANCEL__"
+          action = MainAction::Cancel.new
+          i += 1
+        else
+          i += 1
+        end
+      end
+
+      MainSessionResult.new(action, settings_form)
+    end
+
     def self.collect_main_action(default_dir : String) : MainAction::Type
       code, text = run_wish([default_dir])
       return MainAction::Cancel.new unless code == 0

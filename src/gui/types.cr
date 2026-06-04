@@ -73,6 +73,14 @@ module QuarkGui
     alias Type = Download | Settings | Cancel
   end
 
+  struct MainSessionResult
+    getter action : MainAction::Type
+    getter settings_form : SettingsForm?
+
+    def initialize(@action : MainAction::Type, @settings_form : SettingsForm? = nil)
+    end
+  end
+
   module SettingsAction
     struct Save
       getter form : SettingsForm

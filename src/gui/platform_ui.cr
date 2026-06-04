@@ -32,6 +32,14 @@ module QuarkGui
       {% end %}
     end
 
+    def self.collect_main_session(default_output : String, settings : QuarkConfig::Settings) : MainSessionResult
+      {% if flag?(:windows) %}
+        Win32Ui.collect_main_session(default_output, settings)
+      {% else %}
+        TkUi.collect_main_session(default_output, settings)
+      {% end %}
+    end
+
     def self.collect_settings_action(settings : QuarkConfig::Settings) : SettingsAction::Type
       {% if flag?(:windows) %}
         Win32Ui.collect_settings_action(settings)

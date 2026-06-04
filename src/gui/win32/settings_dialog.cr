@@ -46,11 +46,7 @@
       ) : WinBOOL
         case msg
         when WM_INITDIALOG
-          set_dlg_text(hdlg, IDC_SET_DOWNLOAD_DIR, @@settings_values.download_dir)
-          populate_combo(hdlg, IDC_SET_YTDLP, TOOL_SOURCE_VALUES, @@settings_values.yt_dlp.to_config)
-          populate_combo(hdlg, IDC_SET_FFMPEG, TOOL_SOURCE_VALUES, @@settings_values.ffmpeg.to_config)
-          populate_combo(hdlg, IDC_SET_GUI_MODE, GUI_MODE_VALUES, @@settings_values.gui_download_mode.to_config)
-          LibUser32.CheckDlgButton(hdlg, IDC_SET_LOGS, @@settings_values.download_logs ? 1 : 0)
+          populate_settings_fields(hdlg, @@settings_values)
           1
         when WM_COMMAND
           id = wparam & 0xFFFF
@@ -96,19 +92,11 @@
       end
 
       def self.save_settings_dialog(hdlg : WinHWND) : WinBOOL
-        download_dir = get_dlg_text(hdlg, IDC_SET_DOWNLOAD_DIR).strip
-        if download_dir.empty?
+        unless form = read_settings_form(hdlg)
           message_box("Please choose a default download folder.", true)
           return 0
         end
 
-        form = SettingsForm.new(
-          download_dir,
-          combo_text(hdlg, IDC_SET_YTDLP),
-          combo_text(hdlg, IDC_SET_FFMPEG),
-          combo_text(hdlg, IDC_SET_GUI_MODE),
-          LibUser32.IsDlgButtonChecked(hdlg, IDC_SET_LOGS) != 0,
-        )
         @@settings_action = SettingsAction::Save.new(form)
         LibUser32.EndDialog(hdlg, 1)
         1

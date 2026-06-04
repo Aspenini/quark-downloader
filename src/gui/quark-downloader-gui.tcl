@@ -23,6 +23,299 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         exit 2
     }
     show_message [lindex $argv 1] [lindex $argv 2] [join [lrange $argv 3 end]]
+} elseif {[llength $argv] > 0 && [lindex $argv 0] eq "--session"} {
+    set default_dir [file normalize "~/Downloads"]
+    set current_download_dir "~/Downloads"
+    set current_ytdlp auto
+    set current_ffmpeg auto
+    set current_gui_mode progress
+    set current_logs true
+
+    if {[llength $argv] > 1} { set default_dir [lindex $argv 1] }
+    if {[llength $argv] > 2} { set current_download_dir [lindex $argv 2] }
+    if {[llength $argv] > 3} { set current_ytdlp [lindex $argv 3] }
+    if {[llength $argv] > 4} { set current_ffmpeg [lindex $argv 4] }
+    if {[llength $argv] > 5} { set current_gui_mode [lindex $argv 5] }
+    if {[llength $argv] > 6} { set current_logs [lindex $argv 6] }
+
+    proc session_set_combo_value {widget value values} {
+        $widget configure -values $values
+        set idx [lsearch -exact $values $value]
+        if {$idx < 0} {
+            set idx 0
+        }
+        $widget current $idx
+    }
+
+    proc session_bool_value {value} {
+        set lowered [string tolower $value]
+        return [expr {$lowered eq "true" || $lowered eq "1" || $lowered eq "yes" || $lowered eq "on"}]
+    }
+
+    proc session_normalize_dir {path} {
+        if {[catch {file normalize $path} normalized]} {
+            return $path
+        }
+        return $normalized
+    }
+
+    set ::session_default_dir [session_normalize_dir $default_dir]
+    set ::session_media_type video
+    set ::session_type_var video
+    set ::session_settings_saved 0
+    set ::session_download_dir $current_download_dir
+    set ::session_ytdlp $current_ytdlp
+    set ::session_ffmpeg $current_ffmpeg
+    set ::session_gui_mode $current_gui_mode
+    set ::session_logs [session_bool_value $current_logs]
+    set ::session_logs_var $::session_logs
+
+    proc session_set_formats {} {
+        if {$::session_media_type eq "audio"} {
+            set values $::AUDIO_FORMATS
+        } else {
+            set values $::VIDEO_FORMATS
+        }
+        .main.format_combo configure -values $values
+        .main.format_combo current 0
+    }
+
+    proc session_bind_main_keys {} {
+        bind . <Return> session_on_download
+        bind . <Escape> session_emit_cancel
+    }
+
+    proc session_bind_settings_keys {} {
+        bind . <Return> session_on_settings_save
+        bind . <Escape> session_show_main
+    }
+
+    proc session_show_main {} {
+        wm title . "Quark Downloader"
+        catch {grid remove .settings}
+        grid .main -row 0 -column 0 -sticky nsew
+        session_bind_main_keys
+        focus .main.url_entry
+    }
+
+    proc session_show_settings {} {
+        wm title . "Quark Downloader Settings"
+        catch {grid remove .main}
+
+        .settings.download_entry delete 0 end
+        .settings.download_entry insert 0 $::session_download_dir
+        session_set_combo_value .settings.ytdlp_combo $::session_ytdlp {auto path bundled}
+        session_set_combo_value .settings.ffmpeg_combo $::session_ffmpeg {auto path bundled}
+        session_set_combo_value .settings.mode_combo $::session_gui_mode {progress external_cli}
+        set ::session_logs_var $::session_logs
+
+        grid .settings -row 0 -column 0 -sticky nsew
+        session_bind_settings_keys
+        focus .settings.download_entry
+    }
+
+    proc session_emit_settings {} {
+        puts "__SETTINGS__"
+        puts $::session_download_dir
+        puts $::session_ytdlp
+        puts $::session_ffmpeg
+        puts $::session_gui_mode
+        if {$::session_logs} {
+            puts "true"
+        } else {
+            puts "false"
+        }
+    }
+
+    proc session_emit_download {url media_type format output} {
+        puts "__SESSION__"
+        if {$::session_settings_saved} {
+            session_emit_settings
+        }
+        puts "__DOWNLOAD__"
+        puts $url
+        puts $media_type
+        puts $format
+        puts $output
+        flush stdout
+        destroy .
+        exit 0
+    }
+
+    proc session_emit_cancel {} {
+        puts "__SESSION__"
+        if {$::session_settings_saved} {
+            session_emit_settings
+        }
+        puts "__CANCEL__"
+        flush stdout
+        destroy .
+        exit 0
+    }
+
+    proc session_on_type_change {} {
+        set ::session_media_type $::session_type_var
+        session_set_formats
+    }
+
+    proc session_on_browse {} {
+        set initial [string trim [.main.output_entry get]]
+        if {$initial eq ""} {
+            set initial $::session_default_dir
+        }
+        set chosen [tk_chooseDirectory -parent . -mustexist 1 \
+            -initialdir [session_normalize_dir $initial] -title "Select output folder"]
+        if {$chosen ne ""} {
+            .main.output_entry delete 0 end
+            .main.output_entry insert 0 $chosen
+        }
+    }
+
+    proc session_on_settings_browse {} {
+        set initial [string trim [.settings.download_entry get]]
+        if {$initial eq ""} {
+            set initial [file normalize "~/Downloads"]
+        }
+        set chosen [tk_chooseDirectory -parent . -mustexist 1 \
+            -initialdir [session_normalize_dir $initial] \
+            -title "Select default download folder"]
+        if {$chosen ne ""} {
+            .settings.download_entry delete 0 end
+            .settings.download_entry insert 0 $chosen
+        }
+    }
+
+    proc session_on_settings_save {} {
+        set download_dir [string trim [.settings.download_entry get]]
+        if {$download_dir eq ""} {
+            tk_messageBox -parent . -title "Quark Downloader" \
+                -message "Please choose a default download folder." -type ok -icon error
+            return
+        }
+
+        set previous_default $::session_default_dir
+        set normalized_download_dir [session_normalize_dir $download_dir]
+        set current_output [string trim [.main.output_entry get]]
+
+        set ::session_download_dir $download_dir
+        set ::session_ytdlp [.settings.ytdlp_combo get]
+        set ::session_ffmpeg [.settings.ffmpeg_combo get]
+        set ::session_gui_mode [.settings.mode_combo get]
+        set ::session_logs $::session_logs_var
+        set ::session_default_dir $normalized_download_dir
+        set ::session_settings_saved 1
+
+        if {$current_output eq "" || $current_output eq $previous_default} {
+            .main.output_entry delete 0 end
+            .main.output_entry insert 0 $normalized_download_dir
+        }
+
+        session_show_main
+    }
+
+    proc session_on_download {} {
+        set url [string trim [.main.url_entry get]]
+        if {$url eq ""} {
+            tk_messageBox -parent . -title "Quark Downloader" \
+                -message "Please enter a video URL." -type ok -icon error
+            return
+        }
+
+        set output [string trim [.main.output_entry get]]
+        if {$output eq ""} {
+            tk_messageBox -parent . -title "Quark Downloader" \
+                -message "Please choose an output folder." -type ok -icon error
+            return
+        }
+
+        set format [.main.format_combo get]
+        if {$format eq ""} {
+            set format original
+        }
+
+        session_emit_download $url $::session_media_type $format $output
+    }
+
+    wm title . "Quark Downloader"
+    wm resizable . 0 0
+
+    ttk::frame .main
+    ttk::frame .settings
+    grid columnconfigure . 0 -weight 1
+    grid rowconfigure . 0 -weight 1
+
+    ttk::label .main.url_lbl -text "Video URL:"
+    ttk::entry .main.url_entry -width 42
+    grid .main.url_lbl -row 0 -column 0 -columnspan 3 -sticky w -padx 10 -pady {10 2}
+    grid .main.url_entry -row 1 -column 0 -columnspan 3 -sticky ew -padx 10 -pady {0 8}
+
+    ttk::radiobutton .main.rb_video -text "Video" -variable ::session_type_var -value video \
+        -command session_on_type_change
+    ttk::radiobutton .main.rb_audio -text "Audio" -variable ::session_type_var -value audio \
+        -command session_on_type_change
+    grid .main.rb_video -row 2 -column 0 -sticky w -padx {10 0}
+    grid .main.rb_audio -row 2 -column 1 -sticky w -padx 5
+
+    ttk::label .main.fmt_lbl -text "Format:"
+    ttk::combobox .main.format_combo -state readonly -width 18
+    grid .main.fmt_lbl -row 3 -column 0 -sticky w -padx 10 -pady {8 2}
+    grid .main.format_combo -row 4 -column 0 -columnspan 2 -sticky w -padx 10 -pady {0 8}
+
+    ttk::label .main.out_lbl -text "Output folder:"
+    ttk::entry .main.output_entry -width 32
+    ttk::button .main.browse_btn -text "Browse..." -command session_on_browse
+    grid .main.out_lbl -row 5 -column 0 -columnspan 3 -sticky w -padx 10 -pady {0 2}
+    grid .main.output_entry -row 6 -column 0 -columnspan 2 -sticky ew -padx {10 0}
+    grid .main.browse_btn -row 6 -column 2 -sticky e -padx {4 10}
+
+    .main.output_entry insert 0 $::session_default_dir
+
+    ttk::button .main.settings_btn -text "\u2699" -width 3 -command session_show_settings
+    ttk::button .main.dl_btn -text "Download" -command session_on_download -default active
+    ttk::button .main.cancel_btn -text "Cancel" -command session_emit_cancel
+    grid .main.settings_btn -row 7 -column 0 -sticky w -padx 10 -pady 12
+    grid .main.dl_btn -row 7 -column 1 -sticky e -padx 5 -pady 12
+    grid .main.cancel_btn -row 7 -column 2 -sticky e -padx {0 10} -pady 12
+
+    grid columnconfigure .main 0 -weight 1
+    grid columnconfigure .main 1 -weight 0
+
+    ttk::label .settings.download_lbl -text "Default folder:"
+    ttk::entry .settings.download_entry -width 38
+    ttk::button .settings.download_browse_btn -text "Browse..." \
+        -command session_on_settings_browse
+    grid .settings.download_lbl -row 0 -column 0 -columnspan 3 -sticky w -padx 10 -pady {10 2}
+    grid .settings.download_entry -row 1 -column 0 -columnspan 2 -sticky ew -padx {10 0}
+    grid .settings.download_browse_btn -row 1 -column 2 -sticky e -padx {4 10}
+
+    ttk::label .settings.ytdlp_lbl -text "yt-dlp:"
+    ttk::combobox .settings.ytdlp_combo -state readonly -width 16
+    ttk::label .settings.ffmpeg_lbl -text "ffmpeg:"
+    ttk::combobox .settings.ffmpeg_combo -state readonly -width 16
+    grid .settings.ytdlp_lbl -row 2 -column 0 -sticky w -padx 10 -pady {10 2}
+    grid .settings.ytdlp_combo -row 3 -column 0 -sticky w -padx 10
+    grid .settings.ffmpeg_lbl -row 2 -column 1 -sticky w -padx 10 -pady {10 2}
+    grid .settings.ffmpeg_combo -row 3 -column 1 -sticky w -padx 10
+
+    ttk::label .settings.mode_lbl -text "GUI download:"
+    ttk::combobox .settings.mode_combo -state readonly -width 16
+    ttk::checkbutton .settings.logs_check -text "Create download logs" \
+        -variable ::session_logs_var
+    grid .settings.mode_lbl -row 4 -column 0 -sticky w -padx 10 -pady {10 2}
+    grid .settings.mode_combo -row 5 -column 0 -sticky w -padx 10
+    grid .settings.logs_check -row 5 -column 1 -columnspan 2 -sticky w -padx 10
+
+    ttk::button .settings.save_btn -text "Save" -command session_on_settings_save -default active
+    ttk::button .settings.cancel_btn -text "Cancel" -command session_show_main
+    grid .settings.save_btn -row 6 -column 1 -sticky e -padx 5 -pady 12
+    grid .settings.cancel_btn -row 6 -column 2 -sticky e -padx {0 10} -pady 12
+
+    grid columnconfigure .settings 0 -weight 1
+    grid columnconfigure .settings 1 -weight 1
+
+    wm protocol . WM_DELETE_WINDOW session_emit_cancel
+    session_set_formats
+    session_show_main
 } elseif {[llength $argv] > 0 && [lindex $argv 0] eq "--settings"} {
     set current_download_dir "~/Downloads"
     set current_ytdlp auto
