@@ -1,4 +1,4 @@
-; Quark Downloader — Inno Setup 7 script
+; Quark Downloader - Inno Setup 7 script
 
 ;
 
@@ -64,7 +64,7 @@
 
 #else
 
-  #pragma error "Run `just build` first — expected ..\build\quark-downloader.exe"
+  #pragma error "Run `just build` first - expected ..\build\quark-downloader.exe"
 
 #endif
 
@@ -74,7 +74,7 @@
 
 #else
 
-  #pragma error "Run `just build` first — expected ..\build\quark-downloader-gui.exe"
+  #pragma error "Run `just build` first - expected ..\build\quark-downloader-gui.exe"
 
 #endif
 

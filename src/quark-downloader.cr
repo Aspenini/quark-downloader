@@ -81,11 +81,11 @@ def interactive_main
 end
 
 {% unless flag?(:windows) %}
-Signal::INT.trap do
-  puts "\nCancelled."
-  QuarkDownload.press_any_key(false)
-  exit(130)
-end
+  Signal::INT.trap do
+    puts "\nCancelled."
+    QuarkDownload.press_any_key(false)
+    exit(130)
+  end
 {% end %}
 
 url = nil

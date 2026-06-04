@@ -1,8 +1,9 @@
 require "./ytdlp_tools"
+require "./logs"
 {% if flag?(:windows) %}
-require "json"
-require "file_utils"
-require "./tool_http"
+  require "json"
+  require "file_utils"
+  require "./tool_http"
 {% end %}
 
 module FfmpegTools
@@ -41,8 +42,8 @@ module FfmpegTools
   end
 
   {% if flag?(:windows) %}
-  GITHUB_LATEST_URL = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest"
-  VERSION_FILE      = ".ffmpeg-version"
+    GITHUB_LATEST_URL = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest"
+    VERSION_FILE      = ".ffmpeg-version"
   {% end %}
 
   @@detected = false
@@ -81,9 +82,9 @@ module FfmpegTools
     if location = locate
       from_path, path = location
       if from_path
-        puts "Using ffmpeg from PATH: #{path}"
+        QuarkLogs.puts "Using ffmpeg from PATH: #{path}"
       else
-        puts "Using ffmpeg from: #{path}"
+        QuarkLogs.puts "Using ffmpeg from: #{path}"
       end
     else
       warn_not_found
@@ -102,14 +103,14 @@ module FfmpegTools
         ensure_bundled!
       else
         if exe = path_executable
-          puts "Using ffmpeg from PATH: #{exe}" unless @@detected
+          QuarkLogs.puts "Using ffmpeg from PATH: #{exe}" unless @@detected
           return Path[exe].parent.to_s
         end
         ensure_bundled!
       end
     {% else %}
       if exe = path_executable
-        puts "Using ffmpeg from PATH: #{exe}" unless @@detected
+        QuarkLogs.puts "Using ffmpeg from PATH: #{exe}" unless @@detected
         return Path[exe].parent.to_s
       end
 
@@ -118,51 +119,51 @@ module FfmpegTools
   end
 
   {% if flag?(:windows) %}
-  def self.ensure_path_only! : String
-    if exe = path_executable
-      puts "Using ffmpeg from PATH: #{exe}" unless @@detected
-      return Path[exe].parent.to_s
-    end
+    def self.ensure_path_only! : String
+      if exe = path_executable
+        QuarkLogs.puts "Using ffmpeg from PATH: #{exe}" unless @@detected
+        return Path[exe].parent.to_s
+      end
 
-    raise Error.new(<<-MSG)
+      raise Error.new(<<-MSG)
       ffmpeg not found on PATH (quark-downloader.conf: ffmpeg = path).
       Install ffmpeg and add it to PATH, or set ffmpeg = auto or bundled.
       MSG
-  end
-
-  def self.ensure_bundled! : String
-    Dir.mkdir_p(tools_dir.to_s)
-
-    if bundled?
-      puts "Using ffmpeg from: #{bundled_path}" unless @@detected
-      return tools_dir.to_s
     end
 
-    unless skip_download?
-      puts "Downloading ffmpeg..."
-      download_latest!
-      return tools_dir.to_s
-    end
+    def self.ensure_bundled! : String
+      Dir.mkdir_p(tools_dir.to_s)
 
-    raise Error.new(<<-MSG)
+      if bundled?
+        QuarkLogs.puts "Using ffmpeg from: #{bundled_path}" unless @@detected
+        return tools_dir.to_s
+      end
+
+      unless skip_download?
+        QuarkLogs.puts "Downloading ffmpeg..."
+        download_latest!
+        return tools_dir.to_s
+      end
+
+      raise Error.new(<<-MSG)
       ffmpeg not found in tools/ (quark-downloader.conf: ffmpeg = bundled).
       Place ffmpeg.exe in tools/ or allow a network download when converting formats.
       MSG
-  end
+    end
   {% end %}
 
   def self.warn_not_found
-    puts
-    puts "Warning: ffmpeg not found on PATH."
+    QuarkLogs.puts
+    QuarkLogs.puts "Warning: ffmpeg not found on PATH."
     {% if flag?(:darwin) %}
-      puts "  Install with Homebrew: brew install ffmpeg"
+      QuarkLogs.puts "  Install with Homebrew: brew install ffmpeg"
     {% elsif flag?(:linux) %}
-      puts "  Install with your package manager, e.g. apt install ffmpeg"
+      QuarkLogs.puts "  Install with your package manager, e.g. apt install ffmpeg"
     {% else %}
-      puts "  Install ffmpeg, add it to PATH, place binaries in bundled-tools/ and rebuild,"
-      puts "  or allow a network download when converting formats."
+      QuarkLogs.puts "  Install ffmpeg, add it to PATH, place binaries in bundled-tools/ and rebuild,"
+      QuarkLogs.puts "  or allow a network download when converting formats."
     {% end %}
-    puts "  Original-format downloads may still work; conversion requires ffmpeg."
+    QuarkLogs.puts "  Original-format downloads may still work; conversion requires ffmpeg."
   end
 
   def self.append_to_cmd!(cmd : Array(String))
@@ -171,15 +172,15 @@ module FfmpegTools
 
   def self.raise_not_found
     message = {% if flag?(:darwin) %}
-      "ffmpeg not found on PATH.\nInstall with Homebrew: brew install ffmpeg"
-    {% elsif flag?(:linux) %}
-      "ffmpeg not found on PATH.\nInstall with your package manager, e.g. apt install ffmpeg"
-    {% else %}
-      <<-MSG
+                "ffmpeg not found on PATH.\nInstall with Homebrew: brew install ffmpeg"
+              {% elsif flag?(:linux) %}
+                "ffmpeg not found on PATH.\nInstall with your package manager, e.g. apt install ffmpeg"
+              {% else %}
+                <<-MSG
         ffmpeg not found on PATH.
         Install ffmpeg, add it to PATH, place binaries in bundled-tools/ and rebuild, or allow a network download on next run.
         MSG
-    {% end %}
+              {% end %}
 
     raise Error.new(message)
   end
@@ -191,7 +192,7 @@ module FfmpegTools
     url = asset["browser_download_url"].as_s
     name = asset["name"].as_s
     tag = release["tag_name"].as_s
-    puts "Fetching #{name}..."
+    QuarkLogs.puts "Fetching #{name}..."
     archive = tools_dir / name
     ToolHttp.download_file(url, archive)
     extract_and_install(archive, tag)
@@ -238,7 +239,7 @@ module FfmpegTools
 
     FileUtils.rm_rf(extract_dir.to_s)
     File.write(tools_dir / VERSION_FILE, version_label)
-    puts "ffmpeg ready (#{version_label})."
+    QuarkLogs.puts "ffmpeg ready (#{version_label})."
   end
 
   def self.extract_archive(archive : Path, dest : Path) : Bool

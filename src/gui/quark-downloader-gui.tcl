@@ -1,5 +1,5 @@
 #!/usr/bin/env wish
-# Quark Downloader — Tk GUI (spawned by quark-downloader-gui via wish)
+# Quark Downloader - Tk GUI (spawned by quark-downloader-gui via wish)
 
 package require Tk
 
@@ -23,6 +23,116 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         exit 2
     }
     show_message [lindex $argv 1] [lindex $argv 2] [join [lrange $argv 3 end]]
+} elseif {[llength $argv] > 0 && [lindex $argv 0] eq "--settings"} {
+    set current_download_dir "~/Downloads"
+    set current_ytdlp auto
+    set current_ffmpeg auto
+    set current_gui_mode progress
+    set current_logs true
+
+    if {[llength $argv] > 1} { set current_download_dir [lindex $argv 1] }
+    if {[llength $argv] > 2} { set current_ytdlp [lindex $argv 2] }
+    if {[llength $argv] > 3} { set current_ffmpeg [lindex $argv 3] }
+    if {[llength $argv] > 4} { set current_gui_mode [lindex $argv 4] }
+    if {[llength $argv] > 5} { set current_logs [lindex $argv 5] }
+
+    proc set_combo_value {widget value values} {
+        $widget configure -values $values
+        set idx [lsearch -exact $values $value]
+        if {$idx < 0} {
+            set idx 0
+        }
+        $widget current $idx
+    }
+
+    proc bool_value {value} {
+        set lowered [string tolower $value]
+        return [expr {$lowered eq "true" || $lowered eq "1" || $lowered eq "yes" || $lowered eq "on"}]
+    }
+
+    proc on_settings_browse {} {
+        set initial [string trim [.download_entry get]]
+        if {$initial eq ""} {
+            set initial [file normalize "~/Downloads"]
+        }
+        set chosen [tk_chooseDirectory -mustexist 1 -initialdir $initial \
+            -title "Select default download folder"]
+        if {$chosen ne ""} {
+            .download_entry delete 0 end
+            .download_entry insert 0 $chosen
+        }
+    }
+
+    proc on_settings_save {} {
+        set download_dir [string trim [.download_entry get]]
+        if {$download_dir eq ""} {
+            tk_messageBox -title "Quark Downloader" -message "Please choose a default download folder." \
+                -type ok -icon error
+            return
+        }
+
+        puts "__SETTINGS__"
+        puts $download_dir
+        puts [.ytdlp_combo get]
+        puts [.ffmpeg_combo get]
+        puts [.mode_combo get]
+        if {$::logs_var} {
+            puts "true"
+        } else {
+            puts "false"
+        }
+        flush stdout
+        destroy .
+        exit 0
+    }
+
+    proc on_settings_cancel {} {
+        destroy .
+        exit 1
+    }
+
+    wm title . "Quark Downloader Settings"
+    wm resizable . 0 0
+
+    ttk::label .download_lbl -text "Default folder:"
+    ttk::entry .download_entry -width 38
+    ttk::button .download_browse_btn -text "Browse..." -command on_settings_browse
+    grid .download_lbl -row 0 -column 0 -columnspan 3 -sticky w -padx 10 -pady {10 2}
+    grid .download_entry -row 1 -column 0 -columnspan 2 -sticky ew -padx {10 0}
+    grid .download_browse_btn -row 1 -column 2 -sticky e -padx {4 10}
+    .download_entry insert 0 $current_download_dir
+
+    ttk::label .ytdlp_lbl -text "yt-dlp:"
+    ttk::combobox .ytdlp_combo -state readonly -width 16
+    ttk::label .ffmpeg_lbl -text "ffmpeg:"
+    ttk::combobox .ffmpeg_combo -state readonly -width 16
+    grid .ytdlp_lbl -row 2 -column 0 -sticky w -padx 10 -pady {10 2}
+    grid .ytdlp_combo -row 3 -column 0 -sticky w -padx 10
+    grid .ffmpeg_lbl -row 2 -column 1 -sticky w -padx 10 -pady {10 2}
+    grid .ffmpeg_combo -row 3 -column 1 -sticky w -padx 10
+    set_combo_value .ytdlp_combo $current_ytdlp {auto path bundled}
+    set_combo_value .ffmpeg_combo $current_ffmpeg {auto path bundled}
+
+    ttk::label .mode_lbl -text "GUI download:"
+    ttk::combobox .mode_combo -state readonly -width 16
+    set ::logs_var [bool_value $current_logs]
+    ttk::checkbutton .logs_check -text "Create download logs" -variable ::logs_var
+    grid .mode_lbl -row 4 -column 0 -sticky w -padx 10 -pady {10 2}
+    grid .mode_combo -row 5 -column 0 -sticky w -padx 10
+    grid .logs_check -row 5 -column 1 -columnspan 2 -sticky w -padx 10
+    set_combo_value .mode_combo $current_gui_mode {progress external_cli}
+
+    ttk::button .save_btn -text "Save" -command on_settings_save -default active
+    ttk::button .settings_cancel_btn -text "Cancel" -command on_settings_cancel
+    grid .save_btn -row 6 -column 1 -sticky e -padx 5 -pady 12
+    grid .settings_cancel_btn -row 6 -column 2 -sticky e -padx {0 10} -pady 12
+
+    grid columnconfigure . 0 -weight 1
+    grid columnconfigure . 1 -weight 1
+
+    wm protocol . WM_DELETE_WINDOW on_settings_cancel
+    bind . <Return> on_settings_save
+    bind . <Escape> on_settings_cancel
 } elseif {[llength $argv] > 0 && [lindex $argv 0] eq "--progress"} {
     set logs_dir ""
     if {[llength $argv] > 1} {
@@ -120,6 +230,13 @@ proc on_cancel {} {
     exit 1
 }
 
+proc on_settings {} {
+    puts "__OPEN_SETTINGS__"
+    flush stdout
+    destroy .
+    exit 0
+}
+
 proc on_download {} {
     global media_type
 
@@ -201,8 +318,10 @@ grid .browse_btn -row 6 -column 2 -sticky e -padx {4 10}
 
 .output_entry insert 0 $default_dir
 
+ttk::button .settings_btn -text "\u2699" -width 3 -command on_settings
 ttk::button .dl_btn -text "Download" -command on_download -default active
 ttk::button .cancel_btn -text "Cancel" -command on_cancel
+grid .settings_btn -row 7 -column 0 -sticky w -padx 10 -pady 12
 grid .dl_btn -row 7 -column 1 -sticky e -padx 5 -pady 12
 grid .cancel_btn -row 7 -column 2 -sticky e -padx {0 10} -pady 12
 

@@ -19,35 +19,35 @@ default:
 [group('build')]
 [private]
 [windows]
-embed-icon:
-    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/embed-app-res.ps1
+compile-cli-resources:
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/compile-cli-resources.ps1
 
 [group('build')]
 [private]
 [windows]
-embed-icon-gui:
-    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/embed-gui-res.ps1
+compile-gui-resources:
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/compile-gui-resources.ps1
 
 [group('build')]
 [private]
 [windows]
 copy-bundled-tools:
-    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-bundled-tools.ps1
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/copy-bundled-tools.ps1
 
 [group('build')]
 [unix]
 build:
-    @bash scripts/build-unix.sh
+    @bash scripts/unix/build.sh
 
 [group('build')]
 [windows]
-build: copy-bundled-tools embed-icon embed-icon-gui
-    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1
+build: copy-bundled-tools compile-cli-resources compile-gui-resources
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/build.ps1
 
 [group('dev')]
 [unix]
 run:
-    @bash -c 'source scripts/crystal-env.sh && crystal run src/quark-downloader.cr'
+    @bash -c 'source scripts/unix/crystal-env.sh && crystal run src/quark-downloader.cr'
 
 [group('dev')]
 [windows]
@@ -57,20 +57,19 @@ run:
 [group('dev')]
 [unix]
 run-gui:
-    @bash -c 'source scripts/crystal-env.sh && crystal run src/gui/quark-downloader-gui.cr'
+    @bash -c 'source scripts/unix/crystal-env.sh && crystal run src/gui/quark-downloader-gui.cr'
 
 [group('dev')]
 [windows]
 run-gui:
-    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-gui-windows.ps1
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/run-gui.ps1
 
 [group('clean')]
 [unix]
 clean:
-    @rm -rf {{build_dir}} {{installer_output}}
-    @echo "Cleaned build/ and packaging/output/"
+    @bash scripts/unix/clean.sh
 
 [group('clean')]
 [windows]
 clean:
-    @powershell -NoProfile -Command "if (Test-Path '{{build_dir}}') { Remove-Item -Recurse -Force '{{build_dir}}' }; if (Test-Path '{{installer_output}}') { Remove-Item -Recurse -Force '{{installer_output}}' }; Write-Host 'Cleaned build/ and packaging/output/'"
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/clean.ps1

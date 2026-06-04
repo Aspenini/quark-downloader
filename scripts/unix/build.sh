@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -eu
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=crystal-env.sh
-source "$root/scripts/crystal-env.sh"
+source "$root/scripts/unix/crystal-env.sh"
+
 build_dir="$root/build"
 binary="$build_dir/quark-downloader"
 gui_binary="$build_dir/quark-downloader-gui"

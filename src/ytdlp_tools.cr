@@ -2,12 +2,13 @@ require "json"
 require "digest/sha256"
 require "./tool_http"
 require "./config"
+require "./logs"
 
 module YtDlpTools
   GITHUB_LATEST_URL = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
-  CHECK_INTERVAL      = 24.hours
-  VERSION_FILE        = ".yt-dlp-version"
-  CHECK_AT_FILE       = ".yt-dlp-check-at"
+  CHECK_INTERVAL    = 24.hours
+  VERSION_FILE      = ".yt-dlp-version"
+  CHECK_AT_FILE     = ".yt-dlp-check-at"
 
   class Error < Exception; end
 
@@ -58,12 +59,12 @@ module YtDlpTools
     if path = path_executable
       if version = read_version(path)
         if version_at_least?(version, MIN_YOUTUBE_YTDLP)
-          puts "Using yt-dlp from PATH: #{path}"
+          QuarkLogs.puts "Using yt-dlp from PATH: #{path}"
           warn_youtube_js_runtime
           return path
         end
 
-        puts "yt-dlp on PATH (#{version}) is too old for YouTube; using bundled copy."
+        QuarkLogs.puts "yt-dlp on PATH (#{version}) is too old for YouTube; using bundled copy."
       end
     end
 
@@ -72,7 +73,7 @@ module YtDlpTools
 
   def self.ensure_path_only! : String
     if path = path_executable
-      puts "Using yt-dlp from PATH: #{path}"
+      QuarkLogs.puts "Using yt-dlp from PATH: #{path}"
       warn_if_stale(path)
       warn_youtube_js_runtime
       return path
@@ -95,12 +96,12 @@ module YtDlpTools
           MSG
       end
 
-      puts "Downloading yt-dlp..."
+      QuarkLogs.puts "Downloading yt-dlp..."
       download_latest!
       return bundled_path.to_s
     end
 
-    puts "Using yt-dlp from: #{bundled_path}"
+    QuarkLogs.puts "Using yt-dlp from: #{bundled_path}"
 
     if check_due?
       check_and_update_if_needed
@@ -112,20 +113,20 @@ module YtDlpTools
 
   def self.raise_not_found
     message = {% if flag?(:darwin) %}
-      "yt-dlp not found on PATH.\nInstall with Homebrew: brew install yt-dlp"
-    {% elsif flag?(:linux) %}
-      <<-MSG
+                "yt-dlp not found on PATH.\nInstall with Homebrew: brew install yt-dlp"
+              {% elsif flag?(:linux) %}
+                <<-MSG
         yt-dlp not found on PATH.
         Distro packages (apt install yt-dlp) are often too old for YouTube.
         Prefer a current build: pipx install yt-dlp   or   pip install -U yt-dlp
         Or set yt_dlp = auto in quark-downloader.conf to download a bundled copy.
         MSG
-    {% else %}
-      <<-MSG
+              {% else %}
+                <<-MSG
         yt-dlp not found on PATH.
         Install yt-dlp, add it to PATH, or set yt_dlp = auto in quark-downloader.conf.
         MSG
-    {% end %}
+              {% end %}
 
     raise Error.new(message)
   end
@@ -147,8 +148,8 @@ module YtDlpTools
 
     raise Error.new(<<-MSG)
       YouTube requires a JavaScript runtime for yt-dlp (EJS).
-        • Node.js: sudo apt install nodejs   (or your distro equivalent)
-        • Deno: see https://github.com/yt-dlp/yt-dlp/wiki/EJS
+        - Node.js: sudo apt install nodejs   (or your distro equivalent)
+        - Deno: see https://github.com/yt-dlp/yt-dlp/wiki/EJS
       MSG
   end
 
@@ -165,14 +166,14 @@ module YtDlpTools
   def self.youtube_failure_hints : String
     hints = <<-HINT
       YouTube download failed. Common fixes:
-        • Let quark-downloader use a bundled yt-dlp (yt_dlp = auto in quark-downloader.conf)
-        • Or update PATH: pipx install -U yt-dlp   (or brew upgrade yt-dlp)
+        - Let quark-downloader use a bundled yt-dlp (yt_dlp = auto in quark-downloader.conf)
+        - Or update PATH: pipx install -U yt-dlp   (or brew upgrade yt-dlp)
       HINT
 
     unless js_runtime
       hints += <<-HINT
 
-        • Install a JS runtime for YouTube: sudo apt install nodejs
+        - Install a JS runtime for YouTube: sudo apt install nodejs
           https://github.com/yt-dlp/yt-dlp/wiki/EJS
       HINT
     end
@@ -211,15 +212,15 @@ module YtDlpTools
     return unless version
     return if version_at_least?(version, MIN_YOUTUBE_YTDLP)
 
-    puts
-    puts "Warning: yt-dlp #{version} is likely too old for YouTube."
-    puts "  Update: pipx install -U yt-dlp   (or brew upgrade yt-dlp)"
+    QuarkLogs.puts
+    QuarkLogs.puts "Warning: yt-dlp #{version} is likely too old for YouTube."
+    QuarkLogs.puts "  Update: pipx install -U yt-dlp   (or brew upgrade yt-dlp)"
   end
 
   def self.warn_youtube_js_runtime
     return if js_runtime
 
-    puts "Warning: No Node.js or Deno on PATH — YouTube may fail until you install one (yt-dlp EJS wiki)."
+    QuarkLogs.puts "Warning: No Node.js or Deno on PATH - YouTube may fail until you install one (yt-dlp EJS wiki)."
   end
 
   def self.check_due? : Bool
@@ -248,11 +249,11 @@ module YtDlpTools
       return
     end
 
-    puts "Updating yt-dlp (#{installed || "none"} -> #{latest})..."
+    QuarkLogs.puts "Updating yt-dlp (#{installed || "none"} -> #{latest})..."
     download_release!(release)
   rescue ex
     if File.exists?(bundled_path.to_s)
-      puts "yt-dlp update skipped: #{ex.message}"
+      QuarkLogs.puts "yt-dlp update skipped: #{ex.message}"
     else
       raise ex
     end
@@ -276,12 +277,12 @@ module YtDlpTools
     tmp = tools_dir / "#{name}.download"
     sums = find_checksums_asset(release)
 
-    puts "Fetching #{name} (#{tag})..."
+    QuarkLogs.puts "Fetching #{name} (#{tag})..."
     ToolHttp.download_file(url, tmp)
     verify_checksum!(release, name, tmp) if sums
     install_binary(tmp, bundled_path)
     File.write(tools_dir / VERSION_FILE, tag.lstrip("v"))
-    puts "yt-dlp ready (#{tag})."
+    QuarkLogs.puts "yt-dlp ready (#{tag})."
   end
 
   def self.find_asset(release : JSON::Any) : JSON::Any
@@ -339,7 +340,7 @@ module YtDlpTools
       File.delete?(tmp.to_s)
     end
     {% unless flag?(:windows) %}
-    File.chmod(dest.to_s, 0o755)
+      File.chmod(dest.to_s, 0o755)
     {% end %}
   end
 

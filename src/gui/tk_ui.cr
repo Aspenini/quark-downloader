@@ -1,6 +1,7 @@
 {% unless flag?(:windows) %}
 require "../config"
-require "./gui_logs"
+require "../logs"
+require "./types"
 
 module QuarkGui
   module TkUi
@@ -109,23 +110,53 @@ module QuarkGui
       if success
         run_wish(["--message", "ok", APP_TITLE, "Download Complete!"])
       else
-        run_wish(["--message", "error", APP_TITLE, "Download failed.\n\nLogs: #{GuiLogs.logs_dir}"])
+        body = "Download failed."
+        body += "\n\nLogs: #{QuarkLogs.logs_dir}" if QuarkConfig.download_logs?
+        run_wish(["--message", "error", APP_TITLE, body])
       end
     end
 
-    def self.collect_params(cli : String) : DownloadParams?
-      default_dir = QuarkGui.default_output_dir(cli)
-      code, text = run_wish([default_dir])
+    def self.show_error(message : String) : Nil
+      run_wish(["--message", "error", APP_TITLE, message])
+    end
 
-      return nil unless code == 0
+    def self.collect_main_action(default_dir : String) : MainAction::Type
+      code, text = run_wish([default_dir])
+      return MainAction::Cancel.new unless code == 0
 
       lines = text.lines.map(&.strip).reject(&.empty?)
-      return nil unless lines.size >= 4
+      return MainAction::Cancel.new if lines.empty?
+
+      return MainAction::Settings.new if lines.first == "__OPEN_SETTINGS__"
+      return MainAction::Cancel.new unless lines.size >= 4
 
       url, media_type, format, output_dir = lines[0..3]
-      return nil if url.empty? || output_dir.empty?
+      return MainAction::Cancel.new if url.empty? || output_dir.empty?
 
-      DownloadParams.new(url, media_type, format, output_dir)
+      MainAction::Download.new(DownloadParams.new(url, media_type, format, output_dir))
+    end
+
+    def self.collect_settings_action(settings : QuarkConfig::Settings) : SettingsAction::Type
+      code, text = run_wish([
+        "--settings",
+        settings.download_dir,
+        settings.yt_dlp.to_config,
+        settings.ffmpeg.to_config,
+        settings.gui_download_mode.to_config,
+        settings.download_logs.to_s,
+      ])
+      return SettingsAction::Cancel.new unless code == 0
+
+      lines = text.lines.map(&.strip)
+      return SettingsAction::Cancel.new unless lines.size >= 6 && lines[0] == "__SETTINGS__"
+
+      SettingsAction::Save.new(SettingsForm.from_strings(
+        lines[1],
+        lines[2],
+        lines[3],
+        lines[4],
+        lines[5],
+      ))
     end
   end
 end

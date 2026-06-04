@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Crystal links OpenSSL via pkg-config. Homebrew kegs (openssl@3) are often
-# outside the default search path, which breaks linking with undefined EVP_* symbols.
+# Crystal links OpenSSL through pkg-config. Homebrew kegs such as openssl@3 are
+# often outside the default search path, which can break linking with EVP symbols.
 
 if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists libssl libcrypto 2>/dev/null; then
   return 0 2>/dev/null || exit 0
