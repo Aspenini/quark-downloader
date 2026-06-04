@@ -59,7 +59,34 @@ module QuarkGui
   end
 
   PROGRESS_RE = /\[download\]\s+(\d+(?:\.\d+)?)%/
-  STATUS_MAX = 120
+  STATUS_DISPLAY_MAX = 72
+
+  def self.parse_progress_percent(line : String) : Float64?
+    if m = line.match(PROGRESS_RE)
+      return m[1].to_f
+    end
+
+    # yt-dlp sometimes emits carriage-return progress without a newline first.
+    line.split('\r').each do |part|
+      if m = part.match(PROGRESS_RE)
+        return m[1].to_f
+      end
+    end
+
+    nil
+  end
+
+  def self.parse_status_line(line : String) : String?
+    stripped = line.strip
+    return nil if stripped.empty?
+    return nil if stripped == "Done."
+    return nil if stripped.starts_with?("Deleting original file")
+
+    if stripped.size > STATUS_DISPLAY_MAX
+      stripped = stripped[0, STATUS_DISPLAY_MAX - 3] + "..."
+    end
+    stripped
+  end
 
   def self.run_download_with_progress(command : String, cmd_args : Array(String)) : Int32
     {% if flag?(:windows) %}
@@ -145,23 +172,16 @@ module QuarkGui
     log_file.puts(line)
     log_file.flush
 
-    if m = line.match(PROGRESS_RE)
-      prog_in.puts("PROGRESS\t#{m[1]}")
+    if percent = parse_progress_percent(line)
+      prog_in.puts("PROGRESS\t#{percent}")
       prog_in.flush
       return
     end
 
-    stripped = line.strip
-    return if stripped.empty?
-    return if stripped == "Done."
-
-    if stripped.size > STATUS_MAX
-      stripped = stripped[0, STATUS_MAX - 3] + "..."
+    if status = parse_status_line(line)
+      prog_in.puts("STATUS\t#{status}")
+      prog_in.flush
     end
-    return if stripped.starts_with?("Deleting original file")
-
-    prog_in.puts("STATUS\t#{stripped}")
-    prog_in.flush
   end
   {% end %}
 

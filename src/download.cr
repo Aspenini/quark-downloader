@@ -1,6 +1,9 @@
 require "./config"
 require "./ytdlp_tools"
 require "./ffmpeg_tools"
+{% if flag?(:windows) %}
+require "./win32_hidden_process"
+{% end %}
 
 module QuarkDownload
   def self.user_home : String
@@ -45,6 +48,13 @@ module QuarkDownload
     output_dir : String? = nil,
     no_pause : Bool = false,
   ) : Int32
+    {% if flag?(:windows) %}
+    if ENV["QUARK_GUI"]? == "1"
+      STDOUT.sync = true
+      STDERR.sync = true
+    end
+    {% end %}
+
     QuarkConfig.load!(quiet: true)
 
     ytdlp = begin
@@ -128,6 +138,12 @@ module QuarkDownload
   end
 
   def self.run_command(cmd : Array(String)) : Int32
+    {% if flag?(:windows) %}
+    if ENV["QUARK_GUI"]? == "1"
+      return run_command_hidden(cmd)
+    end
+    {% end %}
+
     puts "\nRunning:"
     puts cmd.map { |x| x.includes?(' ') ? %("#{x}") : x }.join(' ')
     puts
@@ -143,6 +159,52 @@ module QuarkDownload
     puts "Error: #{cmd.first} was not found."
     127
   end
+
+  {% if flag?(:windows) %}
+  def self.run_command_hidden(cmd : Array(String)) : Int32
+    STDOUT.sync = true
+    STDERR.sync = true
+
+    runner = Win32HiddenProcess::Runner.new(cmd.first, cmd[1..]? || [] of String)
+
+    relay = ->(input : IO, output : IO) do
+      input.each_line do |line|
+        begin
+          output.puts(line)
+        rescue IO::Error
+          break
+        end
+      end
+    end
+
+    out_done = Channel(Nil).new(1)
+    err_done = Channel(Nil).new(1)
+
+    Thread.new(name: "cli-ytdlp-stdout") do
+      begin
+        relay.call(runner.stdout, STDOUT)
+      ensure
+        out_done.send(nil)
+      end
+    end
+
+    Thread.new(name: "cli-ytdlp-stderr") do
+      begin
+        relay.call(runner.stderr, STDERR)
+      ensure
+        err_done.send(nil)
+      end
+    end
+
+    status = runner.wait
+    out_done.receive
+    err_done.receive
+    status.try(&.exit_code) || 127
+  rescue File::NotFoundError
+    puts "Error: #{cmd.first} was not found."
+    127
+  end
+  {% end %}
 
   def self.press_any_key(no_pause : Bool, message = "Press any key to exit...")
     return if no_pause

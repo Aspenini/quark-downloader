@@ -14,7 +14,14 @@ module QuarkGui
 
     WM_INITDIALOG = 0x0110
     WM_COMMAND    = 0x0111
+    WM_KEYDOWN    = 0x0100
     BN_CLICKED    = 0
+
+    VK_RETURN = 0x0D_u64
+    VK_ESCAPE = 0x1B_u64
+
+    BFFM_INITIALIZED     = 1_u32
+    BFFM_SETSELECTIONW   = 0x0467_u32 # WM_USER + 103
 
     CB_ADDSTRING  = 0x0143
     CB_SETCURSEL  = 0x014E
@@ -33,6 +40,7 @@ module QuarkGui
 
     @@dialog_hwnd : WinHWND? = nil
     @@default_output : String = ""
+    @@browse_initial : String = ""
     @@confirmed = false
     @@url = ""
     @@media_type = "video"
@@ -90,6 +98,9 @@ module QuarkGui
       fun InitCommonControlsEx(lpInitCtrls : INITCOMMONCONTROLSEX*) : WinBOOL
     end
 
+    alias BrowseCallback = Proc(Void*, UInt32, Int64, Int64, Int32)
+    @@browse_callback : BrowseCallback?
+
     struct BROWSEINFOW
       def initialize(
         @hwndOwner : Void*,
@@ -97,7 +108,7 @@ module QuarkGui
         @pszDisplayName : UInt16*,
         @lpszTitle : UInt16*,
         @ulFlags : UInt32,
-        @lpfn : Void*,
+        @lpfn : BrowseCallback,
         @lParam : Int64,
         @iImage : Int32,
       )
@@ -151,7 +162,25 @@ module QuarkGui
       LibUser32.SendMessageW(combo, CB_SETCURSEL, 0, 0)
     end
 
+    def self.browse_callback_proc : BrowseCallback
+      @@browse_callback ||= BrowseCallback.new do |hwnd, msg, _lparam, _lp_data|
+        if msg == BFFM_INITIALIZED && !@@browse_initial.empty?
+          path = wide(@@browse_initial)
+          LibUser32.SendMessageW(
+            hwnd.as(WinHWND),
+            BFFM_SETSELECTIONW,
+            1,
+            path.to_unsafe.address.to_i64,
+          )
+        end
+        0
+      end
+    end
+
     def self.browse_folder(hdlg : WinHWND) : String?
+      current = get_dlg_text(hdlg, IDC_OUTPUT).strip
+      @@browse_initial = current.empty? ? @@default_output : current
+
       title = wide("Select output folder")
       display = Pointer(UInt16).malloc(260)
       bi = BROWSEINFOW.new(
@@ -160,7 +189,7 @@ module QuarkGui
         display,
         title.to_unsafe,
         (BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE).to_u32,
-        Pointer(Void).null,
+        browse_callback_proc,
         0_i64,
         0,
       )
@@ -176,7 +205,35 @@ module QuarkGui
       end
 
       str, _ = String.from_utf16(path_buf.to_unsafe)
-      return str
+      str
+    end
+
+    def self.try_confirm(hdlg : WinHWND) : WinBOOL
+      url = get_dlg_text(hdlg, IDC_URL).strip
+      if url.empty?
+        message_box("Please enter a video URL.", true)
+        return 0
+      end
+
+      output = get_dlg_text(hdlg, IDC_OUTPUT).strip
+      if output.empty?
+        message_box("Please choose an output folder.", true)
+        return 0
+      end
+
+      combo = LibUser32.GetDlgItem(hdlg, IDC_FORMAT)
+      sel = LibUser32.SendMessageW(combo, 0x0147_u32, 0, 0)
+      format_buf = Array(UInt16).new(256, 0_u16)
+      LibUser32.SendMessageW(combo, 0x0149_u32, sel, format_buf.to_unsafe.address.to_i64)
+      format, _ = String.from_utf16(format_buf.to_unsafe)
+
+      @@url = url
+      @@output_dir = output
+      @@format = format.empty? ? "original" : format
+      @@media_type = LibUser32.IsDlgButtonChecked(hdlg, IDC_AUDIO) != 0 ? "audio" : "video"
+      @@confirmed = true
+      LibUser32.EndDialog(hdlg, 1)
+      1
     end
 
     def self.handle_dialog(
@@ -216,37 +273,22 @@ module QuarkGui
           end
         when 1 # IDOK
           if notify == BN_CLICKED
-            url = get_dlg_text(hdlg, IDC_URL).strip
-            if url.empty?
-              message_box("Please enter a video URL.", true)
-              return 0
-            end
-
-            output = get_dlg_text(hdlg, IDC_OUTPUT).strip
-            if output.empty?
-              message_box("Please choose an output folder.", true)
-              return 0
-            end
-
-            combo = LibUser32.GetDlgItem(hdlg, IDC_FORMAT)
-            sel = LibUser32.SendMessageW(combo, 0x0147_u32, 0, 0)
-            format_buf = Array(UInt16).new(256, 0_u16)
-            LibUser32.SendMessageW(combo, 0x0149_u32, sel, format_buf.to_unsafe.address.to_i64)
-            format, _ = String.from_utf16(format_buf.to_unsafe)
-
-            @@url = url
-            @@output_dir = output
-            @@format = format.empty? ? "original" : format
-            @@media_type = LibUser32.IsDlgButtonChecked(hdlg, IDC_AUDIO) != 0 ? "audio" : "video"
-            @@confirmed = true
-            LibUser32.EndDialog(hdlg, 1)
-            return 1
+            return try_confirm(hdlg)
           end
         when 2 # IDCANCEL
           if notify == BN_CLICKED
             LibUser32.EndDialog(hdlg, 0)
             return 1
           end
+        end
+        0
+      when WM_KEYDOWN
+        case wparam
+        when VK_RETURN
+          return try_confirm(hdlg)
+        when VK_ESCAPE
+          LibUser32.EndDialog(hdlg, 0)
+          return 1
         end
         0
       else
