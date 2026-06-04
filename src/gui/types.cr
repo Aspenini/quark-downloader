@@ -1,7 +1,10 @@
 require "../config"
+require "../version"
 
 module QuarkGui
-  APP_TITLE = "Quark Downloader"
+  APP_TITLE = QuarkVersion::APP_NAME
+  WINDOW_TITLE = QuarkVersion.window_title
+  SETTINGS_WINDOW_TITLE = QuarkVersion.settings_window_title
 
   struct DownloadParams
     property url : String

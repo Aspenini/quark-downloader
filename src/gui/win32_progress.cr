@@ -210,6 +210,7 @@
         case msg
         when Win32Ui::WM_INITDIALOG
           @@dialog_hwnd = hdlg
+          Win32Ui.set_dialog_title(hdlg, WINDOW_TITLE)
           start_download(hdlg)
           1
         when WM_TIMER

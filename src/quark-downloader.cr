@@ -1,6 +1,7 @@
 require "option_parser"
 require "./config"
 require "./download"
+require "./version"
 
 def prompt_choice(prompt : String, choices : Array(String), default : String? = nil) : String
   choices_lower = choices.map(&.downcase)
@@ -43,7 +44,7 @@ end
 def interactive_main
   QuarkConfig.load!
 
-  puts "Quark Downloader"
+  puts QuarkVersion.window_title
   puts "----------------"
 
   url = prompt_nonempty("Enter Video URL: ")

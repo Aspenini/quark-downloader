@@ -33,14 +33,14 @@
 
       def self.show_main_view(hdlg : WinHWND)
         @@dialog_view = :main
-        set_dialog_title(hdlg, APP_TITLE)
+        set_dialog_title(hdlg, WINDOW_TITLE)
         set_view_visible(hdlg, SETTINGS_VIEW_IDS, false)
         set_view_visible(hdlg, MAIN_VIEW_IDS, true)
       end
 
       def self.show_settings_view(hdlg : WinHWND)
         @@dialog_view = :settings
-        set_dialog_title(hdlg, "#{APP_TITLE} Settings")
+        set_dialog_title(hdlg, SETTINGS_WINDOW_TITLE)
         populate_settings_fields(hdlg, @@session_settings)
         set_view_visible(hdlg, MAIN_VIEW_IDS, false)
         set_view_visible(hdlg, SETTINGS_VIEW_IDS, true)

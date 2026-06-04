@@ -3,6 +3,24 @@
 
 package require Tk
 
+set ::APP_NAME "Quark Downloader"
+if {[info exists ::env(QUARK_VERSION)] && [string length $::env(QUARK_VERSION)] > 0} {
+    set ::APP_VERSION $::env(QUARK_VERSION)
+} else {
+    set ::APP_VERSION ""
+}
+
+proc app_window_title {} {
+    if {$::APP_VERSION ne ""} {
+        return "$::APP_NAME $::APP_VERSION"
+    }
+    return $::APP_NAME
+}
+
+proc app_settings_window_title {} {
+    return "[app_window_title] Settings"
+}
+
 set AUDIO_FORMATS {original mp3 m4a flac wav opus vorbis}
 set VIDEO_FORMATS {original mp4 mkv webm}
 
@@ -91,7 +109,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     }
 
     proc session_show_main {} {
-        wm title . "Quark Downloader"
+        wm title . [app_window_title]
         catch {grid remove .settings}
         grid .main -row 0 -column 0 -sticky nsew
         session_bind_main_keys
@@ -99,7 +117,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     }
 
     proc session_show_settings {} {
-        wm title . "Quark Downloader Settings"
+        wm title . [app_settings_window_title]
         catch {grid remove .main}
 
         .settings.download_entry delete 0 end
@@ -236,7 +254,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         session_emit_download $url $::session_media_type $format $output
     }
 
-    wm title . "Quark Downloader"
+    wm title . [app_window_title]
     wm resizable . 0 0
 
     ttk::frame .main
@@ -384,7 +402,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         exit 1
     }
 
-    wm title . "Quark Downloader Settings"
+    wm title . [app_settings_window_title]
     wm resizable . 0 0
 
     ttk::label .download_lbl -text "Default folder:"
@@ -441,7 +459,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         return $text
     }
 
-    wm title . "Quark Downloader"
+    wm title . [app_window_title]
     wm resizable . 0 0
     wm geometry . 400x110
 
@@ -581,7 +599,7 @@ proc on_type_change {} {
     set_formats
 }
 
-wm title . "Quark Downloader"
+wm title . [app_window_title]
 wm resizable . 0 0
 
 ttk::label .url_lbl -text "Video URL:"
