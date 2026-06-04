@@ -28,6 +28,7 @@
       IDC_SET_GUI_MODE_LABEL = 1022
       IDC_SET_SAVE         = 1023
       IDC_SET_CANCEL       = 1024
+      IDC_CHECK_UPDATES    = 1025
 
       SW_HIDE = 0
       SW_SHOW = 5
@@ -44,6 +45,7 @@
         IDC_SET_YTDLP_LABEL, IDC_SET_YTDLP,
         IDC_SET_FFMPEG_LABEL, IDC_SET_FFMPEG,
         IDC_SET_GUI_MODE_LABEL, IDC_SET_GUI_MODE, IDC_SET_LOGS,
+        IDC_CHECK_UPDATES,
         IDC_SET_SAVE, IDC_SET_CANCEL,
       ]
 
@@ -73,8 +75,12 @@
       BIF_NEWDIALOGSTYLE   = 0x0040
 
       MB_OK              = 0x00000000
+      MB_YESNO           = 0x00000004
       MB_ICONERROR       = 0x00000010
       MB_ICONINFORMATION = 0x00000040
+
+      IDYES = 6
+      IDNO  = 7
 
       RT_DIALOG = 5
 
@@ -118,6 +124,14 @@
       lib LibShell32
         fun SHBrowseForFolderW(lpbi : Void*) : Void*
         fun SHGetPathFromIDListW(pidl : Void*, pszPath : UInt16*) : WinBOOL
+        fun ShellExecuteW(
+          hwnd : WinHWND,
+          lpOperation : UInt16*,
+          lpFile : UInt16*,
+          lpParameters : UInt16*,
+          lpDirectory : UInt16*,
+          nShowCmd : Int32,
+        ) : Void*
       end
 
       lib LibComctl32

@@ -117,7 +117,11 @@ module QuarkGui
     end
 
     def self.show_error(message : String) : Nil
-      run_wish(["--message", "error", APP_TITLE, message])
+      show_message("error", APP_TITLE, message)
+    end
+
+    def self.show_message(kind : String, title : String, body : String) : Nil
+      run_wish(["--message", kind, title, body])
     end
 
     def self.collect_main_session(default_dir : String, settings : QuarkConfig::Settings) : MainSessionResult

@@ -3,6 +3,7 @@ require "digest/sha256"
 require "./tool_http"
 require "./config"
 require "./logs"
+require "./version_compare"
 
 module YtDlpTools
   GITHUB_LATEST_URL = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
@@ -58,7 +59,7 @@ module YtDlpTools
   def self.ensure_auto! : String
     if path = path_executable
       if version = read_version(path)
-        if version_at_least?(version, MIN_YOUTUBE_YTDLP)
+        if VersionCompare.at_least?(version, MIN_YOUTUBE_YTDLP)
           QuarkLogs.puts "Using yt-dlp from PATH: #{path}"
           warn_youtube_js_runtime
           return path
@@ -194,23 +195,10 @@ module YtDlpTools
     stdout.to_s.chomp.split(/\s+/).first
   end
 
-  def self.parse_version(v : String) : Tuple(Int32, Int32, Int32)
-    parts = v.lstrip("v").split('.').map(&.to_i)
-    {
-      parts[0]? || 0,
-      parts[1]? || 0,
-      parts[2]? || 0,
-    }
-  end
-
-  def self.version_at_least?(installed : String, minimum : String) : Bool
-    parse_version(installed) >= parse_version(minimum)
-  end
-
   def self.warn_if_stale(path : String)
     version = read_version(path)
     return unless version
-    return if version_at_least?(version, MIN_YOUTUBE_YTDLP)
+    return if VersionCompare.at_least?(version, MIN_YOUTUBE_YTDLP)
 
     QuarkLogs.puts
     QuarkLogs.puts "Warning: yt-dlp #{version} is likely too old for YouTube."
@@ -245,7 +233,7 @@ module YtDlpTools
     latest = release["tag_name"].as_s.lstrip("v")
     installed = installed_version
 
-    if installed && !version_newer?(latest, installed)
+    if installed && !VersionCompare.newer?(latest, installed)
       return
     end
 
@@ -356,7 +344,4 @@ module YtDlpTools
     read_version(bundled_path.to_s)
   end
 
-  def self.version_newer?(latest : String, installed : String) : Bool
-    parse_version(latest) > parse_version(installed)
-  end
 end

@@ -35,6 +35,25 @@ proc show_message {kind title body} {
     exit 0
 }
 
+proc invoke_check_for_updates {} {
+    set script_dir [file dirname [info script]]
+    set gui [file join $script_dir quark-downloader-gui]
+    if {$::tcl_platform(platform) eq "windows"} {
+        set gui "${gui}.exe"
+    }
+    if {![file exists $gui]} {
+        tk_messageBox -title $::APP_NAME \
+            -message "quark-downloader-gui was not found next to the GUI script." \
+            -type ok -icon error
+        return
+    }
+    if {[catch {exec [list $gui --check-updates]} err]} {
+        tk_messageBox -title $::APP_NAME \
+            -message "Could not check for updates:\n$err" \
+            -type ok -icon error
+    }
+}
+
 if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     if {[llength $argv] < 4} {
         puts stderr "usage: $argv0 --message <ok|error> <title> <body>"
@@ -290,7 +309,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
 
     ttk::button .main.settings_btn -text "\u2699" -width 3 -command session_show_settings
     ttk::button .main.dl_btn -text "Download" -command session_on_download -default active
-    ttk::button .main.cancel_btn -text "Cancel" -command session_emit_cancel
+    ttk::button .main.cancel_btn -text "Close" -command session_emit_cancel
     grid .main.settings_btn -row 7 -column 0 -sticky w -padx 10 -pady 12
     grid .main.dl_btn -row 7 -column 1 -sticky e -padx 5 -pady 12
     grid .main.cancel_btn -row 7 -column 2 -sticky e -padx {0 10} -pady 12
@@ -323,10 +342,13 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     grid .settings.mode_combo -row 5 -column 0 -sticky w -padx 10
     grid .settings.logs_check -row 5 -column 1 -columnspan 2 -sticky w -padx 10
 
+    ttk::button .settings.updates_btn -text "Check for updates..." \
+        -command invoke_check_for_updates
     ttk::button .settings.save_btn -text "Save" -command session_on_settings_save -default active
     ttk::button .settings.cancel_btn -text "Cancel" -command session_show_main
-    grid .settings.save_btn -row 6 -column 1 -sticky e -padx 5 -pady 12
-    grid .settings.cancel_btn -row 6 -column 2 -sticky e -padx {0 10} -pady 12
+    grid .settings.updates_btn -row 6 -column 0 -sticky w -padx 10 -pady {8 0}
+    grid .settings.save_btn -row 7 -column 1 -sticky e -padx 5 -pady 12
+    grid .settings.cancel_btn -row 7 -column 2 -sticky e -padx {0 10} -pady 12
 
     grid columnconfigure .settings 0 -weight 1
     grid columnconfigure .settings 1 -weight 1
@@ -433,10 +455,12 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     grid .logs_check -row 5 -column 1 -columnspan 2 -sticky w -padx 10
     set_combo_value .mode_combo $current_gui_mode {progress external_cli}
 
+    ttk::button .updates_btn -text "Check for updates..." -command invoke_check_for_updates
     ttk::button .save_btn -text "Save" -command on_settings_save -default active
     ttk::button .settings_cancel_btn -text "Cancel" -command on_settings_cancel
-    grid .save_btn -row 6 -column 1 -sticky e -padx 5 -pady 12
-    grid .settings_cancel_btn -row 6 -column 2 -sticky e -padx {0 10} -pady 12
+    grid .updates_btn -row 6 -column 0 -sticky w -padx 10 -pady {8 0}
+    grid .save_btn -row 7 -column 1 -sticky e -padx 5 -pady 12
+    grid .settings_cancel_btn -row 7 -column 2 -sticky e -padx {0 10} -pady 12
 
     grid columnconfigure . 0 -weight 1
     grid columnconfigure . 1 -weight 1
@@ -631,7 +655,7 @@ grid .browse_btn -row 6 -column 2 -sticky e -padx {4 10}
 
 ttk::button .settings_btn -text "\u2699" -width 3 -command on_settings
 ttk::button .dl_btn -text "Download" -command on_download -default active
-ttk::button .cancel_btn -text "Cancel" -command on_cancel
+ttk::button .cancel_btn -text "Close" -command on_cancel
 grid .settings_btn -row 7 -column 0 -sticky w -padx 10 -pady 12
 grid .dl_btn -row 7 -column 1 -sticky e -padx 5 -pady 12
 grid .cancel_btn -row 7 -column 2 -sticky e -padx {0 10} -pady 12

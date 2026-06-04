@@ -1,4 +1,5 @@
 {% if flag?(:windows) %}
+  require "../update_check"
   require "./controls"
   require "./folder_browser"
   require "./message_box"
@@ -63,6 +64,11 @@
                  )
                 set_dlg_text(hdlg, IDC_SET_DOWNLOAD_DIR, folder)
               end
+            end
+          when IDC_CHECK_UPDATES
+            if notify == BN_CLICKED
+              QuarkGui::UpdateCheck.run!
+              return 1
             end
           when 1 # IDOK
             if notify == BN_CLICKED
