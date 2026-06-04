@@ -6,11 +6,11 @@
     <td align="right">
       <h1>Quark Downloader</h1>
       <p>
-        <a href="https://github.com/Aspenini/quark-downloader/releases">
-          <img alt="GitHub release" src="https://img.shields.io/github/v/release/Aspenini/quark-downloader?label=release" />
-        </a>
         <a href="shard.yml">
           <img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-black" />
+        </a>
+        <a href="https://github.com/Aspenini/quark-downloader/releases">
+          <img alt="GitHub release" src="https://img.shields.io/github/v/release/Aspenini/quark-downloader?label=release" />
         </a>
         <a href="https://aur.archlinux.org/packages/quark-downloader">
           <img alt="AUR version" src="https://img.shields.io/aur/version/quark-downloader?label=AUR&amp;logo=archlinux&amp;cacheSeconds=3600" />
