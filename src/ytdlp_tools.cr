@@ -343,5 +343,4 @@ module YtDlpTools
 
     read_version(bundled_path.to_s)
   end
-
 end

@@ -2,8 +2,8 @@ require "../config"
 require "../version"
 
 module QuarkGui
-  APP_TITLE = QuarkVersion::APP_NAME
-  WINDOW_TITLE = QuarkVersion.window_title
+  APP_TITLE             = QuarkVersion::APP_NAME
+  WINDOW_TITLE          = QuarkVersion.window_title
   SETTINGS_WINDOW_TITLE = QuarkVersion.settings_window_title
 
   struct DownloadParams
@@ -67,13 +67,10 @@ module QuarkGui
       end
     end
 
-    struct Settings
-    end
-
     struct Cancel
     end
 
-    alias Type = Download | Settings | Cancel
+    alias Type = Download | Cancel
   end
 
   struct MainSessionResult
@@ -82,19 +79,5 @@ module QuarkGui
 
     def initialize(@action : MainAction::Type, @settings_form : SettingsForm? = nil)
     end
-  end
-
-  module SettingsAction
-    struct Save
-      getter form : SettingsForm
-
-      def initialize(@form)
-      end
-    end
-
-    struct Cancel
-    end
-
-    alias Type = Save | Cancel
   end
 end

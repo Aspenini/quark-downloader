@@ -183,44 +183,6 @@ module QuarkGui
       MainSessionResult.new(action, settings_form)
     end
 
-    def self.collect_main_action(default_dir : String) : MainAction::Type
-      code, text = run_wish([default_dir])
-      return MainAction::Cancel.new unless code == 0
-
-      lines = text.lines.map(&.strip).reject(&.empty?)
-      return MainAction::Cancel.new if lines.empty?
-
-      return MainAction::Settings.new if lines.first == "__OPEN_SETTINGS__"
-      return MainAction::Cancel.new unless lines.size >= 4
-
-      url, media_type, format, output_dir = lines[0..3]
-      return MainAction::Cancel.new if url.empty? || output_dir.empty?
-
-      MainAction::Download.new(DownloadParams.new(url, media_type, format, output_dir))
-    end
-
-    def self.collect_settings_action(settings : QuarkConfig::Settings) : SettingsAction::Type
-      code, text = run_wish([
-        "--settings",
-        settings.download_dir,
-        settings.yt_dlp.to_config,
-        settings.ffmpeg.to_config,
-        settings.gui_download_mode.to_config,
-        settings.download_logs.to_s,
-      ])
-      return SettingsAction::Cancel.new unless code == 0
-
-      lines = text.lines.map(&.strip)
-      return SettingsAction::Cancel.new unless lines.size >= 6 && lines[0] == "__SETTINGS__"
-
-      SettingsAction::Save.new(SettingsForm.from_strings(
-        lines[1],
-        lines[2],
-        lines[3],
-        lines[4],
-        lines[5],
-      ))
-    end
   end
 end
 {% end %}

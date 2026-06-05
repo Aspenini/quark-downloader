@@ -29,29 +29,10 @@ module QuarkGui
         when MainAction::Download
           QuarkGui.run_download(cli, action.params)
           return
-        when MainAction::Settings
-          edit_settings
         when MainAction::Cancel
           return
         end
       end
-    end
-
-    def self.edit_settings : Bool
-      QuarkConfig.load!(quiet: true)
-      action = PlatformUi.collect_settings_action(QuarkConfig.settings)
-
-      case action
-      when SettingsAction::Save
-        save_settings(action.form)
-      when SettingsAction::Cancel
-        false
-      else
-        false
-      end
-    rescue ex
-      PlatformUi.show_error("Could not save settings:\n#{ex.message}")
-      false
     end
 
     def self.save_settings(form : SettingsForm) : Bool

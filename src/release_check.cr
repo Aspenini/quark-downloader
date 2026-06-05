@@ -4,9 +4,9 @@ require "./version_compare"
 require "./version"
 
 module ReleaseCheck
-  GITHUB_REPO            = "Aspenini/quark-downloader"
-  INSTALLER_NAME_PREFIX  = "quark-downloader"
-  LATEST_URL             = "https://api.github.com/repos/#{GITHUB_REPO}/releases/latest"
+  GITHUB_REPO           = "Aspenini/quark-downloader"
+  INSTALLER_NAME_PREFIX = "quark-downloader"
+  LATEST_URL            = "https://api.github.com/repos/#{GITHUB_REPO}/releases/latest"
 
   enum Status
     UpToDate

@@ -7,6 +7,8 @@
 
   module QuarkGui
     module Win32Ui
+      WM_APP_UPDATE_CHECK_DONE = 0x8003_u32
+
       @@default_output = ""
       @@media_type = "video"
       @@main_action : MainAction::Type = MainAction::Cancel.new
@@ -14,6 +16,7 @@
       @@dialog_view = :main
       @@session_settings = QuarkConfig::Settings.new
       @@session_settings_saved = false
+      @@update_check_running = false
 
       def self.init_main_session(settings : QuarkConfig::Settings)
         @@session_settings = settings
@@ -109,6 +112,29 @@
         1
       end
 
+      def self.set_update_check_button(hdlg : WinHWND, checking : Bool) : Nil
+        button = LibUser32.GetDlgItem(hdlg, IDC_CHECK_UPDATES)
+        set_dlg_text(hdlg, IDC_CHECK_UPDATES, checking ? "Checking..." : "Check for updates...")
+        LibUser32.EnableWindow(button, checking ? 0 : 1)
+      end
+
+      def self.start_update_check(hdlg : WinHWND) : Nil
+        return if @@update_check_running
+
+        @@update_check_running = true
+        set_update_check_button(hdlg, true)
+
+        Thread.new(name: "update-check") do
+          QuarkGui::UpdateCheck.run!
+        rescue ex
+          message = ex.message || ex.class.name
+          message_box("Could not check for updates:\n#{message}", true)
+        ensure
+          LibUser32.PostMessageW(hdlg, WM_APP_UPDATE_CHECK_DONE, 0, 0)
+        end
+        nil
+      end
+
       def self.handle_dialog(
         hdlg : WinHWND,
         msg : UInt32,
@@ -117,6 +143,7 @@
       ) : WinBOOL
         case msg
         when WM_INITDIALOG
+          @@update_check_running = false
           LibUser32.CheckDlgButton(hdlg, IDC_VIDEO, 1)
           @@media_type = "video"
           populate_formats(hdlg)
@@ -153,7 +180,7 @@
             end
           when IDC_CHECK_UPDATES
             if notify == BN_CLICKED
-              QuarkGui::UpdateCheck.run!
+              start_update_check(hdlg)
               return 1
             end
           when IDC_SETTINGS
@@ -187,6 +214,10 @@
             end
           end
           0
+        when WM_APP_UPDATE_CHECK_DONE
+          @@update_check_running = false
+          set_update_check_button(hdlg, false)
+          1
         when WM_KEYDOWN
           case wparam
           when VK_RETURN
@@ -244,11 +275,6 @@
         end
 
         @@main_action
-      end
-
-      def self.collect_main_action(default_output : String) : MainAction::Type
-        @@session_settings_saved = false
-        run_main_dialog(default_output)
       end
 
       def self.collect_main_session(default_output : String, settings : QuarkConfig::Settings) : MainSessionResult

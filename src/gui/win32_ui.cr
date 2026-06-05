@@ -5,5 +5,4 @@
   require "./win32/controls"
   require "./win32/folder_browser"
   require "./win32/main_dialog"
-  require "./win32/settings_dialog"
 {% end %}

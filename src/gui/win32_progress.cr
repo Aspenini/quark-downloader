@@ -10,9 +10,12 @@
       IDD_PROGRESS        =  102
       IDC_PROGRESS_STATUS = 1007
       IDC_PROGRESS_BAR    = 1008
+      IDC_PROGRESS_ETA    = 1026
 
       WM_TIMER        = 0x0113_u32
       WM_COMMAND      = 0x0111_u32
+      WM_SYSCOMMAND   = 0x0112_u32
+      WM_CLOSE        = 0x0010_u32
       BN_CLICKED      =      0_u32
       WM_APP_DONE     = 0x8001_u32
       WM_APP_PROGRESS = 0x8002_u32
@@ -25,6 +28,11 @@
       WM_KEYDOWN = 0x0100_u32
       VK_ESCAPE  =   0x1B_u64
 
+      SC_CLOSE     = 0xF060_u64
+      MF_BYCOMMAND =      0_u32
+      MF_DISABLED  =      2_u32
+      MF_GRAYED    =      1_u32
+
       alias WinHWND = Win32Ui::WinHWND
       alias WinBOOL = Win32Ui::WinBOOL
 
@@ -35,6 +43,8 @@
       @@cancelled = false
       @@percent = 0.0
       @@status = "Starting download..."
+      @@eta : String? = nil
+      @@download_started = false
       @@pending_command = ""
       @@pending_args = [] of String
 
@@ -55,6 +65,9 @@
           dwInitParam : Int64,
         ) : Int64
         fun PostMessageW(hWnd : WinHWND, msg : UInt32, wParam : UInt64, lParam : Int64) : WinBOOL
+        fun GetSystemMenu(hWnd : WinHWND, bRevert : WinBOOL) : Void*
+        fun EnableMenuItem(hMenu : Void*, uIDEnableItem : UInt32, uEnable : UInt32) : WinBOOL
+        fun DrawMenuBar(hWnd : WinHWND) : WinBOOL
       end
 
       def self.run(command : String, cmd_args : Array(String)) : Int32
@@ -65,6 +78,8 @@
         @@cancelled = false
         @@percent = 0.0
         @@status = "Starting download..."
+        @@eta = nil
+        @@download_started = false
         @@dialog_hwnd = nil
         @@cli_runner = nil
 
@@ -92,6 +107,18 @@
         else
           @@cli_exit_code
         end
+      end
+
+      def self.disable_titlebar_close(hdlg : WinHWND) : Nil
+        menu = LibUser32.GetSystemMenu(hdlg, 0)
+        return if menu.null?
+
+        LibUser32.EnableMenuItem(
+          menu,
+          SC_CLOSE.to_u32,
+          MF_BYCOMMAND | MF_DISABLED | MF_GRAYED,
+        )
+        LibUser32.DrawMenuBar(hdlg)
       end
 
       def self.start_download(hdlg : WinHWND) : Nil
@@ -138,8 +165,13 @@
       end
 
       def self.apply_line(line : String) : Nil
+        if eta = QuarkGui.parse_eta(line)
+          @@eta = eta
+        end
+
         if percent = QuarkGui.parse_progress_percent(line)
-          @@percent = percent
+          @@download_started = true
+          @@percent = QuarkGui.display_download_percent(percent)
           if hdlg = @@dialog_hwnd
             LibUser32.PostMessageW(hdlg, WM_APP_PROGRESS, 0, 0)
           end
@@ -148,6 +180,11 @@
 
         if status = QuarkGui.parse_status_line(line)
           @@status = status
+          unless @@download_started
+            if setup_percent = QuarkGui.next_setup_progress(@@percent, line)
+              @@percent = setup_percent
+            end
+          end
         end
 
         if hdlg = @@dialog_hwnd
@@ -157,8 +194,21 @@
 
       def self.update_controls(hdlg : WinHWND) : Nil
         Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_STATUS, @@status)
+        Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_ETA, QuarkGui.eta_status_text(@@eta))
+        Win32Ui.set_dialog_title(hdlg, progress_window_title)
+
         bar = LibUser32.GetDlgItem(hdlg, IDC_PROGRESS_BAR)
         LibUser32.SendMessageW(bar, PBM_SETPOS, @@percent.to_i32, 0)
+      end
+
+      def self.progress_window_title : String
+        if eta = @@eta
+          "#{WINDOW_TITLE} - #{eta} left"
+        elsif @@download_started
+          "#{WINDOW_TITLE} - estimating..."
+        else
+          WINDOW_TITLE
+        end
       end
 
       def self.finish_download(hdlg : WinHWND, exit_code : Int32) : Nil
@@ -167,7 +217,9 @@
         if exit_code == 0
           @@percent = 100.0
           @@status = "Done."
+          @@eta = nil
           update_controls(hdlg)
+          Win32Ui.set_dialog_title(hdlg, "#{WINDOW_TITLE} - Done")
           Win32Ui.message_box("Download Complete!")
         else
           message = "Download failed."
@@ -210,9 +262,15 @@
         case msg
         when Win32Ui::WM_INITDIALOG
           @@dialog_hwnd = hdlg
+          disable_titlebar_close(hdlg)
           Win32Ui.set_dialog_title(hdlg, WINDOW_TITLE)
           start_download(hdlg)
           1
+        when WM_CLOSE
+          1
+        when WM_SYSCOMMAND
+          command = wparam & 0xFFF0_u64
+          command == SC_CLOSE ? 1 : 0
         when WM_TIMER
           update_controls(hdlg)
           1

@@ -4,31 +4,30 @@
 
   module QuarkGui
     module Win32Ui
-      IDD_MAIN             =  101
-      IDC_URL              = 1001
-      IDC_AUDIO            = 1002
-      IDC_VIDEO            = 1003
-      IDC_FORMAT           = 1004
-      IDC_OUTPUT           = 1005
-      IDC_BROWSE           = 1006
-      IDC_SETTINGS         = 1009
-      IDD_SETTINGS         =  103
-      IDC_SET_DOWNLOAD_DIR = 1010
-      IDC_SET_BROWSE       = 1011
-      IDC_SET_YTDLP        = 1012
-      IDC_SET_FFMPEG       = 1013
-      IDC_SET_GUI_MODE     = 1014
-      IDC_SET_LOGS         = 1015
-      IDC_MAIN_URL_LABEL   = 1016
-      IDC_MAIN_FORMAT_LABEL = 1017
-      IDC_MAIN_OUTPUT_LABEL = 1018
+      IDD_MAIN               =  101
+      IDC_URL                = 1001
+      IDC_AUDIO              = 1002
+      IDC_VIDEO              = 1003
+      IDC_FORMAT             = 1004
+      IDC_OUTPUT             = 1005
+      IDC_BROWSE             = 1006
+      IDC_SETTINGS           = 1009
+      IDC_SET_DOWNLOAD_DIR   = 1010
+      IDC_SET_BROWSE         = 1011
+      IDC_SET_YTDLP          = 1012
+      IDC_SET_FFMPEG         = 1013
+      IDC_SET_GUI_MODE       = 1014
+      IDC_SET_LOGS           = 1015
+      IDC_MAIN_URL_LABEL     = 1016
+      IDC_MAIN_FORMAT_LABEL  = 1017
+      IDC_MAIN_OUTPUT_LABEL  = 1018
       IDC_SET_DOWNLOAD_LABEL = 1019
-      IDC_SET_YTDLP_LABEL  = 1020
-      IDC_SET_FFMPEG_LABEL = 1021
+      IDC_SET_YTDLP_LABEL    = 1020
+      IDC_SET_FFMPEG_LABEL   = 1021
       IDC_SET_GUI_MODE_LABEL = 1022
-      IDC_SET_SAVE         = 1023
-      IDC_SET_CANCEL       = 1024
-      IDC_CHECK_UPDATES    = 1025
+      IDC_SET_SAVE           = 1023
+      IDC_SET_CANCEL         = 1024
+      IDC_CHECK_UPDATES      = 1025
 
       SW_HIDE = 0
       SW_SHOW = 5
@@ -119,6 +118,8 @@
         fun MessageBoxW(hWnd : WinHWND, lpText : UInt16*, lpCaption : UInt16*, uType : UInt32) : Int32
         fun ShowWindow(hWnd : WinHWND, nCmdShow : Int32) : WinBOOL
         fun SetWindowTextW(hWnd : WinHWND, lpString : UInt16*) : WinBOOL
+        fun EnableWindow(hWnd : WinHWND, bEnable : WinBOOL) : WinBOOL
+        fun PostMessageW(hWnd : WinHWND, msg : UInt32, wParam : UInt64, lParam : Int64) : WinBOOL
       end
 
       lib LibShell32

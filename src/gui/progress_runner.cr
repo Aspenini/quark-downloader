@@ -28,6 +28,7 @@ module QuarkGui
         error: Process::Redirect::Close,
       )
       prog_in = progress.input.not_nil!
+      relay = ProgressRelay.new
 
       env = ENV.to_h.merge({"QUARK_GUI" => "1"})
       cli_process = Process.new(
@@ -43,7 +44,7 @@ module QuarkGui
       if stdout = cli_process.output
         spawn do
           stdout.each_line do |line|
-            relay_progress_line(line, prog_in)
+            relay.relay(line, prog_in)
           end
           done.send(nil)
         end
@@ -54,7 +55,7 @@ module QuarkGui
       if stderr = cli_process.error
         spawn do
           stderr.each_line do |line|
-            relay_progress_line(line, prog_in)
+            relay.relay(line, prog_in)
           end
           done.send(nil)
         end
@@ -82,19 +83,6 @@ module QuarkGui
 
       TkUi.show_completion(exit_code == 0, exit_code)
       exit_code
-    end
-
-    def self.relay_progress_line(line : String, prog_in : IO) : Nil
-      if percent = parse_progress_percent(line)
-        prog_in.puts("PROGRESS\t#{percent}")
-        prog_in.flush
-        return
-      end
-
-      if status = parse_status_line(line)
-        prog_in.puts("STATUS\t#{status}")
-        prog_in.flush
-      end
     end
   {% end %}
 end
