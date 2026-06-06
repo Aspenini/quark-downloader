@@ -27,6 +27,19 @@ module QuarkConfig
     end
   end
 
+  enum GuiTheme
+    Light
+    Dark
+
+    def to_config : String
+      case self
+      when Light then "light"
+      when Dark  then "dark"
+      else            "light"
+      end
+    end
+  end
+
   struct Settings
     DEFAULT_DOWNLOAD_DIR = "~/Downloads"
 
@@ -35,6 +48,7 @@ module QuarkConfig
     property ffmpeg : ToolSource
     property gui_download_mode : GuiDownloadMode
     property download_logs : Bool
+    property gui_theme : GuiTheme
 
     def initialize(
       @download_dir : String = DEFAULT_DOWNLOAD_DIR,
@@ -42,13 +56,14 @@ module QuarkConfig
       @ffmpeg : ToolSource = ToolSource::Auto,
       @gui_download_mode : GuiDownloadMode = GuiDownloadMode::Progress,
       @download_logs : Bool = true,
+      @gui_theme : GuiTheme = GuiTheme::Light,
     )
     end
   end
 
   CONFIG_NAME = "quark-downloader.conf"
   APP_NAME    = "quark-downloader"
-  CONFIG_KEYS = ["download_dir", "yt_dlp", "ffmpeg", "gui_download_mode", "download_logs"]
+  CONFIG_KEYS = ["download_dir", "yt_dlp", "ffmpeg", "gui_download_mode", "download_logs", "gui_theme"]
 
   @@settings = Settings.new
 
@@ -128,6 +143,10 @@ module QuarkConfig
     @@settings.download_logs
   end
 
+  def self.gui_theme : GuiTheme
+    @@settings.gui_theme
+  end
+
   def self.user_home : String
     ENV["USERPROFILE"]? || ENV["HOME"]? || "."
   end
@@ -178,6 +197,8 @@ module QuarkConfig
         settings.gui_download_mode = parse_gui_download_mode(value, quiet: quiet)
       when "download_logs"
         settings.download_logs = parse_bool(value, "download_logs", default: true, quiet: quiet)
+      when "gui_theme"
+        settings.gui_theme = parse_gui_theme(value, quiet: quiet)
       else
         puts "Warning: unknown config key #{key.inspect} in #{path}" unless quiet
       end
@@ -206,6 +227,7 @@ module QuarkConfig
     when "ffmpeg"            then settings.ffmpeg.to_config
     when "gui_download_mode" then settings.gui_download_mode.to_config
     when "download_logs"     then settings.download_logs.to_s
+    when "gui_theme"         then settings.gui_theme.to_config
     else                          ""
     end
   end
@@ -228,6 +250,16 @@ module QuarkConfig
     else
       puts "Warning: invalid gui_download_mode value #{value.inspect}, using progress" unless quiet
       GuiDownloadMode::Progress
+    end
+  end
+
+  def self.parse_gui_theme(value : String, quiet : Bool = false) : GuiTheme
+    case value.downcase
+    when "dark"  then GuiTheme::Dark
+    when "light" then GuiTheme::Light
+    else
+      puts "Warning: invalid gui_theme value #{value.inspect}, using light" unless quiet
+      GuiTheme::Light
     end
   end
 
@@ -263,6 +295,11 @@ module QuarkConfig
       "",
       "# Create rotated logs for CLI and GUI downloads",
       "download_logs = #{settings.download_logs}",
+      "",
+      "# GUI appearance",
+      "#   light - light controls and window backgrounds",
+      "#   dark  - dark controls and window backgrounds where supported",
+      "gui_theme = #{settings.gui_theme.to_config}",
       "",
     ].join('\n')
   end

@@ -24,6 +24,70 @@ proc app_settings_window_title {} {
 set AUDIO_FORMATS {original mp3 m4a flac wav opus vorbis}
 set VIDEO_FORMATS {original mp4 mkv webm}
 set ::update_check_running 0
+set ::current_gui_theme light
+
+proc normalize_theme {value} {
+    set lowered [string tolower $value]
+    if {$lowered eq "dark"} {
+        return dark
+    }
+    return light
+}
+
+proc style_configure {style args} {
+    catch {ttk::style configure $style {*}$args}
+}
+
+proc style_map {style args} {
+    catch {ttk::style map $style {*}$args}
+}
+
+proc apply_gui_theme {theme} {
+    set ::current_gui_theme [normalize_theme $theme]
+
+    catch {ttk::style theme use clam}
+
+    if {$::current_gui_theme eq "dark"} {
+        set bg "#1f2328"
+        set surface "#2b3037"
+        set active "#3a424d"
+        set field "#15191f"
+        set fg "#f0f3f6"
+        set muted "#8b949e"
+        set accent "#3d8bfd"
+        set select_fg "#ffffff"
+    } else {
+        set bg "#f5f6f8"
+        set surface "#ffffff"
+        set active "#e8edf3"
+        set field "#ffffff"
+        set fg "#1f2328"
+        set muted "#6b7280"
+        set accent "#2563eb"
+        set select_fg "#ffffff"
+    }
+
+    catch {tk_setPalette background $bg foreground $fg activeBackground $active activeForeground $fg selectBackground $accent selectForeground $select_fg}
+    option add *Background $bg
+    option add *Foreground $fg
+    option add *selectBackground $accent
+    option add *selectForeground $select_fg
+
+    style_configure . -background $bg -foreground $fg -fieldbackground $field -selectbackground $accent -selectforeground $select_fg
+    style_configure TFrame -background $bg
+    style_configure TLabel -background $bg -foreground $fg
+    style_configure TButton -background $surface -foreground $fg -focuscolor $accent
+    style_configure TCheckbutton -background $bg -foreground $fg -focuscolor $accent
+    style_configure TRadiobutton -background $bg -foreground $fg -focuscolor $accent
+    style_configure TEntry -fieldbackground $field -foreground $fg -insertcolor $fg
+    style_configure TCombobox -fieldbackground $field -background $surface -foreground $fg -arrowcolor $fg
+    style_configure Horizontal.TProgressbar -background $accent -troughcolor $surface
+    style_map TButton -background [list active $active disabled $surface] -foreground [list disabled $muted]
+    style_map TCheckbutton -background [list active $bg] -foreground [list disabled $muted]
+    style_map TRadiobutton -background [list active $bg] -foreground [list disabled $muted]
+    style_map TEntry -fieldbackground [list readonly $field disabled $surface] -foreground [list disabled $muted]
+    style_map TCombobox -fieldbackground [list readonly $field disabled $surface] -foreground [list disabled $muted] -selectbackground [list readonly $accent] -selectforeground [list readonly $select_fg]
+}
 
 proc show_message {kind title body} {
     wm withdraw .
@@ -91,6 +155,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     set current_ffmpeg auto
     set current_gui_mode progress
     set current_logs true
+    set current_theme light
 
     if {[llength $argv] > 1} { set default_dir [lindex $argv 1] }
     if {[llength $argv] > 2} { set current_download_dir [lindex $argv 2] }
@@ -98,6 +163,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     if {[llength $argv] > 4} { set current_ffmpeg [lindex $argv 4] }
     if {[llength $argv] > 5} { set current_gui_mode [lindex $argv 5] }
     if {[llength $argv] > 6} { set current_logs [lindex $argv 6] }
+    if {[llength $argv] > 7} { set current_theme [lindex $argv 7] }
 
     proc session_set_combo_value {widget value values} {
         $widget configure -values $values
@@ -130,6 +196,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     set ::session_gui_mode $current_gui_mode
     set ::session_logs [session_bool_value $current_logs]
     set ::session_logs_var $::session_logs
+    set ::session_theme [normalize_theme $current_theme]
 
     proc session_set_formats {} {
         if {$::session_media_type eq "audio"} {
@@ -169,6 +236,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         session_set_combo_value .settings.ffmpeg_combo $::session_ffmpeg {auto path bundled}
         session_set_combo_value .settings.mode_combo $::session_gui_mode {progress external_cli}
         set ::session_logs_var $::session_logs
+        session_set_combo_value .settings.theme_combo $::session_theme {light dark}
 
         grid .settings -row 0 -column 0 -sticky nsew
         session_bind_settings_keys
@@ -186,6 +254,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         } else {
             puts "false"
         }
+        puts $::session_theme
     }
 
     proc session_emit_download {url media_type format output} {
@@ -263,8 +332,10 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         set ::session_ffmpeg [.settings.ffmpeg_combo get]
         set ::session_gui_mode [.settings.mode_combo get]
         set ::session_logs $::session_logs_var
+        set ::session_theme [normalize_theme [.settings.theme_combo get]]
         set ::session_default_dir $normalized_download_dir
         set ::session_settings_saved 1
+        apply_gui_theme $::session_theme
 
         if {$current_output eq "" || $current_output eq $previous_default} {
             .main.output_entry delete 0 end
@@ -299,6 +370,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
 
     wm title . [app_window_title]
     wm resizable . 0 0
+    apply_gui_theme $::session_theme
 
     ttk::frame .main
     ttk::frame .settings
@@ -366,13 +438,18 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     grid .settings.mode_combo -row 5 -column 0 -sticky w -padx 10
     grid .settings.logs_check -row 5 -column 1 -columnspan 2 -sticky w -padx 10
 
+    ttk::label .settings.theme_lbl -text "Theme:"
+    ttk::combobox .settings.theme_combo -state readonly -width 16
+    grid .settings.theme_lbl -row 6 -column 0 -sticky w -padx 10 -pady {10 2}
+    grid .settings.theme_combo -row 7 -column 0 -sticky w -padx 10
+
     ttk::button .settings.updates_btn -text "Check for updates..." \
         -command invoke_check_for_updates
     ttk::button .settings.save_btn -text "Save" -command session_on_settings_save -default active
     ttk::button .settings.cancel_btn -text "Cancel" -command session_show_main
-    grid .settings.updates_btn -row 6 -column 0 -sticky w -padx 10 -pady {8 0}
-    grid .settings.save_btn -row 7 -column 1 -sticky e -padx 5 -pady 12
-    grid .settings.cancel_btn -row 7 -column 2 -sticky e -padx {0 10} -pady 12
+    grid .settings.updates_btn -row 7 -column 1 -columnspan 2 -sticky w -padx 10
+    grid .settings.save_btn -row 8 -column 1 -sticky e -padx 5 -pady 12
+    grid .settings.cancel_btn -row 8 -column 2 -sticky e -padx {0 10} -pady 12
 
     grid columnconfigure .settings 0 -weight 1
     grid columnconfigure .settings 1 -weight 1
@@ -382,12 +459,24 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     session_show_main
 } elseif {[llength $argv] > 0 && [lindex $argv 0] eq "--progress"} {
     set logs_dir ""
+    set current_theme light
     if {[llength $argv] > 1} {
-        set logs_dir [lindex $argv 1]
+        set first_progress_arg [lindex $argv 1]
+        if {[normalize_theme $first_progress_arg] eq [string tolower $first_progress_arg]} {
+            set current_theme $first_progress_arg
+        } else {
+            set logs_dir $first_progress_arg
+        }
+    }
+    if {[llength $argv] > 2} {
+        set current_theme [lindex $argv 2]
     }
 
     set ::download_finished 0
     set ::progress_eta ""
+    set ::progress_eta_last_update 0
+    set ::progress_eta_update_after ""
+    set ::ETA_UPDATE_MS 1500
 
     proc truncate_status {text {max 72}} {
         if {[string length $text] > $max} {
@@ -411,9 +500,47 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         }
     }
 
+    proc apply_eta_display_update {} {
+        if {![winfo exists .eta_lbl]} {
+            return
+        }
+        .eta_lbl configure -text [eta_text]
+        update_progress_title
+        set ::progress_eta_last_update [clock milliseconds]
+        set ::progress_eta_update_after ""
+    }
+
+    proc schedule_eta_display_update {} {
+        set now [clock milliseconds]
+        if {$::progress_eta_last_update == 0} {
+            apply_eta_display_update
+            return
+        }
+
+        set elapsed [expr {$now - $::progress_eta_last_update}]
+        if {$elapsed >= $::ETA_UPDATE_MS} {
+            if {$::progress_eta_update_after ne ""} {
+                after cancel $::progress_eta_update_after
+                set ::progress_eta_update_after ""
+            }
+            apply_eta_display_update
+        } elseif {$::progress_eta_update_after eq ""} {
+            set delay [expr {$::ETA_UPDATE_MS - $elapsed}]
+            set ::progress_eta_update_after [after $delay apply_eta_display_update]
+        }
+    }
+
+    proc cancel_eta_display_update {} {
+        if {$::progress_eta_update_after ne ""} {
+            after cancel $::progress_eta_update_after
+            set ::progress_eta_update_after ""
+        }
+    }
+
     update_progress_title
     wm resizable . 0 0
     wm geometry . 400x128
+    apply_gui_theme $current_theme
 
     ttk::label .status_lbl -text "Starting download..." -wraplength 376 -justify left
     ttk::progressbar .bar -mode determinate -maximum 100 -length 376
@@ -428,6 +555,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
             return
         }
         set ::download_finished 1
+        cancel_eta_display_update
         destroy .
         exit $exit_code
     }
@@ -446,8 +574,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         } elseif {$kind eq "ETA"} {
             if {$payload ne ""} {
                 set ::progress_eta $payload
-                .eta_lbl configure -text [eta_text]
-                update_progress_title
+                schedule_eta_display_update
             }
         } elseif {$kind eq "STATUS"} {
             .status_lbl configure -text [truncate_status $payload]

@@ -10,6 +10,7 @@ describe QuarkConfig do
       ffmpeg = bundled
       gui_download_mode = external_cli
       download_logs = off
+      gui_theme = dark
       CONF
 
     settings = QuarkConfig.parse_file(path, quiet: true)
@@ -19,6 +20,7 @@ describe QuarkConfig do
     settings.ffmpeg.should eq(QuarkConfig::ToolSource::Bundled)
     settings.gui_download_mode.should eq(QuarkConfig::GuiDownloadMode::ExternalCli)
     settings.download_logs.should be_false
+    settings.gui_theme.should eq(QuarkConfig::GuiTheme::Dark)
   ensure
     File.delete?(path.to_s) if path
   end
@@ -30,6 +32,7 @@ describe QuarkConfig do
       ffmpeg = wrong
       gui_download_mode = mystery
       download_logs = maybe
+      gui_theme = neon
       CONF
 
     settings = QuarkConfig.parse_file(path, quiet: true)
@@ -38,6 +41,7 @@ describe QuarkConfig do
     settings.ffmpeg.should eq(QuarkConfig::ToolSource::Auto)
     settings.gui_download_mode.should eq(QuarkConfig::GuiDownloadMode::Progress)
     settings.download_logs.should be_true
+    settings.gui_theme.should eq(QuarkConfig::GuiTheme::Light)
   ensure
     File.delete?(path.to_s) if path
   end
@@ -49,6 +53,7 @@ describe QuarkConfig do
       ffmpeg: QuarkConfig::ToolSource::Path,
       gui_download_mode: QuarkConfig::GuiDownloadMode::ExternalCli,
       download_logs: false,
+      gui_theme: QuarkConfig::GuiTheme::Dark,
     )
 
     rendered = QuarkConfig.render(settings)
@@ -58,6 +63,7 @@ describe QuarkConfig do
     rendered.includes?("ffmpeg = path").should be_true
     rendered.includes?("gui_download_mode = external_cli").should be_true
     rendered.includes?("download_logs = false").should be_true
+    rendered.includes?("gui_theme = dark").should be_true
   end
 
   it "appends missing public settings to older config files" do
@@ -76,6 +82,7 @@ describe QuarkConfig do
     migrated.includes?("download_dir = ~/Downloads").should be_true
     migrated.includes?("gui_download_mode = progress").should be_true
     migrated.includes?("download_logs = true").should be_true
+    migrated.includes?("gui_theme = light").should be_true
   ensure
     File.delete?(path.to_s) if path
   end

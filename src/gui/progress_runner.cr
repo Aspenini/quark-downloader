@@ -22,7 +22,7 @@ module QuarkGui
 
       progress = Process.new(
         wish,
-        args: [script, "--progress"],
+        args: [script, "--progress", "", QuarkConfig.gui_theme.to_config],
         input: Process::Redirect::Pipe,
         output: Process::Redirect::Close,
         error: Process::Redirect::Close,

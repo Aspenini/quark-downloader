@@ -12,6 +12,7 @@
         path
         external_cli
         false
+        dark
         __DOWNLOAD__
         https://example.com/video
         audio
@@ -25,6 +26,7 @@
       form.ffmpeg.should eq("path")
       form.gui_download_mode.should eq("external_cli")
       form.download_logs.should be_false
+      form.gui_theme.should eq("dark")
 
       action = result.action
       action.should be_a(QuarkGui::MainAction::Download)
@@ -44,6 +46,7 @@
         bundled
         progress
         true
+        light
         __CANCEL__
         TEXT
 
@@ -52,6 +55,24 @@
       form.download_dir.should eq("~/Music")
       form.ffmpeg.should eq("bundled")
       form.download_logs.should be_true
+      form.gui_theme.should eq("light")
+    end
+
+    it "defaults legacy saved settings to light theme" do
+      result = QuarkGui::TkUi.parse_main_session_response(<<-TEXT)
+        __SESSION__
+        __SETTINGS__
+        ~/Legacy
+        auto
+        auto
+        progress
+        true
+        __CANCEL__
+        TEXT
+
+      form = result.settings_form.should_not be_nil
+      form.download_dir.should eq("~/Legacy")
+      form.gui_theme.should eq("light")
     end
   end
 {% end %}

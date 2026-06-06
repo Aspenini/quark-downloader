@@ -54,6 +54,7 @@ On first run, Quark creates `quark-downloader.conf` under the user config direct
 | `ffmpeg` | `auto`, `path`, or `bundled` |
 | `gui_download_mode` | `progress` for the GUI progress dialog, or `external_cli` to open the CLI window after Download |
 | `download_logs` | `true` or `false`; applies to both CLI and GUI downloads |
+| `gui_theme` | `light` or `dark`; applies to the Tk GUI on macOS/Linux (Windows uses its native light UI) |
 
 The GUI gear button opens these settings without editing the file by hand. Logs are rotated in the config directory under `logs/`. Existing config files are updated with missing default keys on load.
 

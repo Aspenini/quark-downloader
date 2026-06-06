@@ -133,6 +133,7 @@ module QuarkGui
         settings.ffmpeg.to_config,
         settings.gui_download_mode.to_config,
         settings.download_logs.to_s,
+        settings.gui_theme.to_config,
       ])
       return MainSessionResult.new(MainAction::Cancel.new) unless code == 0
 
@@ -153,14 +154,22 @@ module QuarkGui
         when "__SETTINGS__"
           break unless i + 5 < lines.size
 
+          gui_theme = QuarkConfig::GuiTheme::Light.to_config
+          next_index = i + 6
+          if i + 6 < lines.size && !lines[i + 6].starts_with?("__")
+            gui_theme = lines[i + 6]
+            next_index = i + 7
+          end
+
           settings_form = SettingsForm.from_strings(
             lines[i + 1],
             lines[i + 2],
             lines[i + 3],
             lines[i + 4],
             lines[i + 5],
+            gui_theme,
           )
-          i += 6
+          i = next_index
         when "__DOWNLOAD__"
           break unless i + 4 < lines.size
 

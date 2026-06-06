@@ -22,6 +22,7 @@ module QuarkGui
     property ffmpeg : String
     property gui_download_mode : String
     property download_logs : Bool
+    property gui_theme : String
 
     def initialize(
       @download_dir,
@@ -29,6 +30,7 @@ module QuarkGui
       @ffmpeg,
       @gui_download_mode,
       @download_logs,
+      @gui_theme = QuarkConfig::GuiTheme::Light.to_config,
     )
     end
 
@@ -38,6 +40,7 @@ module QuarkGui
       ffmpeg : String,
       gui_download_mode : String,
       download_logs : String,
+      gui_theme : String = QuarkConfig::GuiTheme::Light.to_config,
     ) : SettingsForm
       SettingsForm.new(
         download_dir,
@@ -45,6 +48,7 @@ module QuarkGui
         ffmpeg,
         gui_download_mode,
         QuarkConfig.parse_bool(download_logs, "download_logs", default: true, quiet: true),
+        QuarkConfig.parse_gui_theme(gui_theme, quiet: true).to_config,
       )
     end
 
@@ -55,6 +59,7 @@ module QuarkGui
         ffmpeg: QuarkConfig.parse_tool_source(ffmpeg, "ffmpeg", quiet: true),
         gui_download_mode: QuarkConfig.parse_gui_download_mode(gui_download_mode, quiet: true),
         download_logs: download_logs,
+        gui_theme: QuarkConfig.parse_gui_theme(gui_theme, quiet: true),
       )
     end
   end

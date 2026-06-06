@@ -20,10 +20,11 @@
       WM_APP_DONE     = 0x8001_u32
       WM_APP_PROGRESS = 0x8002_u32
 
-      PBM_SETRANGE = 0x0401_u32
-      PBM_SETPOS   = 0x0402_u32
-      TIMER_ID     =      1_u32
-      TIMER_MS     =    100_u32
+      PBM_SETRANGE  = 0x0401_u32
+      PBM_SETPOS    = 0x0402_u32
+      TIMER_ID      =      1_u32
+      TIMER_MS      =    100_u32
+      ETA_UPDATE_MS =  1_500_u64
 
       WM_KEYDOWN = 0x0100_u32
       VK_ESCAPE  =   0x1B_u64
@@ -44,6 +45,9 @@
       @@percent = 0.0
       @@status = "Starting download..."
       @@eta : String? = nil
+      @@display_eta : String? = nil
+      @@display_download_started = false
+      @@last_eta_update_ms = 0_u64
       @@download_started = false
       @@pending_command = ""
       @@pending_args = [] of String
@@ -70,6 +74,10 @@
         fun DrawMenuBar(hWnd : WinHWND) : WinBOOL
       end
 
+      lib LibKernel32
+        fun GetTickCount64 : UInt64
+      end
+
       def self.run(command : String, cmd_args : Array(String)) : Int32
         @@pending_command = command
         @@pending_args = cmd_args
@@ -79,6 +87,9 @@
         @@percent = 0.0
         @@status = "Starting download..."
         @@eta = nil
+        @@display_eta = nil
+        @@display_download_started = false
+        @@last_eta_update_ms = 0_u64
         @@download_started = false
         @@dialog_hwnd = nil
         @@cli_runner = nil
@@ -192,23 +203,36 @@
         end
       end
 
-      def self.update_controls(hdlg : WinHWND) : Nil
+      def self.update_controls(hdlg : WinHWND, force_eta : Bool = false) : Nil
         Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_STATUS, @@status)
-        Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_ETA, QuarkGui.eta_status_text(@@eta))
-        Win32Ui.set_dialog_title(hdlg, progress_window_title)
+        if refresh_eta_display?(force_eta)
+          Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_ETA, QuarkGui.eta_status_text(@@display_eta))
+          Win32Ui.set_dialog_title(hdlg, progress_window_title)
+        end
 
         bar = LibUser32.GetDlgItem(hdlg, IDC_PROGRESS_BAR)
         LibUser32.SendMessageW(bar, PBM_SETPOS, @@percent.to_i32, 0)
       end
 
       def self.progress_window_title : String
-        if eta = @@eta
+        if eta = @@display_eta
           "#{WINDOW_TITLE} - #{eta} left"
-        elsif @@download_started
+        elsif @@display_download_started
           "#{WINDOW_TITLE} - estimating..."
         else
           WINDOW_TITLE
         end
+      end
+
+      def self.refresh_eta_display?(force : Bool = false) : Bool
+        now = LibKernel32.GetTickCount64
+        return false unless force || @@last_eta_update_ms == 0_u64 || now - @@last_eta_update_ms >= ETA_UPDATE_MS
+        return false if @@display_eta == @@eta && @@display_download_started == @@download_started && !force && @@last_eta_update_ms != 0_u64
+
+        @@display_eta = @@eta
+        @@display_download_started = @@download_started
+        @@last_eta_update_ms = now
+        true
       end
 
       def self.finish_download(hdlg : WinHWND, exit_code : Int32) : Nil
@@ -218,7 +242,7 @@
           @@percent = 100.0
           @@status = "Done."
           @@eta = nil
-          update_controls(hdlg)
+          update_controls(hdlg, force_eta: true)
           Win32Ui.set_dialog_title(hdlg, "#{WINDOW_TITLE} - Done")
           Win32Ui.message_box("Download Complete!")
         else
@@ -258,44 +282,44 @@
         msg : UInt32,
         wparam : UInt64,
         lparam : UInt64,
-      ) : WinBOOL
+      ) : Int64
         case msg
         when Win32Ui::WM_INITDIALOG
           @@dialog_hwnd = hdlg
           disable_titlebar_close(hdlg)
           Win32Ui.set_dialog_title(hdlg, WINDOW_TITLE)
           start_download(hdlg)
-          1
+          1_i64
         when WM_CLOSE
-          1
+          1_i64
         when WM_SYSCOMMAND
           command = wparam & 0xFFF0_u64
-          command == SC_CLOSE ? 1 : 0
+          command == SC_CLOSE ? 1_i64 : 0_i64
         when WM_TIMER
           update_controls(hdlg)
-          1
+          1_i64
         when WM_APP_DONE
           finish_download(hdlg, wparam.to_i32)
-          1
+          1_i64
         when WM_APP_PROGRESS
           update_controls(hdlg)
-          1
+          1_i64
         when WM_COMMAND
           id = wparam & 0xFFFF
           notify = (wparam >> 16) & 0xFFFF
           if id == 2 && notify == BN_CLICKED # IDCANCEL
             cancel_download(hdlg)
-            return 1
+            return 1_i64
           end
-          0
+          0_i64
         when WM_KEYDOWN
           if wparam == VK_ESCAPE
             cancel_download(hdlg)
-            return 1
+            return 1_i64
           end
-          0
+          0_i64
         else
-          0
+          0_i64
         end
       end
 

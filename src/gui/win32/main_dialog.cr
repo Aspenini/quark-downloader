@@ -74,17 +74,17 @@
         )
       end
 
-      def self.try_confirm(hdlg : WinHWND) : WinBOOL
+      def self.try_confirm(hdlg : WinHWND) : Int64
         url = get_dlg_text(hdlg, IDC_URL).strip
         if url.empty?
           message_box("Please enter a video URL.", true)
-          return 0
+          return 0_i64
         end
 
         output = get_dlg_text(hdlg, IDC_OUTPUT).strip
         if output.empty?
           message_box("Please choose an output folder.", true)
-          return 0
+          return 0_i64
         end
 
         format = combo_text(hdlg, IDC_FORMAT)
@@ -97,19 +97,19 @@
           output,
         ))
         LibUser32.EndDialog(hdlg, 1)
-        1
+        1_i64
       end
 
-      def self.try_save_settings(hdlg : WinHWND) : WinBOOL
+      def self.try_save_settings(hdlg : WinHWND) : Int64
         unless form = read_settings_form(hdlg)
           message_box("Please choose a default download folder.", true)
-          return 0
+          return 0_i64
         end
 
         @@session_settings = form.to_settings
         @@session_settings_saved = true
         show_main_view(hdlg)
-        1
+        1_i64
       end
 
       def self.set_update_check_button(hdlg : WinHWND, checking : Bool) : Nil
@@ -140,7 +140,7 @@
         msg : UInt32,
         wparam : UInt64,
         lparam : UInt64,
-      ) : WinBOOL
+      ) : Int64
         case msg
         when WM_INITDIALOG
           @@update_check_running = false
@@ -150,7 +150,7 @@
           set_dlg_text(hdlg, IDC_OUTPUT, @@default_output)
           set_dlg_text(hdlg, IDC_SETTINGS, "\u{2699}")
           show_main_view(hdlg)
-          1
+          1_i64
         when WM_COMMAND
           id = wparam & 0xFFFF
           notify = (wparam >> 16) & 0xFFFF
@@ -181,12 +181,12 @@
           when IDC_CHECK_UPDATES
             if notify == BN_CLICKED
               start_update_check(hdlg)
-              return 1
+              return 1_i64
             end
           when IDC_SETTINGS
             if notify == BN_CLICKED
               show_settings_view(hdlg)
-              return 1
+              return 1_i64
             end
           when IDC_SET_SAVE
             if notify == BN_CLICKED
@@ -195,7 +195,7 @@
           when IDC_SET_CANCEL
             if notify == BN_CLICKED
               show_main_view(hdlg)
-              return 1
+              return 1_i64
             end
           when 1 # IDOK
             if notify == BN_CLICKED
@@ -205,19 +205,19 @@
             if notify == BN_CLICKED
               if @@dialog_view == :settings
                 show_main_view(hdlg)
-                return 1
+                return 1_i64
               end
 
               @@main_action = MainAction::Cancel.new
               LibUser32.EndDialog(hdlg, 0)
-              return 1
+              return 1_i64
             end
           end
-          0
+          0_i64
         when WM_APP_UPDATE_CHECK_DONE
           @@update_check_running = false
           set_update_check_button(hdlg, false)
-          1
+          1_i64
         when WM_KEYDOWN
           case wparam
           when VK_RETURN
@@ -227,16 +227,16 @@
           when VK_ESCAPE
             if @@dialog_view == :settings
               show_main_view(hdlg)
-              return 1
+              return 1_i64
             end
 
             @@main_action = MainAction::Cancel.new
             LibUser32.EndDialog(hdlg, 0)
-            return 1
+            return 1_i64
           end
-          0
+          0_i64
         else
-          0
+          0_i64
         end
       end
 

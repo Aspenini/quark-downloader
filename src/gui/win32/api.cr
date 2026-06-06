@@ -88,7 +88,7 @@
 
       alias WinHWND = Void*
       alias WinBOOL = Int32
-      alias DialogCallback = Proc(Void*, UInt32, UInt64, UInt64, Int32)
+      alias DialogCallback = Proc(Void*, UInt32, UInt64, UInt64, Int64)
       alias BrowseCallback = Proc(Void*, UInt32, Int64, Int64, Int32)
 
       lib LibKernel32

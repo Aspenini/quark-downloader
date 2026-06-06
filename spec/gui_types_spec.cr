@@ -9,6 +9,7 @@ describe QuarkGui::SettingsForm do
       "path",
       "external_cli",
       "off",
+      "dark",
     )
 
     settings = form.to_settings
@@ -18,5 +19,6 @@ describe QuarkGui::SettingsForm do
     settings.ffmpeg.should eq(QuarkConfig::ToolSource::Path)
     settings.gui_download_mode.should eq(QuarkConfig::GuiDownloadMode::ExternalCli)
     settings.download_logs.should be_false
+    settings.gui_theme.should eq(QuarkConfig::GuiTheme::Dark)
   end
 end
