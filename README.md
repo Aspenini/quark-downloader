@@ -6,8 +6,8 @@
     <td align="right">
       <h1>Quark Downloader</h1>
       <p>
-        <a href="shard.yml">
-          <img alt="Version 0.5.0" src="https://img.shields.io/badge/version-0.5.0-purple" />
+        <a href="https://github.com/Aspenini/quark-downloader/actions/workflows/crystal.yml">
+          <img alt="Crystal CI" src="https://img.shields.io/github/actions/workflow/status/Aspenini/quark-downloader/crystal.yml?branch=main&amp;label=Crystal%20CI&amp;color=purple" />
         </a>
         <a href="https://github.com/Aspenini/quark-downloader/releases">
           <img alt="GitHub release" src="https://img.shields.io/github/v/release/Aspenini/quark-downloader?label=release" />
