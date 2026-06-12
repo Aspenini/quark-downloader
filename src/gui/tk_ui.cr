@@ -1,6 +1,8 @@
 {% unless flag?(:windows) %}
 require "../config"
 require "../logs"
+require "../process_status"
+require "./session_protocol"
 require "./types"
 
 module QuarkGui
@@ -99,7 +101,7 @@ module QuarkGui
         output: output,
         error: Process::Redirect::Pipe,
       )
-      code = status.try(&.exit_code) || 1
+      code = QuarkProcess.exit_code(status)
       unless code == 0 || code == 1
         tk_error("Tk GUI failed to start (exit code #{code}).\nOn macOS: brew install tcl-tk")
       end
@@ -125,71 +127,14 @@ module QuarkGui
     end
 
     def self.collect_main_session(default_dir : String, settings : QuarkConfig::Settings) : MainSessionResult
-      code, text = run_wish([
-        "--session",
-        default_dir,
-        settings.download_dir,
-        settings.yt_dlp.to_config,
-        settings.ffmpeg.to_config,
-        settings.gui_download_mode.to_config,
-        settings.download_logs.to_s,
-        settings.gui_theme.to_config,
-      ])
+      code, text = run_wish(SessionProtocol.build_session_args(default_dir, settings))
       return MainSessionResult.new(MainAction::Cancel.new) unless code == 0
 
       parse_main_session_response(text)
     end
 
     def self.parse_main_session_response(text : String) : MainSessionResult
-      lines = text.lines.map(&.strip)
-      return MainSessionResult.new(MainAction::Cancel.new) if lines.empty?
-      return MainSessionResult.new(MainAction::Cancel.new) unless lines.first == "__SESSION__"
-
-      action : MainAction::Type = MainAction::Cancel.new
-      settings_form : SettingsForm? = nil
-      i = 1
-
-      while i < lines.size
-        case lines[i]
-        when "__SETTINGS__"
-          break unless i + 5 < lines.size
-
-          gui_theme = QuarkConfig::GuiTheme::Light.to_config
-          next_index = i + 6
-          if i + 6 < lines.size && !lines[i + 6].starts_with?("__")
-            gui_theme = lines[i + 6]
-            next_index = i + 7
-          end
-
-          settings_form = SettingsForm.from_strings(
-            lines[i + 1],
-            lines[i + 2],
-            lines[i + 3],
-            lines[i + 4],
-            lines[i + 5],
-            gui_theme,
-          )
-          i = next_index
-        when "__DOWNLOAD__"
-          break unless i + 4 < lines.size
-
-          url = lines[i + 1]
-          media_type = lines[i + 2]
-          format = lines[i + 3]
-          output_dir = lines[i + 4]
-          unless url.empty? || output_dir.empty?
-            action = MainAction::Download.new(DownloadParams.new(url, media_type, format, output_dir))
-          end
-          i += 5
-        when "__CANCEL__"
-          action = MainAction::Cancel.new
-          i += 1
-        else
-          i += 1
-        end
-      end
-
-      MainSessionResult.new(action, settings_form)
+      SessionProtocol.parse(text)
     end
 
   end

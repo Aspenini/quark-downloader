@@ -11,6 +11,7 @@
       IDC_PROGRESS_STATUS = 1007
       IDC_PROGRESS_BAR    = 1008
       IDC_PROGRESS_ETA    = 1026
+      IDC_PROGRESS_QUEUE  = 1027
 
       WM_TIMER        = 0x0113_u32
       WM_COMMAND      = 0x0111_u32
@@ -51,6 +52,8 @@
       @@download_started = false
       @@pending_command = ""
       @@pending_args = [] of String
+      @@url_text = ""
+      @@item_text = ""
 
       alias DialogCallback = Win32Ui::DialogCallback
       @@dialog_proc : DialogCallback?
@@ -91,6 +94,8 @@
         @@display_download_started = false
         @@last_eta_update_ms = 0_u64
         @@download_started = false
+        @@url_text = ""
+        @@item_text = ""
         @@dialog_hwnd = nil
         @@cli_runner = nil
 
@@ -176,6 +181,19 @@
       end
 
       def self.apply_line(line : String) : Nil
+        if m = line.match(QuarkGui::QUEUE_URL_RE)
+          @@url_text = "URL #{m[1]} of #{m[2]}"
+          @@item_text = ""
+          @@download_started = false
+          @@percent = 0.0
+        end
+
+        if m = line.match(QuarkGui::PLAYLIST_ITEM_RE)
+          @@item_text = "item #{m[1]} of #{m[2]}"
+          @@download_started = false
+          @@percent = 0.0
+        end
+
         if eta = QuarkGui.parse_eta(line)
           @@eta = eta
         end
@@ -205,6 +223,8 @@
 
       def self.update_controls(hdlg : WinHWND, force_eta : Bool = false) : Nil
         Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_STATUS, @@status)
+        queue_text = [@@url_text, @@item_text].reject(&.empty?).join(" - ")
+        Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_QUEUE, queue_text)
         if refresh_eta_display?(force_eta)
           Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_ETA, QuarkGui.eta_status_text(@@display_eta))
           Win32Ui.set_dialog_title(hdlg, progress_window_title)

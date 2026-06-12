@@ -4,6 +4,8 @@ require "./types"
 
 {% if flag?(:windows) %}
   require "./win32/message_box"
+{% elsif flag?(:darwin) %}
+  require "./macos_ui"
 {% else %}
   require "./tk_ui"
 {% end %}
@@ -33,11 +35,18 @@ module QuarkGui
                   "You have #{QuarkVersion::VERSION}.\n\n" \
                   "Download the latest installer?"
         Win32Ui.confirm_open_url(message, info.download_url)
+      {% elsif flag?(:darwin) %}
+        show_info(
+          "A newer version (#{info.latest_version}) is available. " \
+          "You have #{QuarkVersion::VERSION}.\n\n" \
+          "Download the latest release from github.com/Aspenini/quark-downloader/releases " \
+          "(or update with your package manager).",
+        )
       {% else %}
         show_info(
           "A newer version (#{info.latest_version}) is available. " \
           "You have #{QuarkVersion::VERSION}.\n\n" \
-          "Update with your package manager (e.g. brew upgrade quark-downloader, yay -Syu, or the AUR).",
+          "Update with your package manager (e.g. yay -Syu or the AUR).",
         )
       {% end %}
     end
@@ -45,6 +54,8 @@ module QuarkGui
     def self.show_info(message : String) : Nil
       {% if flag?(:windows) %}
         Win32Ui.message_box(message, error: false)
+      {% elsif flag?(:darwin) %}
+        MacUi.show_message("ok", APP_TITLE, message)
       {% else %}
         TkUi.show_message("ok", APP_TITLE, message)
       {% end %}
@@ -53,6 +64,8 @@ module QuarkGui
     def self.show_error(message : String) : Nil
       {% if flag?(:windows) %}
         Win32Ui.message_box(message, error: true)
+      {% elsif flag?(:darwin) %}
+        MacUi.show_message("error", APP_TITLE, message)
       {% else %}
         TkUi.show_message("error", APP_TITLE, message)
       {% end %}

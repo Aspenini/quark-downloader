@@ -28,7 +28,7 @@
       inner += "; echo; read -r -p 'Press Enter to close...' _"
 
       status = Process.run(path, args: prefix + ["sh", "-c", inner])
-      status.try(&.exit_code) || 1
+      QuarkProcess.exit_code(status)
     end
   end
 {% end %}

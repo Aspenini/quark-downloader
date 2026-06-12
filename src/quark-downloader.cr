@@ -89,7 +89,7 @@ end
   end
 {% end %}
 
-url = nil
+urls = [] of String
 media_type = "video"
 format = "original"
 output_dir = nil
@@ -99,7 +99,17 @@ print_default_dir = false
 OptionParser.parse do |parser|
   parser.banner = "Usage: quark-downloader [options]\n\nInteractive when run with no options."
 
-  parser.on("--url URL", "Video URL to download") { |v| url = v }
+  parser.on("--url URL", "Video or playlist URL to download (repeatable)") { |v| urls << v }
+  parser.on("--batch-file FILE", "File with one URL per line (# comments ignored)") { |v|
+    unless File.exists?(v)
+      abort "Batch file not found: #{v}"
+    end
+    File.each_line(v) do |line|
+      line = line.strip
+      next if line.empty? || line.starts_with?('#')
+      urls << line
+    end
+  }
   parser.on("--type TYPE", "audio or video (default: video)") { |v| media_type = v }
   parser.on("--format FORMAT", "Output format (default: original)") { |v| format = v }
   parser.on("--output-dir DIR", "Output directory") { |v| output_dir = v }
@@ -116,8 +126,8 @@ if print_default_dir
   exit 0
 end
 
-if u = url
-  exit QuarkDownload.run(u, media_type, format, output_dir, no_pause: no_pause)
-else
+if urls.empty?
   interactive_main
+else
+  exit QuarkDownload.run_all(urls, media_type, format, output_dir, no_pause: no_pause)
 end

@@ -44,6 +44,11 @@ build:
 build: copy-bundled-tools compile-cli-resources compile-gui-resources
     @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/build.ps1
 
+[group('build')]
+[unix]
+dmg:
+    @bash scripts/macos/build-dmg.sh
+
 [group('dev')]
 [unix]
 run:

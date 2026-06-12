@@ -4,46 +4,63 @@
 
   module QuarkGui
     module Win32Ui
-      IDD_MAIN               =  101
-      IDC_URL                = 1001
-      IDC_AUDIO              = 1002
-      IDC_VIDEO              = 1003
-      IDC_FORMAT             = 1004
-      IDC_OUTPUT             = 1005
-      IDC_BROWSE             = 1006
-      IDC_SETTINGS           = 1009
-      IDC_SET_DOWNLOAD_DIR   = 1010
-      IDC_SET_BROWSE         = 1011
-      IDC_SET_YTDLP          = 1012
-      IDC_SET_FFMPEG         = 1013
-      IDC_SET_GUI_MODE       = 1014
-      IDC_SET_LOGS           = 1015
-      IDC_MAIN_URL_LABEL     = 1016
-      IDC_MAIN_FORMAT_LABEL  = 1017
-      IDC_MAIN_OUTPUT_LABEL  = 1018
-      IDC_SET_DOWNLOAD_LABEL = 1019
-      IDC_SET_YTDLP_LABEL    = 1020
-      IDC_SET_FFMPEG_LABEL   = 1021
-      IDC_SET_GUI_MODE_LABEL = 1022
-      IDC_SET_SAVE           = 1023
-      IDC_SET_CANCEL         = 1024
-      IDC_CHECK_UPDATES      = 1025
+      IDD_MAIN                 =  101
+      IDC_URL                  = 1001
+      IDC_AUDIO                = 1002
+      IDC_VIDEO                = 1003
+      IDC_FORMAT               = 1004
+      IDC_OUTPUT               = 1005
+      IDC_BROWSE               = 1006
+      IDC_SETTINGS             = 1009
+      IDC_SET_DOWNLOAD_DIR     = 1010
+      IDC_SET_BROWSE           = 1011
+      IDC_SET_YTDLP            = 1012
+      IDC_SET_FFMPEG           = 1013
+      IDC_SET_GUI_MODE         = 1014
+      IDC_SET_LOGS             = 1015
+      IDC_MAIN_URL_LABEL       = 1016
+      IDC_MAIN_FORMAT_LABEL    = 1017
+      IDC_MAIN_OUTPUT_LABEL    = 1018
+      IDC_SET_DOWNLOAD_LABEL   = 1019
+      IDC_SET_YTDLP_LABEL      = 1020
+      IDC_SET_FFMPEG_LABEL     = 1021
+      IDC_SET_GUI_MODE_LABEL   = 1022
+      IDC_SET_SAVE             = 1023
+      IDC_SET_CANCEL           = 1024
+      IDC_CHECK_UPDATES        = 1025
+      IDC_URL_ADD              = 1028
+      IDC_QUEUE_LIST           = 1029
+      IDC_QUEUE_REMOVE         = 1030
+      IDC_MAIN_QUEUE_LABEL     = 1031
+      IDC_SET_STRIP_IDS        = 1032
+      IDC_SET_SANITIZE         = 1033
+      IDC_SET_SPACES           = 1034
+      IDC_SET_SPACES_LABEL     = 1035
+      IDC_SET_PLAYLIST_FOLDERS = 1036
+      IDC_GRP_GENERAL          = 1037
+      IDC_GRP_NAMING           = 1038
+      IDC_GRP_DOWNLOADS        = 1039
+      IDC_GRP_TOOLS            = 1040
 
       SW_HIDE = 0
       SW_SHOW = 5
 
       MAIN_VIEW_IDS = [
-        IDC_MAIN_URL_LABEL, IDC_URL, IDC_AUDIO, IDC_VIDEO,
+        IDC_MAIN_URL_LABEL, IDC_URL, IDC_URL_ADD,
+        IDC_MAIN_QUEUE_LABEL, IDC_QUEUE_LIST, IDC_QUEUE_REMOVE,
+        IDC_AUDIO, IDC_VIDEO,
         IDC_MAIN_FORMAT_LABEL, IDC_FORMAT,
         IDC_MAIN_OUTPUT_LABEL, IDC_OUTPUT, IDC_BROWSE,
         IDC_SETTINGS, 1, 2,
       ]
 
       SETTINGS_VIEW_IDS = [
-        IDC_SET_DOWNLOAD_LABEL, IDC_SET_DOWNLOAD_DIR, IDC_SET_BROWSE,
-        IDC_SET_YTDLP_LABEL, IDC_SET_YTDLP,
+        IDC_GRP_GENERAL, IDC_SET_DOWNLOAD_LABEL, IDC_SET_DOWNLOAD_DIR, IDC_SET_BROWSE,
+        IDC_GRP_NAMING, IDC_SET_STRIP_IDS, IDC_SET_SANITIZE,
+        IDC_SET_SPACES_LABEL, IDC_SET_SPACES, IDC_SET_PLAYLIST_FOLDERS,
+        IDC_GRP_DOWNLOADS, IDC_SET_GUI_MODE_LABEL, IDC_SET_GUI_MODE, IDC_SET_LOGS,
+        IDC_GRP_TOOLS, IDC_SET_YTDLP_LABEL, IDC_SET_YTDLP,
         IDC_SET_FFMPEG_LABEL, IDC_SET_FFMPEG,
-        IDC_SET_GUI_MODE_LABEL, IDC_SET_GUI_MODE, IDC_SET_LOGS,
         IDC_CHECK_UPDATES,
         IDC_SET_SAVE, IDC_SET_CANCEL,
       ]
@@ -52,6 +69,7 @@
       VIDEO_FORMATS      = ["original", "mp4", "mkv", "webm"]
       TOOL_SOURCE_VALUES = ["auto", "path", "bundled"]
       GUI_MODE_VALUES    = ["progress", "external_cli"]
+      SPACES_VALUES      = ["keep", "underscore", "dash", "remove"]
 
       WM_INITDIALOG = 0x0110
       WM_COMMAND    = 0x0111
@@ -66,6 +84,13 @@
       CB_GETLBTEXT    = 0x0148
       CB_SETCURSEL    = 0x014E
       CB_RESETCONTENT = 0x014B
+
+      LB_ADDSTRING    = 0x0180
+      LB_DELETESTRING = 0x0182
+      LB_RESETCONTENT = 0x0184
+      LB_GETCURSEL    = 0x0188
+      LB_GETTEXT      = 0x0189
+      LB_GETCOUNT     = 0x018B
 
       BFFM_INITIALIZED   =      1_u32
       BFFM_SETSELECTIONW = 0x0467_u32 # WM_USER + 103

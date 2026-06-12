@@ -20,7 +20,7 @@
 
 #define MyAppName       "Quark Downloader"
 
-#define MyAppVersion    "0.4.0"
+#define MyAppVersion    "0.5.0"
 
 #define MyAppPublisher  "Quark Downloader"
 

@@ -28,6 +28,12 @@ module YtDlpTools
   end
 
   def self.tools_dir : Path
+    {% if flag?(:darwin) %}
+      # An installed .app bundle is not a writable place for downloaded tools.
+      if app_dir.to_s.includes?(".app/Contents/MacOS")
+        return QuarkConfig.config_dir / "tools"
+      end
+    {% end %}
     app_dir / "tools"
   end
 

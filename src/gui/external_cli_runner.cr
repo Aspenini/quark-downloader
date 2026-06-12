@@ -18,7 +18,7 @@ module QuarkGui
           output: Process::Redirect::Inherit,
           error: Process::Redirect::Inherit,
         )
-        status.try(&.exit_code) || 1
+        QuarkProcess.exit_code(status)
       end
     {% end %}
   end

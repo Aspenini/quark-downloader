@@ -69,4 +69,51 @@ describe QuarkGui do
     lines.first.starts_with?("PROGRESS\t").should be_true
     lines[1].should eq("ETA\t00:12")
   end
+
+  it "emits queue context for URL markers and playlist items" do
+    output = IO::Memory.new
+    relay = QuarkGui::ProgressRelay.new
+
+    relay.relay("==> URL 2 of 5: https://example.com/a", output)
+    relay.relay("[download] Downloading item 3 of 12", output)
+
+    lines = output.to_s.lines.map(&.strip)
+    lines.should contain("QUEUE\tURL 2 of 5")
+    lines.should contain("QUEUE\tURL 2 of 5 - item 3 of 12")
+  end
+
+  it "resets the bar when a new URL starts" do
+    output = IO::Memory.new
+    relay = QuarkGui::ProgressRelay.new
+
+    relay.relay("[download]  90.0% of 1.00MiB", output)
+    relay.relay("==> URL 2 of 2: https://example.com/b", output)
+
+    lines = output.to_s.lines.map(&.strip)
+    lines.last.should eq("PROGRESS\t0.0")
+  end
+
+  it "emits no queue context for plain single downloads" do
+    output = IO::Memory.new
+    relay = QuarkGui::ProgressRelay.new
+
+    relay.relay("[youtube] abc: Downloading webpage", output)
+    relay.relay("[download]  25.0% of 1.00MiB", output)
+
+    output.to_s.lines.any?(&.starts_with?("QUEUE")).should be_false
+  end
+
+  it "lets playlist items restart setup progress" do
+    output = IO::Memory.new
+    relay = QuarkGui::ProgressRelay.new
+
+    relay.relay("[download]  100.0% of 1.00MiB", output)
+    relay.relay("[download] Downloading item 2 of 3", output)
+    relay.relay("[youtube] abc: Downloading webpage", output)
+
+    lines = output.to_s.lines.map(&.strip)
+    lines.should contain("QUEUE\titem 2 of 3")
+    # After a new item begins, setup status lines nudge the bar again.
+    lines.last.starts_with?("STATUS\t").should be_true
+  end
 end

@@ -1,3 +1,5 @@
+require "./filename_sanitize"
+
 module QuarkConfig
   enum ToolSource
     Auto
@@ -40,6 +42,31 @@ module QuarkConfig
     end
   end
 
+  enum FilenameSpaces
+    Keep
+    Underscore
+    Dash
+    Remove
+
+    def to_config : String
+      case self
+      in Keep       then "keep"
+      in Underscore then "underscore"
+      in Dash       then "dash"
+      in Remove     then "remove"
+      end
+    end
+
+    def to_policy : FilenameSanitize::SpacesPolicy
+      case self
+      in Keep       then FilenameSanitize::SpacesPolicy::Keep
+      in Underscore then FilenameSanitize::SpacesPolicy::Underscore
+      in Dash       then FilenameSanitize::SpacesPolicy::Dash
+      in Remove     then FilenameSanitize::SpacesPolicy::Remove
+      end
+    end
+  end
+
   struct Settings
     DEFAULT_DOWNLOAD_DIR = "~/Downloads"
 
@@ -49,6 +76,10 @@ module QuarkConfig
     property gui_download_mode : GuiDownloadMode
     property download_logs : Bool
     property gui_theme : GuiTheme
+    property strip_video_ids : Bool
+    property sanitize_filenames : Bool
+    property filename_spaces : FilenameSpaces
+    property playlist_folders : Bool
 
     def initialize(
       @download_dir : String = DEFAULT_DOWNLOAD_DIR,
@@ -57,13 +88,20 @@ module QuarkConfig
       @gui_download_mode : GuiDownloadMode = GuiDownloadMode::Progress,
       @download_logs : Bool = true,
       @gui_theme : GuiTheme = GuiTheme::Light,
+      @strip_video_ids : Bool = true,
+      @sanitize_filenames : Bool = true,
+      @filename_spaces : FilenameSpaces = FilenameSpaces::Keep,
+      @playlist_folders : Bool = true,
     )
     end
   end
 
   CONFIG_NAME = "quark-downloader.conf"
   APP_NAME    = "quark-downloader"
-  CONFIG_KEYS = ["download_dir", "yt_dlp", "ffmpeg", "gui_download_mode", "download_logs", "gui_theme"]
+  CONFIG_KEYS = [
+    "download_dir", "yt_dlp", "ffmpeg", "gui_download_mode", "download_logs", "gui_theme",
+    "strip_video_ids", "sanitize_filenames", "filename_spaces", "playlist_folders",
+  ]
 
   @@settings = Settings.new
 
@@ -147,6 +185,22 @@ module QuarkConfig
     @@settings.gui_theme
   end
 
+  def self.strip_video_ids? : Bool
+    @@settings.strip_video_ids
+  end
+
+  def self.sanitize_filenames? : Bool
+    @@settings.sanitize_filenames
+  end
+
+  def self.filename_spaces : FilenameSpaces
+    @@settings.filename_spaces
+  end
+
+  def self.playlist_folders? : Bool
+    @@settings.playlist_folders
+  end
+
   def self.user_home : String
     ENV["USERPROFILE"]? || ENV["HOME"]? || "."
   end
@@ -199,6 +253,14 @@ module QuarkConfig
         settings.download_logs = parse_bool(value, "download_logs", default: true, quiet: quiet)
       when "gui_theme"
         settings.gui_theme = parse_gui_theme(value, quiet: quiet)
+      when "strip_video_ids"
+        settings.strip_video_ids = parse_bool(value, "strip_video_ids", default: true, quiet: quiet)
+      when "sanitize_filenames"
+        settings.sanitize_filenames = parse_bool(value, "sanitize_filenames", default: true, quiet: quiet)
+      when "filename_spaces"
+        settings.filename_spaces = parse_filename_spaces(value, quiet: quiet)
+      when "playlist_folders"
+        settings.playlist_folders = parse_bool(value, "playlist_folders", default: true, quiet: quiet)
       else
         puts "Warning: unknown config key #{key.inspect} in #{path}" unless quiet
       end
@@ -222,13 +284,17 @@ module QuarkConfig
 
   def self.config_value(settings : Settings, key : String) : String
     case key
-    when "download_dir"      then settings.download_dir
-    when "yt_dlp"            then settings.yt_dlp.to_config
-    when "ffmpeg"            then settings.ffmpeg.to_config
-    when "gui_download_mode" then settings.gui_download_mode.to_config
-    when "download_logs"     then settings.download_logs.to_s
-    when "gui_theme"         then settings.gui_theme.to_config
-    else                          ""
+    when "download_dir"       then settings.download_dir
+    when "yt_dlp"             then settings.yt_dlp.to_config
+    when "ffmpeg"             then settings.ffmpeg.to_config
+    when "gui_download_mode"  then settings.gui_download_mode.to_config
+    when "download_logs"      then settings.download_logs.to_s
+    when "gui_theme"          then settings.gui_theme.to_config
+    when "strip_video_ids"    then settings.strip_video_ids.to_s
+    when "sanitize_filenames" then settings.sanitize_filenames.to_s
+    when "filename_spaces"    then settings.filename_spaces.to_config
+    when "playlist_folders"   then settings.playlist_folders.to_s
+    else                           ""
     end
   end
 
@@ -250,6 +316,18 @@ module QuarkConfig
     else
       puts "Warning: invalid gui_download_mode value #{value.inspect}, using progress" unless quiet
       GuiDownloadMode::Progress
+    end
+  end
+
+  def self.parse_filename_spaces(value : String, quiet : Bool = false) : FilenameSpaces
+    case value.downcase
+    when "keep", "space", "spaces"   then FilenameSpaces::Keep
+    when "underscore", "underscores" then FilenameSpaces::Underscore
+    when "dash", "dashes", "hyphen"  then FilenameSpaces::Dash
+    when "remove", "none"            then FilenameSpaces::Remove
+    else
+      puts "Warning: invalid filename_spaces value #{value.inspect}, using keep" unless quiet
+      FilenameSpaces::Keep
     end
   end
 
@@ -280,6 +358,16 @@ module QuarkConfig
       "",
       "# Default folder offered at the output prompt (~ = your home directory)",
       "download_dir = #{settings.download_dir}",
+      "",
+      "# Download naming",
+      "#   strip_video_ids    - drop the trailing \" [VIDEOID]\" from filenames",
+      "#   sanitize_filenames - make filenames mostly ASCII-safe on all platforms",
+      "#   filename_spaces    - keep | underscore | dash | remove",
+      "#   playlist_folders   - put playlist downloads in a folder named after the playlist",
+      "strip_video_ids = #{settings.strip_video_ids}",
+      "sanitize_filenames = #{settings.sanitize_filenames}",
+      "filename_spaces = #{settings.filename_spaces.to_config}",
+      "playlist_folders = #{settings.playlist_folders}",
       "",
       "# How to locate yt-dlp and ffmpeg",
       "#   auto    - PATH first, then bundled tools beside the app",

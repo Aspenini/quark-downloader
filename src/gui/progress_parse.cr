@@ -1,6 +1,8 @@
 module QuarkGui
   PROGRESS_RE         = /\[download\]\s+(\d+(?:\.\d+)?)%/
   ETA_RE              = /\bETA\s+([0-9]+:[0-9]{2}(?::[0-9]{2})?|--:--|unknown|n\/a)/i
+  QUEUE_URL_RE        = /^==> URL (\d+) of (\d+)/
+  PLAYLIST_ITEM_RE    = /\[download\] Downloading item (\d+) of (\d+)/
   SETUP_PROGRESS_MAX  =  8.0
   SETUP_PROGRESS_STEP = 1.25
   STATUS_DISPLAY_MAX  =   72
@@ -63,9 +65,28 @@ module QuarkGui
     @setup_percent = 0.0
     @download_started = false
     @lock = Mutex.new
+    @url_text = ""
+    @item_text = ""
 
     def relay(line : String, output : IO) : Nil
       @lock.synchronize do
+        if m = line.match(QUEUE_URL_RE)
+          @url_text = "URL #{m[1]} of #{m[2]}"
+          @item_text = ""
+          @download_started = false
+          emit_queue(output)
+          emit_progress(output, 0.0)
+          @setup_percent = 0.0
+          return
+        end
+
+        if m = line.match(PLAYLIST_ITEM_RE)
+          @item_text = "item #{m[1]} of #{m[2]}"
+          @download_started = false
+          @setup_percent = 0.0
+          emit_queue(output)
+        end
+
         eta = QuarkGui.parse_eta(line)
 
         if percent = QuarkGui.parse_progress_percent(line)
@@ -102,6 +123,14 @@ module QuarkGui
 
     private def emit_eta(output : IO, eta : String) : Nil
       output.puts("ETA\t#{eta}")
+      output.flush
+    end
+
+    private def emit_queue(output : IO) : Nil
+      text = [@url_text, @item_text].reject(&.empty?).join(" - ")
+      return if text.empty?
+
+      output.puts("QUEUE\t#{text}")
       output.flush
     end
   end

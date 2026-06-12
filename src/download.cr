@@ -1,36 +1,37 @@
 require "./config"
 require "./logs"
+require "./process_status"
 require "./ytdlp_tools"
 require "./ffmpeg_tools"
+require "./filename_sanitize"
+require "./playlist"
+require "./destination_tracker"
 {% if flag?(:windows) %}
   require "./win32_hidden_process"
 {% end %}
 
 module QuarkDownload
-  def self.user_home : String
-    ENV["USERPROFILE"]? || ENV["HOME"]? || "."
-  end
-
   def self.default_downloads_dir : String
     {% if flag?(:windows) %}
-      return File.join(user_home, "Downloads")
+      return File.join(QuarkConfig.user_home, "Downloads")
     {% else %}
       if xdg = xdg_download_dir?
         return xdg
       end
     {% end %}
 
-    File.join(user_home, "Downloads")
+    File.join(QuarkConfig.user_home, "Downloads")
   end
 
   def self.xdg_download_dir? : String?
-    config = Path[user_home] / ".config" / "user-dirs.dirs"
+    home = QuarkConfig.user_home
+    config = Path[home] / ".config" / "user-dirs.dirs"
     return nil unless File.exists?(config.to_s)
 
     File.each_line(config.to_s) do |line|
       next unless line.starts_with?("XDG_DOWNLOAD_DIR=")
       if m = line.match(/^XDG_DOWNLOAD_DIR="(.+)"\s*$/)
-        return File.expand_path(m[1].gsub("$HOME", user_home))
+        return File.expand_path(m[1].gsub("$HOME", home))
       end
     end
 
@@ -49,6 +50,16 @@ module QuarkDownload
     output_dir : String? = nil,
     no_pause : Bool = false,
   ) : Int32
+    run_all([url], media_type, format, output_dir, no_pause: no_pause)
+  end
+
+  def self.run_all(
+    urls : Array(String),
+    media_type : String,
+    format : String = "original",
+    output_dir : String? = nil,
+    no_pause : Bool = false,
+  ) : Int32
     {% if flag?(:windows) %}
       if ENV["QUARK_GUI"]? == "1"
         STDOUT.sync = true
@@ -62,12 +73,6 @@ module QuarkDownload
     begin
       ytdlp = begin
         YtDlpTools.ensure!
-      rescue ex : YtDlpTools::Error
-        abort_with(ex.message || ex.to_s, no_pause)
-      end
-
-      begin
-        YtDlpTools.preflight_youtube!(url)
       rescue ex : YtDlpTools::Error
         abort_with(ex.message || ex.to_s, no_pause)
       end
@@ -91,62 +96,174 @@ module QuarkDownload
         abort_with("Error creating output directory:\n#{ex}", no_pause)
       end
 
-      outtmpl = (output_path / "%(title)s [%(id)s].%(ext)s").to_s
-      cmd = [ytdlp, "--no-playlist", "-o", outtmpl]
+      multi = urls.size > 1
+      failed = [] of {String, Int32}
 
-      if media_type == "audio"
-        cmd.concat(["-f", "bestaudio/best"])
-        unless {"original", "default.original"}.includes?(format)
-          append_ffmpeg!(cmd, no_pause)
-          cmd.concat(["-x", "--audio-format", format])
-        end
-      else
-        unless {"original", "default.original"}.includes?(format)
-          append_ffmpeg!(cmd, no_pause)
-          cmd.concat(["-f", "bv*+ba/b", "--merge-output-format", format])
-          case format
-          when "webm"
-            cmd.concat(["--recode-video", "webm"])
-          when "mp4"
-            cmd.concat(["--remux-video", "mp4"])
+      urls.each_with_index do |url, index|
+        QuarkLogs.puts "\n==> URL #{index + 1} of #{urls.size}: #{url}" if multi
+
+        code = begin
+          run_single(ytdlp, url, media_type, format, output_path)
+        rescue ex : YtDlpTools::Error | FfmpegTools::Error
+          if multi
+            QuarkLogs.puts(ex.message || ex.to_s)
+            1
+          else
+            abort_with(ex.message || ex.to_s, no_pause)
           end
         end
+
+        failed << {url, code} unless code == 0
       end
 
-      if ENV["QUARK_GUI"]? == "1"
-        cmd.concat(["--newline", "--no-color"])
+      if multi
+        QuarkLogs.puts
+        QuarkLogs.puts "==> Finished: #{urls.size - failed.size} of #{urls.size} succeeded."
+        failed.each { |(u, _)| QuarkLogs.puts "  failed: #{u}" }
+        if failed.any? { |(u, _)| YtDlpTools.youtube_url?(u) }
+          QuarkLogs.puts
+          QuarkLogs.puts YtDlpTools.youtube_failure_hints
+        end
+        press_any_key(no_pause)
+        return failed.empty? ? 0 : 1
       end
 
-      cmd.concat(YtDlpTools.extra_args(url))
-      cmd << url
-
-      exit_code = run_command(cmd)
-
-      if exit_code == 0
+      if failed.empty?
         QuarkLogs.puts "Done."
         press_any_key(no_pause)
+        0
       else
-        message = "Failed with exit code #{exit_code}."
+        url, code = failed.first
+        message = "Failed with exit code #{code}."
         message += "\n\n#{YtDlpTools.youtube_failure_hints}" if YtDlpTools.youtube_url?(url)
-        abort_with(message, no_pause, exit_code)
+        abort_with(message, no_pause, code)
       end
-
-      exit_code
     ensure
       QuarkLogs.close
     end
   end
 
-  def self.append_ffmpeg!(cmd : Array(String), no_pause : Bool)
-    FfmpegTools.append_to_cmd!(cmd)
-  rescue ex : FfmpegTools::Error
-    abort_with(ex.message || ex.to_s, no_pause)
+  def self.run_single(
+    ytdlp : String,
+    url : String,
+    media_type : String,
+    format : String,
+    output_path : Path,
+  ) : Int32
+    YtDlpTools.preflight_youtube!(url)
+
+    settings = QuarkConfig.settings
+    playlist = QuarkPlaylist.playlist_url?(url)
+    target_dir = output_path
+
+    if playlist && settings.playlist_folders
+      if probe = QuarkPlaylist.probe(ytdlp, url, YtDlpTools.extra_args(url))
+        folder = FilenameSanitize.sanitize_component(
+          probe.title,
+          settings.sanitize_filenames,
+          settings.filename_spaces.to_policy,
+        )
+        candidate = output_path / folder
+        begin
+          Dir.mkdir_p(candidate.to_s)
+          target_dir = candidate
+          count_note = probe.count ? " (#{probe.count} items)" : ""
+          QuarkLogs.puts "Playlist: #{probe.title}#{count_note}"
+          QuarkLogs.puts "Saving into: #{target_dir}"
+        rescue ex
+          QuarkLogs.puts "Warning: could not create playlist folder #{candidate}: #{ex.message}"
+        end
+      else
+        QuarkLogs.puts "Warning: could not read playlist info; downloading without a playlist folder."
+      end
+    end
+
+    name_template = settings.strip_video_ids ? "%(title)s.%(ext)s" : "%(title)s [%(id)s].%(ext)s"
+    outtmpl = (target_dir / name_template).to_s
+
+    cmd = [ytdlp]
+    cmd.concat(playlist ? ["--yes-playlist", "--ignore-errors"] : ["--no-playlist"])
+    cmd.concat(["-o", outtmpl])
+
+    if media_type == "audio"
+      cmd.concat(["-f", "bestaudio/best"])
+      unless {"original", "default.original"}.includes?(format)
+        FfmpegTools.append_to_cmd!(cmd)
+        cmd.concat(["-x", "--audio-format", format])
+      end
+    else
+      unless {"original", "default.original"}.includes?(format)
+        FfmpegTools.append_to_cmd!(cmd)
+        cmd.concat(["-f", "bv*+ba/b", "--merge-output-format", format])
+        case format
+        when "webm"
+          cmd.concat(["--recode-video", "webm"])
+        when "mp4"
+          cmd.concat(["--remux-video", "mp4"])
+        end
+      end
+    end
+
+    if ENV["QUARK_GUI"]? == "1"
+      cmd.concat(["--newline", "--no-color"])
+    end
+
+    cmd.concat(YtDlpTools.extra_args(url))
+    cmd << url
+
+    tracker = DestinationTracker.new
+    exit_code = run_command(cmd, tracker)
+
+    apply_naming!(tracker, output_path, settings)
+
+    if playlist && tracker.error_count > 0
+      QuarkLogs.puts "Playlist finished: #{tracker.error_count} item(s) failed."
+    end
+
+    exit_code
   end
 
-  def self.run_command(cmd : Array(String)) : Int32
+  # Renames downloaded files according to the download-naming settings.
+  # Only touches files yt-dlp reported, that still exist, inside the output
+  # directory. Failures are logged and never abort the download.
+  def self.apply_naming!(tracker : DestinationTracker, output_path : Path, settings : QuarkConfig::Settings) : Nil
+    policy = settings.filename_spaces.to_policy
+    return unless settings.sanitize_filenames || !policy.keep?
+
+    base = File.expand_path(output_path.to_s)
+
+    tracker.paths.each do |path|
+      begin
+        next if path.ends_with?(".part") || path.ends_with?(".ytdl")
+
+        expanded = File.expand_path(path)
+        next unless expanded == base || expanded.starts_with?(base + File::SEPARATOR)
+        next unless File.file?(expanded)
+
+        dir = File.dirname(expanded)
+        name = File.basename(expanded)
+        new_name = FilenameSanitize.sanitize_filename(
+          name,
+          settings.sanitize_filenames,
+          policy,
+        )
+        next if new_name == name
+
+        final = FilenameSanitize.collision_free(dir, new_name)
+        next unless final
+
+        File.rename(expanded, File.join(dir, final))
+        QuarkLogs.puts "Renamed: #{name} -> #{final}"
+      rescue ex
+        QuarkLogs.puts "Warning: could not rename #{path}: #{ex.message}"
+      end
+    end
+  end
+
+  def self.run_command(cmd : Array(String), tracker : DestinationTracker? = nil) : Int32
     {% if flag?(:windows) %}
       if ENV["QUARK_GUI"]? == "1"
-        return run_command_hidden(cmd)
+        return run_command_hidden(cmd, tracker)
       end
     {% end %}
 
@@ -160,20 +277,20 @@ module QuarkDownload
       output: Process::Redirect::Pipe,
       error: Process::Redirect::Pipe,
     )
-    relay_process_output(process)
+    relay_process_output(process, tracker)
     status = process.wait
-    status.try(&.exit_code) || 127
+    QuarkProcess.exit_code(status, 127)
   rescue File::NotFoundError
     QuarkLogs.puts "Error: #{cmd.first} was not found."
     127
   end
 
-  def self.relay_process_output(process : Process) : Nil
+  def self.relay_process_output(process : Process, tracker : DestinationTracker? = nil) : Nil
     done = Channel(Nil).new(2)
 
     if stdout = process.output
       spawn do
-        relay_lines(stdout, STDOUT)
+        relay_lines(stdout, STDOUT, tracker)
         done.send(nil)
       end
     else
@@ -182,7 +299,7 @@ module QuarkDownload
 
     if stderr = process.error
       spawn do
-        relay_lines(stderr, STDERR)
+        relay_lines(stderr, STDERR, tracker)
         done.send(nil)
       end
     else
@@ -192,15 +309,16 @@ module QuarkDownload
     2.times { done.receive }
   end
 
-  def self.relay_lines(input : IO, output : IO) : Nil
+  def self.relay_lines(input : IO, output : IO, tracker : DestinationTracker? = nil) : Nil
     input.each_line do |line|
+      tracker.try(&.observe(line))
       QuarkLogs.puts(line, output)
     end
   rescue IO::Error
   end
 
   {% if flag?(:windows) %}
-    def self.run_command_hidden(cmd : Array(String)) : Int32
+    def self.run_command_hidden(cmd : Array(String), tracker : DestinationTracker? = nil) : Int32
       STDOUT.sync = true
       STDERR.sync = true
 
@@ -209,6 +327,7 @@ module QuarkDownload
       relay = ->(input : IO, output : IO) do
         input.each_line do |line|
           begin
+            tracker.try(&.observe(line))
             QuarkLogs.puts(line, output)
           rescue IO::Error
             break
@@ -238,7 +357,7 @@ module QuarkDownload
       status = runner.wait
       out_done.receive
       err_done.receive
-      status.try(&.exit_code) || 127
+      QuarkProcess.exit_code(status, 127)
     rescue File::NotFoundError
       QuarkLogs.puts "Error: #{cmd.first} was not found."
       127

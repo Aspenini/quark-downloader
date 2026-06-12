@@ -32,6 +32,11 @@
           @@session_settings.ffmpeg.to_config,
           @@session_settings.gui_download_mode.to_config,
           @@session_settings.download_logs,
+          @@session_settings.gui_theme.to_config,
+          @@session_settings.strip_video_ids,
+          @@session_settings.sanitize_filenames,
+          @@session_settings.filename_spaces.to_config,
+          @@session_settings.playlist_folders,
         )
       end
 
@@ -74,10 +79,32 @@
         )
       end
 
-      def self.try_confirm(hdlg : WinHWND) : Int64
+      def self.add_url_to_queue(hdlg : WinHWND) : Nil
         url = get_dlg_text(hdlg, IDC_URL).strip
-        if url.empty?
-          message_box("Please enter a video URL.", true)
+        return if url.empty?
+
+        list = LibUser32.GetDlgItem(hdlg, IDC_QUEUE_LIST)
+        unless listbox_items(hdlg, IDC_QUEUE_LIST).includes?(url)
+          w = wide(url)
+          LibUser32.SendMessageW(list, LB_ADDSTRING, 0_u64, w.to_unsafe.address.to_i64)
+        end
+        set_dlg_text(hdlg, IDC_URL, "")
+      end
+
+      def self.remove_selected_url(hdlg : WinHWND) : Nil
+        list = LibUser32.GetDlgItem(hdlg, IDC_QUEUE_LIST)
+        selected = LibUser32.SendMessageW(list, LB_GETCURSEL, 0, 0)
+        return if selected < 0
+
+        LibUser32.SendMessageW(list, LB_DELETESTRING, selected.to_u64, 0)
+      end
+
+      def self.try_confirm(hdlg : WinHWND) : Int64
+        add_url_to_queue(hdlg)
+
+        urls = listbox_items(hdlg, IDC_QUEUE_LIST)
+        if urls.empty?
+          message_box("Please enter at least one video or playlist URL.", true)
           return 0_i64
         end
 
@@ -91,7 +118,7 @@
 
         @@media_type = LibUser32.IsDlgButtonChecked(hdlg, IDC_AUDIO) != 0 ? "audio" : "video"
         @@main_action = MainAction::Download.new(DownloadParams.new(
-          url,
+          urls,
           @@media_type,
           format.empty? ? "original" : format,
           output,
@@ -101,7 +128,7 @@
       end
 
       def self.try_save_settings(hdlg : WinHWND) : Int64
-        unless form = read_settings_form(hdlg)
+        unless form = read_settings_form(hdlg, @@session_settings.gui_theme.to_config)
           message_box("Please choose a default download folder.", true)
           return 0_i64
         end
@@ -165,6 +192,16 @@
             if notify == BN_CLICKED
               @@media_type = "video"
               populate_formats(hdlg)
+            end
+          when IDC_URL_ADD
+            if notify == BN_CLICKED
+              add_url_to_queue(hdlg)
+              return 1_i64
+            end
+          when IDC_QUEUE_REMOVE
+            if notify == BN_CLICKED
+              remove_selected_url(hdlg)
+              return 1_i64
             end
           when IDC_BROWSE
             if notify == BN_CLICKED

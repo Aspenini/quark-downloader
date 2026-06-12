@@ -5,6 +5,7 @@
 # Build outputs
 /build/
 /bin/
+/dist/
 /packaging/output/
 
 # Runtime tool cache (next to executable)

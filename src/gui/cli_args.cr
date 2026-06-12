@@ -3,14 +3,14 @@ require "./types"
 
 module QuarkGui
   def self.build_cli_args(cli : String, params : DownloadParams) : Array(String)
-    [
-      cli,
-      "--url", params.url,
+    args = [cli]
+    params.urls.each { |url| args.concat(["--url", url]) }
+    args.concat([
       "--type", params.media_type,
       "--format", params.format,
       "--output-dir", params.output_dir,
       "--no-pause",
-    ]
+    ])
   end
 
   def self.default_output_dir(cli : String) : String
