@@ -184,6 +184,11 @@ module QuarkDownload
     cmd = [ytdlp]
     cmd.concat(playlist ? ["--yes-playlist", "--ignore-errors"] : ["--no-playlist"])
     cmd.concat(["-o", outtmpl])
+    # A stalled connection must not block forever. --socket-timeout turns a silent
+    # socket into an error instead of an infinite read; a few quick retries cover
+    # transient blips. If yt-dlp still produces no output at all, the stall
+    # watchdog in run_command kills it after STALL_TIMEOUT (see run_playlist).
+    cmd.concat(["--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3"])
 
     if media_type == "audio"
       cmd.concat(["-f", "bestaudio/best"])
@@ -209,10 +214,13 @@ module QuarkDownload
     end
 
     cmd.concat(YtDlpTools.extra_args(url))
-    cmd << url
 
     tracker = DestinationTracker.new
-    exit_code = run_command(cmd, tracker)
+    exit_code = if playlist
+                  run_playlist(cmd, url, tracker)
+                else
+                  run_command(cmd + [url], tracker, StallMonitor.new, STALL_TIMEOUT)
+                end
 
     apply_naming!(tracker, output_path, settings)
 
@@ -260,10 +268,122 @@ module QuarkDownload
     end
   end
 
-  def self.run_command(cmd : Array(String), tracker : DestinationTracker? = nil) : Int32
+  # How long yt-dlp may produce no output at all before we treat the current
+  # item as stuck, kill it, and move on. yt-dlp prints progress/extraction lines
+  # every second or two while it is working, so this much total silence means a
+  # wedged connection rather than a slow-but-alive download.
+  STALL_TIMEOUT = 30.seconds
+
+  PLAYLIST_ITEM_LINE_RE = /^\[download\] Downloading item (\d+) of (\d+)/
+  # ffmpeg post-processing (merge/recode/extract) runs silently and can take far
+  # longer than STALL_TIMEOUT; suspend the watchdog while it is in progress.
+  POSTPROCESS_RE = /^\[(?:Merger|ExtractAudio|VideoConvertor|VideoRemuxer|Recode|Fixup\w*|Metadata|EmbedSubtitle|EmbedThumbnail|SponsorBlock|ModifyChapters|SplitChapters)\]/
+  RESUME_RE      = /^\[download\]|Extracting URL/
+
+  # Watches a single yt-dlp run: tracks the last time it emitted output, the
+  # current playlist item, and whether the run is in silent post-processing.
+  # When a playlist is restarted past a stuck item, item numbers are rewritten
+  # back to absolute (yt-dlp renumbers from 1 after --playlist-start).
+  class StallMonitor
+    @lock = Mutex.new
+    @last = Time.instant
+    @suspended = false
+    @killed = false
+    @finished = false
+    getter current_item : Int32?
+    getter total_items : Int32?
+
+    def initialize(@offset : Int32 = 0, @total_items : Int32? = nil)
+    end
+
+    def observe(line : String) : String
+      @lock.synchronize do
+        @last = Time.instant
+        if m = line.match(PLAYLIST_ITEM_LINE_RE)
+          @total_items ||= m[2].to_i + @offset
+          abs = m[1].to_i + @offset
+          @current_item = abs
+          @suspended = false
+          return line.sub(PLAYLIST_ITEM_LINE_RE, "[download] Downloading item #{abs} of #{@total_items}")
+        end
+
+        if line.matches?(POSTPROCESS_RE)
+          @suspended = true
+        elsif line.matches?(RESUME_RE)
+          @suspended = false
+        end
+        line
+      end
+    end
+
+    def stalled?(timeout : Time::Span) : Bool
+      @lock.synchronize do
+        return false if @suspended || @finished
+        Time.instant - @last >= timeout
+      end
+    end
+
+    def mark_killed : Nil
+      @lock.synchronize { @killed = true }
+    end
+
+    def finish : Nil
+      @lock.synchronize { @finished = true }
+    end
+
+    def killed? : Bool
+      @lock.synchronize { @killed }
+    end
+
+    def finished? : Bool
+      @lock.synchronize { @finished }
+    end
+  end
+
+  # Runs a playlist, restarting past any item that goes silent for STALL_TIMEOUT.
+  # Already-downloaded items are skipped instantly on restart, so resuming from
+  # the next item is cheap. A stuck item is abandoned so the rest still downloads.
+  def self.run_playlist(opts : Array(String), url : String, tracker : DestinationTracker) : Int32
+    total : Int32? = nil
+    start = 1
+    exit_code = 0
+
+    loop do
+      cmd = opts.dup
+      # "N:" selects item N through the end; yt-dlp renumbers the slice from 1,
+      # which StallMonitor's offset rewrites back to absolute item numbers.
+      cmd.concat(["--playlist-items", "#{start}:"]) if start > 1
+      cmd << url
+
+      monitor = StallMonitor.new(offset: start - 1, total_items: total)
+      exit_code = run_command(cmd, tracker, monitor, STALL_TIMEOUT)
+      total ||= monitor.total_items
+
+      break unless monitor.killed?
+
+      item = monitor.current_item
+      unless item
+        QuarkLogs.puts "\nStopped: no response from the server."
+        break
+      end
+
+      QuarkLogs.puts "\nSkipping item #{item}: no response for #{STALL_TIMEOUT.total_seconds.to_i}s."
+      start = item + 1
+      break if (t = total) && start > t
+    end
+
+    exit_code
+  end
+
+  def self.run_command(
+    cmd : Array(String),
+    tracker : DestinationTracker? = nil,
+    monitor : StallMonitor? = nil,
+    stall_timeout : Time::Span? = nil,
+  ) : Int32
     {% if flag?(:windows) %}
       if ENV["QUARK_GUI"]? == "1"
-        return run_command_hidden(cmd, tracker)
+        return run_command_hidden(cmd, tracker, monitor, stall_timeout)
       end
     {% end %}
 
@@ -277,20 +397,36 @@ module QuarkDownload
       output: Process::Redirect::Pipe,
       error: Process::Redirect::Pipe,
     )
-    relay_process_output(process, tracker)
+
+    if monitor && (timeout = stall_timeout)
+      spawn do
+        loop do
+          sleep 1.second
+          break if monitor.finished?
+          if monitor.stalled?(timeout)
+            monitor.mark_killed
+            process.terminate rescue nil
+            break
+          end
+        end
+      end
+    end
+
+    relay_process_output(process, tracker, monitor)
     status = process.wait
+    monitor.try(&.finish)
     QuarkProcess.exit_code(status, 127)
   rescue File::NotFoundError
     QuarkLogs.puts "Error: #{cmd.first} was not found."
     127
   end
 
-  def self.relay_process_output(process : Process, tracker : DestinationTracker? = nil) : Nil
+  def self.relay_process_output(process : Process, tracker : DestinationTracker? = nil, monitor : StallMonitor? = nil) : Nil
     done = Channel(Nil).new(2)
 
     if stdout = process.output
       spawn do
-        relay_lines(stdout, STDOUT, tracker)
+        relay_lines(stdout, STDOUT, tracker, monitor)
         done.send(nil)
       end
     else
@@ -299,7 +435,7 @@ module QuarkDownload
 
     if stderr = process.error
       spawn do
-        relay_lines(stderr, STDERR, tracker)
+        relay_lines(stderr, STDERR, tracker, monitor)
         done.send(nil)
       end
     else
@@ -309,16 +445,22 @@ module QuarkDownload
     2.times { done.receive }
   end
 
-  def self.relay_lines(input : IO, output : IO, tracker : DestinationTracker? = nil) : Nil
+  def self.relay_lines(input : IO, output : IO, tracker : DestinationTracker? = nil, monitor : StallMonitor? = nil) : Nil
     input.each_line do |line|
-      tracker.try(&.observe(line))
-      QuarkLogs.puts(line, output)
+      out_line = monitor ? monitor.observe(line) : line
+      tracker.try(&.observe(out_line))
+      QuarkLogs.puts(out_line, output)
     end
   rescue IO::Error
   end
 
   {% if flag?(:windows) %}
-    def self.run_command_hidden(cmd : Array(String), tracker : DestinationTracker? = nil) : Int32
+    def self.run_command_hidden(
+      cmd : Array(String),
+      tracker : DestinationTracker? = nil,
+      monitor : StallMonitor? = nil,
+      stall_timeout : Time::Span? = nil,
+    ) : Int32
       STDOUT.sync = true
       STDERR.sync = true
 
@@ -327,8 +469,9 @@ module QuarkDownload
       relay = ->(input : IO, output : IO) do
         input.each_line do |line|
           begin
-            tracker.try(&.observe(line))
-            QuarkLogs.puts(line, output)
+            out_line = monitor ? monitor.observe(line) : line
+            tracker.try(&.observe(out_line))
+            QuarkLogs.puts(out_line, output)
           rescue IO::Error
             break
           end
@@ -354,7 +497,21 @@ module QuarkDownload
         end
       end
 
+      if monitor && (timeout = stall_timeout)
+        Thread.new(name: "cli-ytdlp-watchdog") do
+          loop do
+            break if runner.wait(1000_u32) # finished within the second
+            if monitor.stalled?(timeout)
+              monitor.mark_killed
+              runner.terminate
+              break
+            end
+          end
+        end
+      end
+
       status = runner.wait
+      monitor.try(&.finish)
       out_done.receive
       err_done.receive
       QuarkProcess.exit_code(status, 127)

@@ -98,10 +98,8 @@ final class ProgressController: NSObject, NSWindowDelegate {
                 bar.doubleValue = min(max(value, 0), 100)
             }
         case "ETA":
-            if !payload.isEmpty {
-                eta = payload
-                scheduleEtaDisplayUpdate()
-            }
+            eta = payload
+            scheduleEtaDisplayUpdate()
         case "STATUS":
             statusLabel.stringValue = payload
         case "QUEUE":

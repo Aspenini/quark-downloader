@@ -1,11 +1,12 @@
 module QuarkGui
-  PROGRESS_RE         = /\[download\]\s+(\d+(?:\.\d+)?)%/
-  ETA_RE              = /\bETA\s+([0-9]+:[0-9]{2}(?::[0-9]{2})?|--:--|unknown|n\/a)/i
-  QUEUE_URL_RE        = /^==> URL (\d+) of (\d+)/
-  PLAYLIST_ITEM_RE    = /\[download\] Downloading item (\d+) of (\d+)/
-  SETUP_PROGRESS_MAX  =  8.0
-  SETUP_PROGRESS_STEP = 1.25
-  STATUS_DISPLAY_MAX  =   72
+  PROGRESS_RE          = /\[download\]\s+(\d+(?:\.\d+)?)%/
+  ETA_RE               = /\bETA\s+([0-9]+:[0-9]{2}(?::[0-9]{2})?|--:--|unknown|n\/a)/i
+  QUEUE_URL_RE         = /^==> URL (\d+) of (\d+)/
+  PLAYLIST_ITEM_RE     = /\[download\] Downloading item (\d+) of (\d+)/
+  SETUP_PROGRESS_MAX   =        8.0
+  SETUP_PROGRESS_STEP  =       1.25
+  STATUS_DISPLAY_MAX   =         72
+  INACTIVITY_NOTICE_MS = 15_000_u64
 
   def self.parse_progress_percent(line : String) : Float64?
     # yt-dlp sometimes emits carriage-return progress without a newline first.
@@ -61,6 +62,41 @@ module QuarkGui
     "Time left: #{time_left_text(eta)}"
   end
 
+  def self.inactivity_status(elapsed_ms : UInt64) : String?
+    return nil if elapsed_ms < INACTIVITY_NOTICE_MS
+
+    seconds = elapsed_ms // 1_000
+    "Waiting for network/server response (#{seconds}s without output)..."
+  end
+
+  def self.format_duration(total_seconds : Int64) : String
+    total_seconds = 0_i64 if total_seconds < 0
+    hours = total_seconds // 3_600
+    minutes = (total_seconds % 3_600) // 60
+    seconds = total_seconds % 60
+    if hours > 0
+      "%d:%02d:%02d" % {hours, minutes, seconds}
+    else
+      "%d:%02d" % {minutes, seconds}
+    end
+  end
+
+  # Rough remaining-time estimate for a whole playlist, based on the average
+  # wall-clock time per completed item so far. Returns nil until at least one
+  # item has finished (we need a sample) or when there is nothing left.
+  def self.playlist_eta_text(item : Int32?, total : Int32?, elapsed_ms : UInt64) : String?
+    return nil unless item && total && total > 1
+    completed = item - 1
+    return nil if completed < 1 || elapsed_ms == 0
+
+    remaining = total - completed
+    return nil if remaining <= 0
+
+    per_item_ms = elapsed_ms.to_f / completed
+    eta_seconds = (remaining * per_item_ms / 1_000.0).to_i64
+    "Playlist: ~#{format_duration(eta_seconds)} left"
+  end
+
   class ProgressRelay
     @setup_percent = 0.0
     @download_started = false
@@ -76,6 +112,7 @@ module QuarkGui
           @download_started = false
           emit_queue(output)
           emit_progress(output, 0.0)
+          emit_eta(output, "")
           @setup_percent = 0.0
           return
         end
@@ -85,6 +122,7 @@ module QuarkGui
           @download_started = false
           @setup_percent = 0.0
           emit_queue(output)
+          emit_eta(output, "")
         end
 
         eta = QuarkGui.parse_eta(line)

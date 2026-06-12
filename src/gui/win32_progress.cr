@@ -10,8 +10,9 @@
       IDD_PROGRESS        =  102
       IDC_PROGRESS_STATUS = 1007
       IDC_PROGRESS_BAR    = 1008
-      IDC_PROGRESS_ETA    = 1026
-      IDC_PROGRESS_QUEUE  = 1027
+      IDC_PROGRESS_ETA          = 1026
+      IDC_PROGRESS_QUEUE        = 1027
+      IDC_PROGRESS_PLAYLIST_ETA = 1041
 
       WM_TIMER        = 0x0113_u32
       WM_COMMAND      = 0x0111_u32
@@ -54,6 +55,10 @@
       @@pending_args = [] of String
       @@url_text = ""
       @@item_text = ""
+      @@last_output_ms = 0_u64
+      @@playlist_item : Int32? = nil
+      @@playlist_total : Int32? = nil
+      @@playlist_started_ms = 0_u64
 
       alias DialogCallback = Win32Ui::DialogCallback
       @@dialog_proc : DialogCallback?
@@ -96,6 +101,10 @@
         @@download_started = false
         @@url_text = ""
         @@item_text = ""
+        @@playlist_item = nil
+        @@playlist_total = nil
+        @@playlist_started_ms = 0_u64
+        @@last_output_ms = LibKernel32.GetTickCount64
         @@dialog_hwnd = nil
         @@cli_runner = nil
 
@@ -181,17 +190,27 @@
       end
 
       def self.apply_line(line : String) : Nil
+        @@last_output_ms = LibKernel32.GetTickCount64
+
         if m = line.match(QuarkGui::QUEUE_URL_RE)
           @@url_text = "URL #{m[1]} of #{m[2]}"
           @@item_text = ""
           @@download_started = false
           @@percent = 0.0
+          @@eta = nil
+          @@playlist_item = nil
+          @@playlist_total = nil
+          @@playlist_started_ms = 0_u64
         end
 
         if m = line.match(QuarkGui::PLAYLIST_ITEM_RE)
           @@item_text = "item #{m[1]} of #{m[2]}"
           @@download_started = false
           @@percent = 0.0
+          @@eta = nil
+          @@playlist_item = m[1].to_i
+          @@playlist_total = m[2].to_i
+          @@playlist_started_ms = LibKernel32.GetTickCount64 if @@playlist_started_ms == 0
         end
 
         if eta = QuarkGui.parse_eta(line)
@@ -222,9 +241,19 @@
       end
 
       def self.update_controls(hdlg : WinHWND, force_eta : Bool = false) : Nil
-        Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_STATUS, @@status)
+        elapsed_ms = LibKernel32.GetTickCount64 - @@last_output_ms
+        status = QuarkGui.inactivity_status(elapsed_ms) || @@status
+        Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_STATUS, status)
         queue_text = [@@url_text, @@item_text].reject(&.empty?).join(" - ")
         Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_QUEUE, queue_text)
+
+        if total = @@playlist_total
+          playlist_elapsed = @@playlist_started_ms == 0 ? 0_u64 : LibKernel32.GetTickCount64 - @@playlist_started_ms
+          playlist_eta = QuarkGui.playlist_eta_text(@@playlist_item, total, playlist_elapsed) || "Playlist: estimating..."
+          Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_PLAYLIST_ETA, playlist_eta)
+        else
+          Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_PLAYLIST_ETA, "")
+        end
         if refresh_eta_display?(force_eta)
           Win32Ui.set_dlg_text(hdlg, IDC_PROGRESS_ETA, QuarkGui.eta_status_text(@@display_eta))
           Win32Ui.set_dialog_title(hdlg, progress_window_title)

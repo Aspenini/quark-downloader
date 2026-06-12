@@ -24,6 +24,31 @@ describe QuarkGui do
     QuarkGui.parse_eta(line).should eq("00:30")
   end
 
+  it "reports prolonged periods without downloader output" do
+    QuarkGui.inactivity_status(14_999_u64).should be_nil
+    QuarkGui.inactivity_status(15_000_u64).should eq(
+      "Waiting for network/server response (15s without output)..."
+    )
+  end
+
+  it "formats durations as M:SS and H:MM:SS" do
+    QuarkGui.format_duration(0_i64).should eq("0:00")
+    QuarkGui.format_duration(75_i64).should eq("1:15")
+    QuarkGui.format_duration(3_725_i64).should eq("1:02:05")
+    QuarkGui.format_duration(-5_i64).should eq("0:00")
+  end
+
+  it "estimates remaining playlist time from completed items" do
+    # 3 items done (on item 4) in 90s => 30s/item, 97 items left => ~48:30.
+    QuarkGui.playlist_eta_text(4, 100, 90_000_u64).should eq("Playlist: ~48:30 left")
+  end
+
+  it "withholds a playlist estimate until it has a sample" do
+    QuarkGui.playlist_eta_text(1, 100, 5_000_u64).should be_nil   # no item finished yet
+    QuarkGui.playlist_eta_text(nil, 100, 5_000_u64).should be_nil # not a playlist
+    QuarkGui.playlist_eta_text(6, 5, 40_000_u64).should be_nil    # nothing remaining
+  end
+
   it "filters and truncates status lines" do
     QuarkGui.parse_status_line("").should be_nil
     QuarkGui.parse_status_line("Done.").should be_nil
@@ -80,6 +105,7 @@ describe QuarkGui do
     lines = output.to_s.lines.map(&.strip)
     lines.should contain("QUEUE\tURL 2 of 5")
     lines.should contain("QUEUE\tURL 2 of 5 - item 3 of 12")
+    lines.count("ETA").should eq(2)
   end
 
   it "resets the bar when a new URL starts" do
@@ -90,7 +116,8 @@ describe QuarkGui do
     relay.relay("==> URL 2 of 2: https://example.com/b", output)
 
     lines = output.to_s.lines.map(&.strip)
-    lines.last.should eq("PROGRESS\t0.0")
+    lines[-2].should eq("PROGRESS\t0.0")
+    lines.last.should eq("ETA")
   end
 
   it "emits no queue context for plain single downloads" do

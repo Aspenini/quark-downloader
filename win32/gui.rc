@@ -43,6 +43,7 @@
 #define IDC_GRP_NAMING 1038
 #define IDC_GRP_DOWNLOADS 1039
 #define IDC_GRP_TOOLS 1040
+#define IDC_PROGRESS_PLAYLIST_ETA 1041
 
 IDI_APP_ICON ICON "../icons/icon.ico"
 
@@ -101,7 +102,7 @@ BEGIN
     PUSHBUTTON      "Cancel", IDC_SET_CANCEL, 304, 290, 50, 14
 END
 
-IDD_PROGRESS DIALOGEX 0, 0, 400, 118
+IDD_PROGRESS DIALOGEX 0, 0, 400, 130
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
 CAPTION "Quark Downloader"
 FONT 9, "Segoe UI"
@@ -109,6 +110,7 @@ BEGIN
     LTEXT           "Starting download...", IDC_PROGRESS_STATUS, 12, 12, 376, 28
     LTEXT           "", IDC_PROGRESS_QUEUE, 12, 42, 376, 10
     CONTROL         "", IDC_PROGRESS_BAR, "msctls_progress32", PBS_SMOOTH | WS_CHILD | WS_VISIBLE, 12, 56, 376, 14
-    LTEXT           "Time left: estimating...", IDC_PROGRESS_ETA, 12, 76, 250, 10
-    PUSHBUTTON      "Cancel", IDCANCEL, 338, 90, 50, 14
+    LTEXT           "Time left: estimating...", IDC_PROGRESS_ETA, 12, 74, 376, 10
+    LTEXT           "", IDC_PROGRESS_PLAYLIST_ETA, 12, 86, 376, 10
+    PUSHBUTTON      "Cancel", IDCANCEL, 338, 104, 50, 14
 END

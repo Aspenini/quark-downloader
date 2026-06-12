@@ -671,10 +671,8 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
                 .bar configure -value $payload
             }
         } elseif {$kind eq "ETA"} {
-            if {$payload ne ""} {
-                set ::progress_eta $payload
-                schedule_eta_display_update
-            }
+            set ::progress_eta $payload
+            schedule_eta_display_update
         } elseif {$kind eq "STATUS"} {
             .status_lbl configure -text [truncate_status $payload]
         } elseif {$kind eq "QUEUE"} {
