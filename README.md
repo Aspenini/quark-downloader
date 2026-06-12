@@ -22,11 +22,11 @@
 
 ## Dependencies
 
-| | Windows | macOS / Linux |
-|---|---------|----------------|
-| **yt-dlp** | PATH or auto-download to `tools/` | PATH - keep it current for YouTube |
-| **ffmpeg** | PATH, `bundled-tools/` -> `build/tools/` on build, or auto-download | PATH (`brew install ffmpeg`, etc.) |
-| **GUI (optional)** | Built-in Win32 dialog | macOS: native AppKit UI (bundled helper); Linux: [Tk](https://www.tcl.tk/) / `wish` (`apt install tk`) |
+| Dependency         | Windows                           | macOS             | Linux                                                 |
+| ------------------ | --------------------------------- | ----------------- | ----------------------------------------------------- |
+| **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH                                                  |
+| **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH                                                  |
+| **GUI (optional)** | Win32                             | AppKit UI         | [Tk](https://www.tcl.tk/) / `wish` (`apt install tk`) |
 
 **Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
