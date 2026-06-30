@@ -52,7 +52,7 @@ dmg:
 [group('dev')]
 [unix]
 run:
-    @bash -c 'source scripts/unix/crystal-env.sh && crystal run src/quark-downloader.cr'
+    @bash -c 'source scripts/unix/crystal-env.sh && crystal run ${QUARK_CRYSTAL_LINK_FLAGS:-} src/quark-downloader.cr'
 
 [group('dev')]
 [windows]
@@ -62,7 +62,7 @@ run:
 [group('dev')]
 [unix]
 run-gui:
-    @bash -c 'source scripts/unix/crystal-env.sh && crystal run src/gui/quark-downloader-gui.cr'
+    @bash -c 'source scripts/unix/crystal-env.sh && crystal run ${QUARK_CRYSTAL_LINK_FLAGS:-} src/gui/quark-downloader-gui.cr'
 
 [group('dev')]
 [windows]

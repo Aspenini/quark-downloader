@@ -15,10 +15,10 @@ echo ""
 mkdir -p "$build_dir"
 
 echo "  Compiling CLI..."
-crystal build --release "$root/src/quark-downloader.cr" -o "$binary"
+crystal build ${QUARK_CRYSTAL_LINK_FLAGS:-} --release "$root/src/quark-downloader.cr" -o "$binary"
 
 echo "  Compiling GUI..."
-crystal build --release "$root/src/gui/quark-downloader-gui.cr" -o "$gui_binary"
+crystal build ${QUARK_CRYSTAL_LINK_FLAGS:-} --release "$root/src/gui/quark-downloader-gui.cr" -o "$gui_binary"
 cp "$root/src/gui/quark-downloader-gui.tcl" "$build_dir/"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then

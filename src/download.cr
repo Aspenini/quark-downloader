@@ -446,12 +446,35 @@ module QuarkDownload
   end
 
   def self.relay_lines(input : IO, output : IO, tracker : DestinationTracker? = nil, monitor : StallMonitor? = nil) : Nil
-    input.each_line do |line|
+    each_output_token(input) do |line|
       out_line = monitor ? monitor.observe(line) : line
       tracker.try(&.observe(out_line))
       QuarkLogs.puts(out_line, output)
     end
   rescue IO::Error
+  end
+
+  # yt-dlp reports progress with carriage returns ("\r"), only emitting a real
+  # newline when an item finishes. IO#each_line splits on "\n" alone, so without
+  # --newline it would buffer an entire multi-minute download into one pending
+  # line and never feed the stall watchdog, which then kills a healthy download.
+  # Splitting on both "\r" and "\n" surfaces each progress tick as it arrives.
+  def self.each_output_token(input : IO, & : String ->) : Nil
+    builder = String::Builder.new
+    pending = false
+
+    while char = input.read_char
+      if char == '\n' || char == '\r'
+        yield builder.to_s
+        builder = String::Builder.new
+        pending = false
+      else
+        builder << char
+        pending = true
+      end
+    end
+
+    yield builder.to_s if pending
   end
 
   {% if flag?(:windows) %}

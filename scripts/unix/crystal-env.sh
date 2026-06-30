@@ -2,6 +2,15 @@
 # Crystal links OpenSSL through pkg-config. Homebrew kegs such as openssl@3 are
 # often outside the default search path, which can break linking with EVP symbols.
 
+# Crystal on macOS may default to the LLVM lld linker, but Homebrew's lld cannot
+# link Mach-O for current macOS ("This version of lld does not support linking
+# for platform macOS"), so every crystal build/run fails. Point Crystal at
+# Apple's system linker instead. Recipes/scripts append $QUARK_CRYSTAL_LINK_FLAGS
+# to their crystal invocations. Override by exporting it yourself before running.
+if [[ "$(uname -s)" == "Darwin" && -z "${QUARK_CRYSTAL_LINK_FLAGS+x}" ]]; then
+  export QUARK_CRYSTAL_LINK_FLAGS="--link-flags=-fuse-ld=/usr/bin/ld"
+fi
+
 if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists libssl libcrypto 2>/dev/null; then
   return 0 2>/dev/null || exit 0
 fi

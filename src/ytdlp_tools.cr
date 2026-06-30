@@ -143,9 +143,22 @@ module YtDlpTools
     u.includes?("youtube.com") || u.includes?("youtu.be")
   end
 
+  # yt-dlp's EJS supports these JavaScript runtimes (highest priority first, the
+  # same order yt-dlp itself prefers). We enable whichever the user already has
+  # so YouTube works with deno, node, quickjs, or bun - no need to install a
+  # specific one. Each entry maps the runtime name yt-dlp expects to the binary
+  # names to look for on PATH. bun is last because yt-dlp has deprecated it.
+  JS_RUNTIMES = [
+    {"deno", ["deno"]},
+    {"node", ["node"]},
+    {"quickjs", ["qjs", "quickjs"]},
+    {"bun", ["bun"]},
+  ]
+
   def self.js_runtime : String?
-    return "deno" if Process.find_executable("deno")
-    return "node" if Process.find_executable("node")
+    JS_RUNTIMES.each do |(name, binaries)|
+      return name if binaries.any? { |bin| Process.find_executable(bin) }
+    end
     nil
   end
 
@@ -155,8 +168,10 @@ module YtDlpTools
 
     raise Error.new(<<-MSG)
       YouTube requires a JavaScript runtime for yt-dlp (EJS).
-        - Node.js: sudo apt install nodejs   (or your distro equivalent)
-        - Deno: see https://github.com/yt-dlp/yt-dlp/wiki/EJS
+      Install any one of: deno, node, quickjs, or bun.
+        - macOS (Homebrew): brew install deno   (or node)
+        - Linux: sudo apt install nodejs   (or your distro equivalent)
+        - More: https://github.com/yt-dlp/yt-dlp/wiki/EJS
       MSG
   end
 
@@ -165,7 +180,11 @@ module YtDlpTools
 
     args = [] of String
     if runtime = js_runtime
-      args.concat(["--remote-components", "ejs", "--js-runtimes", runtime])
+      # Enable the detected runtime. --remote-components ejs:github lets yt-dlp
+      # fetch the EJS solver from GitHub when its build doesn't already bundle it
+      # (official/Homebrew builds do, so nothing is fetched in that case). The
+      # bare value "ejs" is invalid and silently ignored by yt-dlp.
+      args.concat(["--js-runtimes", runtime, "--remote-components", "ejs:github"])
     end
     args
   end
@@ -214,7 +233,7 @@ module YtDlpTools
   def self.warn_youtube_js_runtime
     return if js_runtime
 
-    QuarkLogs.puts "Warning: No Node.js or Deno on PATH - YouTube may fail until you install one (yt-dlp EJS wiki)."
+    QuarkLogs.puts "Warning: No JavaScript runtime on PATH (deno, node, quickjs, or bun) - YouTube may fail until you install one (yt-dlp EJS wiki)."
   end
 
   def self.check_due? : Bool
