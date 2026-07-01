@@ -1,0 +1,240 @@
+import {
+    LineEdit, TextEdit, ComboBox, CheckBox, Button, ScrollView,
+    VerticalBox, HorizontalBox, ProgressIndicator
+} from "std-widgets.slint";
+
+// One row of a generic form. `kind` selects which widget renders.
+//   "text" | "path" | "list" | "radio" | "combo" | "check" | "section"
+export struct FieldData {
+    id: string,
+    kind: string,
+    label: string,
+    text: string,
+    options: [string],
+    selected: int,
+    checked: bool,
+}
+
+export component MainForm inherits Window {
+    in property <string> window-title;
+    in-out property <[FieldData]> fields;
+    in property <string> submit-label: "OK";
+    in property <string> cancel-label: "Cancel";
+    in property <[string]> extra-buttons;
+
+    callback submit();
+    callback cancel();
+    callback extra(int);
+    callback browse(int);
+    callback list-add(int, string);
+    callback list-remove(int, int);
+
+    title: window-title;
+    preferred-width: 560px;
+    preferred-height: 540px;
+    min-width: 460px;
+
+    VerticalBox {
+        padding: 16px;
+        spacing: 10px;
+
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalBox {
+                spacing: 10px;
+                for field[idx] in root.fields: VerticalBox {
+                    spacing: 4px;
+
+                    if field.kind == "section": Text {
+                        text: field.label;
+                        font-weight: 700;
+                        font-size: 15px;
+                    }
+
+                    if field.kind != "section" && field.kind != "check": Text {
+                        text: field.label;
+                        font-weight: 600;
+                    }
+
+                    if field.kind == "text": LineEdit {
+                        text: field.text;
+                        edited(t) => { root.fields[idx].text = t; }
+                    }
+
+                    if field.kind == "path": HorizontalBox {
+                        padding: 0;
+                        LineEdit {
+                            horizontal-stretch: 1;
+                            text: field.text;
+                            edited(t) => { root.fields[idx].text = t; }
+                        }
+                        Button {
+                            text: "Browse...";
+                            clicked => { root.browse(idx); }
+                        }
+                    }
+
+                    if field.kind == "list": VerticalBox {
+                        padding: 0;
+                        spacing: 4px;
+                        for item[j] in field.options: HorizontalBox {
+                            padding: 0;
+                            Text {
+                                text: item;
+                                horizontal-stretch: 1;
+                                overflow: elide;
+                                vertical-alignment: center;
+                            }
+                            Button {
+                                text: "Remove";
+                                clicked => { root.list-remove(idx, j); }
+                            }
+                        }
+                        HorizontalBox {
+                            padding: 0;
+                            new-entry := LineEdit {
+                                horizontal-stretch: 1;
+                                placeholder-text: field.text;
+                                accepted => {
+                                    root.list-add(idx, self.text);
+                                    self.text = "";
+                                }
+                            }
+                            Button {
+                                text: "Add";
+                                clicked => {
+                                    root.list-add(idx, new-entry.text);
+                                    new-entry.text = "";
+                                }
+                            }
+                        }
+                    }
+
+                    if field.kind == "combo": ComboBox {
+                        model: field.options;
+                        current-index: field.selected;
+                        selected(value) => { root.fields[idx].selected = self.current-index; }
+                    }
+
+                    if field.kind == "radio": VerticalBox {
+                        padding: 0;
+                        spacing: 2px;
+                        for opt[j] in field.options: TouchArea {
+                            height: 26px;
+                            clicked => { root.fields[idx].selected = j; }
+                            HorizontalBox {
+                                padding: 0;
+                                spacing: 6px;
+                                Rectangle {
+                                    width: 16px;
+                                    height: 16px;
+                                    border-radius: 8px;
+                                    border-width: 1px;
+                                    border-color: gray;
+                                    Rectangle {
+                                        width: 8px;
+                                        height: 8px;
+                                        border-radius: 4px;
+                                        background: field.selected == j ? #3b82f6 : transparent;
+                                    }
+                                }
+                                Text {
+                                    text: opt;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+                    }
+
+                    if field.kind == "check": CheckBox {
+                        text: field.label;
+                        checked: field.checked;
+                        toggled => { root.fields[idx].checked = self.checked; }
+                    }
+                }
+            }
+        }
+
+        HorizontalBox {
+            padding: 0;
+            spacing: 8px;
+            for label[idx] in root.extra-buttons: Button {
+                text: label;
+                clicked => { root.extra(idx); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: root.cancel-label;
+                clicked => { root.cancel(); }
+            }
+            Button {
+                text: root.submit-label;
+                primary: true;
+                clicked => { root.submit(); }
+            }
+        }
+    }
+}
+
+export component ProgressView inherits Window {
+    in property <string> window-title;
+    in property <float> percent;        // 0..100
+    in property <string> status;
+    in property <string> eta;
+    in property <string> queue;
+    callback cancel();
+
+    title: window-title;
+    preferred-width: 460px;
+    preferred-height: 200px;
+
+    VerticalBox {
+        padding: 18px;
+        spacing: 12px;
+        Text { text: root.queue; font-weight: 600; }
+        ProgressIndicator {
+            height: 14px;
+            progress: root.percent / 100;
+        }
+        Text { text: root.status; overflow: elide; }
+        Text { text: root.eta; color: gray; }
+        HorizontalBox {
+            padding: 0;
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "Cancel";
+                clicked => { root.cancel(); }
+            }
+        }
+    }
+}
+
+export component MessageDialog inherits Window {
+    in property <string> window-title;
+    in property <string> body;
+    in property <bool> is-error;
+    callback dismiss();
+
+    title: window-title;
+    preferred-width: 420px;
+
+    VerticalBox {
+        padding: 18px;
+        spacing: 14px;
+        Text {
+            text: root.body;
+            wrap: word-wrap;
+            color: root.is-error ? #d33333 : #cccccc;
+        }
+        HorizontalBox {
+            padding: 0;
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "OK";
+                primary: true;
+                clicked => { root.dismiss(); }
+            }
+        }
+    }
+}

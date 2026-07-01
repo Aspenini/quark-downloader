@@ -1,0 +1,27 @@
+[package]
+name = "quark-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Reusable cross-platform UI toolkit with selectable backends (Slint + native)."
+
+[features]
+default = ["slint"]
+slint = ["dep:slint", "dep:slint-build", "dep:rfd"]
+# Native backends are scaffolded; enabling them compiles their toolkit bridge.
+native-windows = []
+native-cocoa = []
+native-gtk = []
+native-kirigami = []
+
+[dependencies]
+crossbeam-channel = { workspace = true }
+slint = { version = "1.8", optional = true }
+rfd = { version = "0.15", optional = true }
+
+[build-dependencies]
+slint-build = { version = "1.8", optional = true }
+
+[dev-dependencies]
+crossbeam-channel = { workspace = true }

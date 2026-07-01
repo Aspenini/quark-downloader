@@ -12,6 +12,9 @@
 /tools/
 quark-downloader.conf
 
+# Rust
+/target/
+
 # Crystal
 *.dwarf
 /.crystal/

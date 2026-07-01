@@ -1,0 +1,15 @@
+[package]
+name = "quark-downloader-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "quark-downloader-gui"
+path = "src/main.rs"
+
+[dependencies]
+quark-core = { path = "../quark-core" }
+quark-gui = { path = "../quark-gui" }
+crossbeam-channel = { workspace = true }
