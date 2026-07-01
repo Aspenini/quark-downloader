@@ -45,3 +45,7 @@ jobs:
 
       - name: Build (release)
         run: cargo build --workspace --release
+
+      - name: Check native Cocoa backend (macOS)
+        if: runner.os == 'macOS'
+        run: cargo clippy -p quark-gui --all-targets --features native-cocoa -- -D warnings

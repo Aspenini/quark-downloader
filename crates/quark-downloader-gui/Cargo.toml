@@ -9,6 +9,12 @@ rust-version.workspace = true
 name = "quark-downloader-gui"
 path = "src/main.rs"
 
+[features]
+# Opt into native GUI backends (selectable at runtime via `gui_backend`).
+native-cocoa = ["quark-gui/native-cocoa"]
+native-windows = ["quark-gui/native-windows"]
+native-gtk = ["quark-gui/native-gtk"]
+
 [dependencies]
 quark-core = { path = "../quark-core" }
 quark-gui = { path = "../quark-gui" }

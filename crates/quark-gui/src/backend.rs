@@ -68,13 +68,22 @@ impl Backend {
 /// when the requested backend is unavailable. Returns the renderer and the
 /// backend actually chosen so callers can report a fallback.
 pub fn renderer(preferred: Backend) -> (Box<dyn Renderer>, Backend) {
-    // Native backends are scaffolded behind features; none are wired yet, so
-    // any non-Slint request currently resolves down the fallback chain.
-    if preferred == Backend::Headless {
-        return (
-            Box::new(crate::backends::headless::HeadlessRenderer),
-            Backend::Headless,
-        );
+    match preferred {
+        Backend::Headless => {
+            return (
+                Box::new(crate::backends::headless::HeadlessRenderer),
+                Backend::Headless,
+            );
+        }
+        #[cfg(all(target_os = "macos", feature = "native-cocoa"))]
+        Backend::Cocoa => {
+            return (
+                Box::new(crate::backends::cocoa::CocoaRenderer::new()),
+                Backend::Cocoa,
+            );
+        }
+        // Other native backends fall through to Slint until implemented.
+        _ => {}
     }
 
     #[cfg(feature = "slint")]

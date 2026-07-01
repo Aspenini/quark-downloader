@@ -1,24 +1,13 @@
-# Windows ffmpeg binaries (place locally; not in git)
-/bundled-tools/*
-!/bundled-tools/.gitkeep
+# Rust
+/target/
 
-# Build outputs
-/build/
-/bin/
+# Packaging / distribution outputs
 /dist/
 /packaging/output/
 
 # Runtime tool cache (next to executable)
 /tools/
 quark-downloader.conf
-
-# Rust
-/target/
-
-# Crystal
-*.dwarf
-/.crystal/
-/.shards/
 
 # OS / editor
 .DS_Store

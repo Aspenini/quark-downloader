@@ -9,16 +9,58 @@ description = "Reusable cross-platform UI toolkit with selectable backends (Slin
 [features]
 default = ["slint"]
 slint = ["dep:slint", "dep:slint-build", "dep:rfd"]
-# Native backends are scaffolded; enabling them compiles their toolkit bridge.
-native-windows = []
-native-cocoa = []
-native-gtk = []
-native-kirigami = []
+# Native backends. Each currently implements native dialogs and delegates the
+# form/progress views to Slint until its native views are built, so they enable
+# the `slint` feature too.
+native-windows = ["slint"]
+native-cocoa = ["slint", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
+native-gtk = ["slint"]
+native-kirigami = ["slint"]
 
 [dependencies]
 crossbeam-channel = { workspace = true }
 slint = { version = "1.8", optional = true }
 rfd = { version = "0.15", optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.5", optional = true }
+objc2-foundation = { version = "0.2", optional = true, features = [
+    "NSString",
+    "NSGeometry",
+    "NSArray",
+    "NSEnumerator",
+    "NSObjCRuntime",
+    "NSURL",
+    "NSTimer",
+    "NSRunLoop",
+    "NSDate",
+] }
+objc2-app-kit = { version = "0.2", optional = true, features = [
+    "NSAlert",
+    "NSApplication",
+    "NSResponder",
+    "NSWindow",
+    "NSView",
+    "NSControl",
+    "NSTextField",
+    "NSText",
+    "NSTextView",
+    "NSScrollView",
+    "NSStackView",
+    "NSButton",
+    "NSButtonCell",
+    "NSCell",
+    "NSPopUpButton",
+    "NSProgressIndicator",
+    "NSPanel",
+    "NSSavePanel",
+    "NSOpenPanel",
+    "NSLayoutConstraint",
+    "NSLayoutAnchor",
+    "NSUserInterfaceLayout",
+    "NSGraphics",
+    "NSColor",
+] }
 
 [build-dependencies]
 slint-build = { version = "1.8", optional = true }
