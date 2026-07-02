@@ -29,7 +29,6 @@ pub enum Backend {
     Auto,
     Slint,
     Win32,
-    WinUi,
     Cocoa,
     Gtk,
     Kirigami,
@@ -41,8 +40,8 @@ impl Backend {
     pub fn from_name(name: &str) -> Backend {
         match name.trim().to_ascii_lowercase().as_str() {
             "slint" => Backend::Slint,
-            "win32" => Backend::Win32,
-            "winui" => Backend::WinUi,
+            // "winui" is a legacy alias for the native Windows backend.
+            "win32" | "winui" => Backend::Win32,
             "cocoa" => Backend::Cocoa,
             "gtk" => Backend::Gtk,
             "kirigami" => Backend::Kirigami,
@@ -56,10 +55,12 @@ impl Backend {
         match self {
             Backend::Headless | Backend::Auto => true,
             Backend::Slint => cfg!(feature = "slint"),
-            Backend::Win32 | Backend::WinUi => cfg!(all(windows, feature = "native-windows")),
+            Backend::Win32 => cfg!(all(windows, feature = "native-windows")),
             Backend::Cocoa => cfg!(all(target_os = "macos", feature = "native-cocoa")),
-            Backend::Gtk => cfg!(all(target_os = "linux", feature = "native-gtk")),
-            Backend::Kirigami => cfg!(all(target_os = "linux", feature = "native-kirigami")),
+            // GTK4 and Qt are cross-platform; compiling their feature requires
+            // the system libraries, so the feature flag alone gates them.
+            Backend::Gtk => cfg!(feature = "native-gtk"),
+            Backend::Kirigami => cfg!(feature = "native-kirigami"),
         }
     }
 }
@@ -82,7 +83,28 @@ pub fn renderer(preferred: Backend) -> (Box<dyn Renderer>, Backend) {
                 Backend::Cocoa,
             );
         }
-        // Other native backends fall through to Slint until implemented.
+        #[cfg(all(windows, feature = "native-windows"))]
+        Backend::Win32 => {
+            return (
+                Box::new(crate::backends::win32::Win32Renderer::new()),
+                Backend::Win32,
+            );
+        }
+        #[cfg(feature = "native-gtk")]
+        Backend::Gtk => {
+            return (
+                Box::new(crate::backends::gtk::GtkRenderer::new()),
+                Backend::Gtk,
+            );
+        }
+        #[cfg(feature = "native-kirigami")]
+        Backend::Kirigami => {
+            return (
+                Box::new(crate::backends::kirigami::QtRenderer::new()),
+                Backend::Kirigami,
+            );
+        }
+        // Anything else (or an unavailable native backend) falls to Slint.
         _ => {}
     }
 

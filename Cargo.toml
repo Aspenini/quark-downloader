@@ -12,7 +12,7 @@ version = "0.6.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/Aspenini/quark-downloader"
-rust-version = "1.80"
+rust-version = "1.82"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

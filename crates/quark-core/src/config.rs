@@ -62,8 +62,8 @@ str_enum!(FilenameSpaces {
 
 str_enum!(GuiBackend {
     Slint => "slint",
-    Win32 => "win32",
-    WinUi => "winui",
+    // "winui" is a legacy alias from when a separate WinUI backend was planned.
+    Win32 => "win32" | "winui",
     Cocoa => "cocoa",
     Gtk => "gtk",
     Kirigami => "kirigami",
@@ -74,9 +74,11 @@ impl GuiBackend {
     pub fn supported_here(&self) -> bool {
         match self {
             GuiBackend::Slint => true,
-            GuiBackend::Win32 | GuiBackend::WinUi => cfg!(windows),
+            GuiBackend::Win32 => cfg!(windows),
             GuiBackend::Cocoa => cfg!(target_os = "macos"),
-            GuiBackend::Gtk | GuiBackend::Kirigami => cfg!(target_os = "linux"),
+            // GTK 4 and Qt are cross-platform (Linux first-class; they work
+            // anywhere their system libraries are installed).
+            GuiBackend::Gtk | GuiBackend::Kirigami => true,
         }
     }
 }
@@ -164,7 +166,7 @@ impl Settings {
              yt_dlp = {ytdlp:?}\n\
              ffmpeg = {ffmpeg:?}\n\
              \n\
-             # GUI backend toolkit: slint | win32 | winui | cocoa | gtk | kirigami\n\
+             # GUI backend toolkit: slint | win32 | cocoa | gtk | kirigami\n\
              # slint works everywhere; the rest are native and platform-specific.\n\
              gui_backend = {backend:?}\n\
              \n\

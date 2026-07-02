@@ -52,14 +52,17 @@ QuarkGUI renders through a selectable backend. **Slint** is the default on every
 automatic fallback. Native backends are opt-in via cargo features and chosen at runtime with the
 `gui_backend` setting:
 
-| Setting | Platform | Status |
-| ------- | -------- | ------ |
-| `slint` | all | default, complete |
-| `cocoa` | macOS | native `NSAlert` dialogs; forms/progress delegate to Slint (`--features native-cocoa`) |
-| `win32`, `winui` | Windows | scaffolded, falls back to Slint |
-| `gtk`, `kirigami` | Linux | scaffolded, falls back to Slint |
+| Setting | Platform | Toolkit (`cargo` feature) |
+| ------- | -------- | ------------------------- |
+| `slint` | all | Slint — default, no system dependencies |
+| `cocoa` | macOS | native AppKit form, progress, and dialogs (`native-cocoa`) |
+| `win32` | Windows | native Win32 form, progress, and dialogs (`native-windows`) |
+| `gtk` | Linux (any platform with GTK 4) | GTK 4 via gtk4-rs (`native-gtk`, needs the GTK 4 libraries) |
+| `kirigami` | all | Qt Widgets via a cxx bridge — Breeze/Kirigami look on KDE (`native-kirigami`, needs Qt 6) |
 
-Requesting a backend that isn't available on the current build falls back to Slint automatically.
+All five are complete implementations of the same renderer interface. Requesting a backend that
+isn't compiled into the current build falls back to Slint automatically. `winui` is accepted as a
+legacy alias for `win32`.
 
 ## Build & run
 
@@ -75,9 +78,17 @@ just test               # cargo test --workspace
 just lint               # clippy, warnings as errors
 just build-native native-cocoa   # build the GUI crate with a native backend
 
-# Native macOS backend end-to-end:
-cargo run -p quark-downloader-gui --features native-cocoa
+# Native backends end-to-end (set gui_backend accordingly, or it falls back to Slint):
+cargo run -p quark-downloader-gui --features native-cocoa      # macOS
+cargo run -p quark-downloader-gui --features native-windows    # Windows
+cargo run -p quark-downloader-gui --features native-gtk        # needs GTK 4 libs
+cargo run -p quark-downloader-gui --features native-kirigami   # needs Qt 6 (qmake on PATH)
 ```
+
+The GTK and Qt backends link real system libraries: `apt install libgtk-4-dev` / `qt6-base-dev`
+on Debian-likes, `brew install gtk4` / `qt` on macOS. A scripted, self-closing progress demo
+smoke-tests any backend without interaction, e.g.
+`QUARK_GUI_BACKEND=gtk cargo run -p quark-gui --example progress --no-default-features --features native-gtk`.
 
 ## CLI
 
@@ -103,7 +114,7 @@ as `.conf.bak`).
 | ------- | ------ |
 | `download_dir` | Default output folder (`~` supported) |
 | `yt_dlp` / `ffmpeg` | `auto`, `path`, or `bundled` |
-| `gui_backend` | `slint` (default), `win32`, `winui`, `cocoa`, `gtk`, `kirigami` |
+| `gui_backend` | `slint` (default), `win32`, `cocoa`, `gtk`, `kirigami` |
 | `gui_download_mode` | `progress` (in-app progress window) or `external_cli` (open the CLI in a terminal) |
 | `gui_theme` | `light` or `dark` |
 | `download_logs` | `true` / `false` — rotated logs under the config dir's `logs/` |

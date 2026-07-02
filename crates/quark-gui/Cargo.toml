@@ -9,18 +9,36 @@ description = "Reusable cross-platform UI toolkit with selectable backends (Slin
 [features]
 default = ["slint"]
 slint = ["dep:slint", "dep:slint-build", "dep:rfd"]
-# Native backends. Each currently implements native dialogs and delegates the
-# form/progress views to Slint until its native views are built, so they enable
-# the `slint` feature too.
-native-windows = ["slint"]
-native-cocoa = ["slint", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
-native-gtk = ["slint"]
-native-kirigami = ["slint"]
+# Native backends. Each is a complete Renderer; enabling one does not pull in
+# Slint (Slint stays the default/fallback via the `slint` feature).
+native-windows = ["dep:windows-sys"]
+native-cocoa = ["dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
+native-gtk = ["dep:gtk4"]
+native-kirigami = ["dep:cxx", "dep:cxx-build", "dep:qt-build-utils"]
 
 [dependencies]
 crossbeam-channel = { workspace = true }
 slint = { version = "1.8", optional = true }
 rfd = { version = "0.15", optional = true }
+# Qt backend (feature `native-kirigami`): a small C++ bridge to Qt Widgets.
+cxx = { version = "1", optional = true }
+
+# GTK backend (feature `native-gtk`): requires the system GTK 4 libraries.
+gtk4 = { version = "0.11", optional = true, features = ["v4_10"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", optional = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Dwm",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Controls",
+    "Win32_UI_Controls_Dialogs",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.5", optional = true }
@@ -64,6 +82,8 @@ objc2-app-kit = { version = "0.2", optional = true, features = [
 
 [build-dependencies]
 slint-build = { version = "1.8", optional = true }
+cxx-build = { version = "1", optional = true }
+qt-build-utils = { version = "0.9", optional = true }
 
 [dev-dependencies]
 crossbeam-channel = { workspace = true }

@@ -2,7 +2,7 @@
 //!
 //! Describe a UI once with [`model`] types, then render it through a
 //! [`backend::Renderer`]. Slint is the default backend on every platform;
-//! native backends (Win32/WinUI/Cocoa/GTK/Kirigami) plug in behind features
+//! native backends (Win32/Cocoa/GTK/Kirigami) plug in behind features
 //! without changing your UI code. The crate is application-agnostic and can be
 //! used by any program, not just Quark Downloader.
 //!

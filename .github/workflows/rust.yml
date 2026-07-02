@@ -28,11 +28,13 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Slint system deps (Linux)
+      - name: Install system deps (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxcb1-dev libxkbcommon-dev
+          # Slint needs fontconfig/xcb/xkbcommon; the native backends need GTK 4 and Qt 6.
+          sudo apt-get install -y libfontconfig1-dev libxcb1-dev libxkbcommon-dev \
+            libgtk-4-dev qt6-base-dev
 
       - name: Format
         run: cargo fmt --all --check
@@ -49,3 +51,17 @@ jobs:
       - name: Check native Cocoa backend (macOS)
         if: runner.os == 'macOS'
         run: cargo clippy -p quark-gui --all-targets --features native-cocoa -- -D warnings
+
+      - name: Check native Windows backend (Windows)
+        if: runner.os == 'Windows'
+        run: cargo clippy -p quark-gui --all-targets --features native-windows -- -D warnings
+
+      # GTK 4 and Qt Widgets (`kirigami`) are cross-platform, but linking them
+      # needs their system libraries; the Linux runner has both via apt.
+      - name: Check native GTK backend (Linux)
+        if: runner.os == 'Linux'
+        run: cargo clippy -p quark-gui --all-targets --features native-gtk -- -D warnings
+
+      - name: Check native Qt backend (Linux)
+        if: runner.os == 'Linux'
+        run: cargo clippy -p quark-gui --all-targets --features native-kirigami -- -D warnings

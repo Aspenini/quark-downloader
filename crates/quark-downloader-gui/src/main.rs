@@ -24,7 +24,7 @@ const FORMAT_OPTIONS: &[&str] = &[
 ];
 const TOOL_OPTIONS: &[&str] = &["auto", "path", "bundled"];
 const SPACES_OPTIONS: &[&str] = &["keep", "underscore", "dash", "remove"];
-const BACKEND_OPTIONS: &[&str] = &["slint", "win32", "winui", "cocoa", "gtk", "kirigami"];
+const BACKEND_OPTIONS: &[&str] = &["slint", "win32", "cocoa", "gtk", "kirigami"];
 const MODE_OPTIONS: &[&str] = &["progress", "external_cli"];
 const THEME_OPTIONS: &[&str] = &["light", "dark"];
 

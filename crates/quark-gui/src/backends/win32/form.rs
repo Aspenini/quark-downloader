@@ -1,0 +1,603 @@
+//! Native Win32 form window: labels, edits, radio groups, combos, checkboxes,
+//! a multi-line list edit, and file/folder pickers, laid out in fixed rows.
+
+use std::cell::Cell;
+use std::ffi::c_void;
+use std::sync::Once;
+
+use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, COINIT_APARTMENTTHREADED};
+use windows_sys::Win32::UI::Controls::Dialogs::{
+    GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_PATHMUSTEXIST, OPENFILENAMEW,
+};
+use windows_sys::Win32::UI::Controls::BST_CHECKED;
+use windows_sys::Win32::UI::Shell::{
+    SHBrowseForFolderW, SHGetPathFromIDListW, BIF_NEWDIALOGSTYLE, BIF_RETURNONLYFSDIRS, BROWSEINFOW,
+};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, GetWindowLongPtrW,
+    IsDialogMessageW, PostQuitMessage, SendMessageW, SetWindowLongPtrW, SetWindowTextW,
+    TranslateMessage, BM_GETCHECK, BM_SETCHECK, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL,
+    CB_SETCURSEL, ES_AUTOHSCROLL, ES_AUTOVSCROLL, ES_MULTILINE, ES_WANTRETURN, GWLP_USERDATA, MSG,
+    WINDOW_STYLE, WM_CLOSE, WM_COMMAND, WS_BORDER, WS_CAPTION, WS_CHILD, WS_GROUP, WS_MINIMIZEBOX,
+    WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
+};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    BS_AUTOCHECKBOX, BS_AUTORADIOBUTTON, BS_DEFPUSHBUTTON, BS_PUSHBUTTON,
+};
+
+use super::util::{self, ThemePaint};
+use crate::model::{Field, FieldValue, FormOutcome, FormSpec, FormValues};
+
+const MARGIN: i32 = 16;
+const CLIENT_W: i32 = 560;
+const LABEL_W: i32 = 150;
+const ROW_H: i32 = 26;
+const LABEL_H: i32 = 18;
+const LIST_H: i32 = 110;
+const RADIO_H: i32 = 22;
+const SPACING: i32 = 8;
+const BUTTON_W: i32 = 90;
+const BUTTON_H: i32 = 28;
+const BROWSE_W: i32 = 84;
+
+const ID_SUBMIT: usize = 1;
+const ID_CANCEL: usize = 2;
+const ID_EXTRA_BASE: usize = 10;
+const ID_BROWSE_BASE: usize = 200;
+
+const STYLE: WINDOW_STYLE = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Decision {
+    Submit,
+    Extra(usize),
+    Cancel,
+}
+
+/// A control to read back after the loop ends.
+enum Control {
+    Text(HWND),
+    List(HWND),
+    Combo(HWND),
+    Check(HWND),
+    Radio(Vec<HWND>),
+}
+
+struct Entry {
+    id: String,
+    control: Control,
+}
+
+struct BrowseTarget {
+    edit: HWND,
+    directory: bool,
+}
+
+/// Shared with the wndproc through GWLP_USERDATA.
+struct FormState {
+    decision: Cell<Option<Decision>>,
+    browse: Vec<BrowseTarget>,
+    paint: ThemePaint,
+}
+
+pub fn run_form(spec: FormSpec) -> FormOutcome {
+    static CLASS: Once = Once::new();
+    let class_name = util::register_class("QuarkGuiForm", Some(form_wndproc), &CLASS);
+    let font = util::message_font();
+
+    // Created with a provisional height; resized after layout below.
+    let hwnd = util::top_level(&class_name, &spec.window.title, STYLE, CLIENT_W, 400);
+    let paint = ThemePaint::new(spec.window.theme, hwnd);
+
+    let mut entries: Vec<Entry> = Vec::new();
+    let mut browse: Vec<BrowseTarget> = Vec::new();
+    let mut y = MARGIN;
+    let control_x = MARGIN + LABEL_W + SPACING;
+    let control_w = CLIENT_W - control_x - MARGIN;
+
+    for field in &spec.fields {
+        match field {
+            Field::Section { label } => {
+                y += 4;
+                util::child(
+                    "STATIC",
+                    label,
+                    WS_CHILD | WS_VISIBLE | WS_GROUP,
+                    MARGIN,
+                    y,
+                    CLIENT_W - 2 * MARGIN,
+                    LABEL_H,
+                    hwnd,
+                    0,
+                    font,
+                );
+                y += LABEL_H + SPACING;
+            }
+            Field::Text { id, label, value } => {
+                util::child(
+                    "STATIC",
+                    label,
+                    WS_CHILD | WS_VISIBLE | WS_GROUP,
+                    MARGIN,
+                    y + 4,
+                    LABEL_W,
+                    LABEL_H,
+                    hwnd,
+                    0,
+                    font,
+                );
+                let edit = util::child(
+                    "EDIT",
+                    value,
+                    WS_CHILD
+                        | WS_VISIBLE
+                        | WS_TABSTOP
+                        | WS_GROUP
+                        | WS_BORDER
+                        | ES_AUTOHSCROLL as u32,
+                    control_x,
+                    y,
+                    control_w,
+                    ROW_H - 2,
+                    hwnd,
+                    0,
+                    font,
+                );
+                entries.push(Entry {
+                    id: id.clone(),
+                    control: Control::Text(edit),
+                });
+                y += ROW_H + SPACING;
+            }
+            Field::Path {
+                id,
+                label,
+                value,
+                directory,
+            } => {
+                util::child(
+                    "STATIC",
+                    label,
+                    WS_CHILD | WS_VISIBLE | WS_GROUP,
+                    MARGIN,
+                    y + 4,
+                    LABEL_W,
+                    LABEL_H,
+                    hwnd,
+                    0,
+                    font,
+                );
+                let edit_w = control_w - BROWSE_W - SPACING;
+                let edit = util::child(
+                    "EDIT",
+                    value,
+                    WS_CHILD
+                        | WS_VISIBLE
+                        | WS_TABSTOP
+                        | WS_GROUP
+                        | WS_BORDER
+                        | ES_AUTOHSCROLL as u32,
+                    control_x,
+                    y,
+                    edit_w,
+                    ROW_H - 2,
+                    hwnd,
+                    0,
+                    font,
+                );
+                let browse_id = ID_BROWSE_BASE + browse.len();
+                util::child(
+                    "BUTTON",
+                    "Browse...",
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_PUSHBUTTON as u32,
+                    control_x + edit_w + SPACING,
+                    y - 1,
+                    BROWSE_W,
+                    ROW_H,
+                    hwnd,
+                    browse_id,
+                    font,
+                );
+                browse.push(BrowseTarget {
+                    edit,
+                    directory: *directory,
+                });
+                entries.push(Entry {
+                    id: id.clone(),
+                    control: Control::Text(edit),
+                });
+                y += ROW_H + SPACING;
+            }
+            Field::List {
+                id, label, items, ..
+            } => {
+                util::child(
+                    "STATIC",
+                    label,
+                    WS_CHILD | WS_VISIBLE | WS_GROUP,
+                    MARGIN,
+                    y,
+                    CLIENT_W - 2 * MARGIN,
+                    LABEL_H,
+                    hwnd,
+                    0,
+                    font,
+                );
+                y += LABEL_H + 2;
+                let edit = util::child(
+                    "EDIT",
+                    &items.join("\r\n"),
+                    WS_CHILD
+                        | WS_VISIBLE
+                        | WS_TABSTOP
+                        | WS_GROUP
+                        | WS_BORDER
+                        | WS_VSCROLL
+                        | (ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN) as u32,
+                    MARGIN,
+                    y,
+                    CLIENT_W - 2 * MARGIN,
+                    LIST_H,
+                    hwnd,
+                    0,
+                    font,
+                );
+                entries.push(Entry {
+                    id: id.clone(),
+                    control: Control::List(edit),
+                });
+                y += LIST_H + SPACING;
+            }
+            Field::Combo {
+                id,
+                label,
+                options,
+                selected,
+            } => {
+                util::child(
+                    "STATIC",
+                    label,
+                    WS_CHILD | WS_VISIBLE | WS_GROUP,
+                    MARGIN,
+                    y + 4,
+                    LABEL_W,
+                    LABEL_H,
+                    hwnd,
+                    0,
+                    font,
+                );
+                let combo = util::child(
+                    "COMBOBOX",
+                    "",
+                    WS_CHILD
+                        | WS_VISIBLE
+                        | WS_TABSTOP
+                        | WS_GROUP
+                        | WS_VSCROLL
+                        | CBS_DROPDOWNLIST as u32,
+                    control_x,
+                    y,
+                    control_w,
+                    200, // includes dropdown height
+                    hwnd,
+                    0,
+                    font,
+                );
+                for opt in options {
+                    let opt = util::wide(opt);
+                    unsafe { SendMessageW(combo, CB_ADDSTRING, 0, opt.as_ptr() as LPARAM) };
+                }
+                unsafe { SendMessageW(combo, CB_SETCURSEL, *selected, 0) };
+                entries.push(Entry {
+                    id: id.clone(),
+                    control: Control::Combo(combo),
+                });
+                y += ROW_H + SPACING;
+            }
+            Field::Check { id, label, value } => {
+                let check = util::child(
+                    "BUTTON",
+                    label,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_AUTOCHECKBOX as u32,
+                    MARGIN,
+                    y,
+                    CLIENT_W - 2 * MARGIN,
+                    RADIO_H,
+                    hwnd,
+                    0,
+                    font,
+                );
+                if *value {
+                    unsafe { SendMessageW(check, BM_SETCHECK, BST_CHECKED as usize, 0) };
+                }
+                entries.push(Entry {
+                    id: id.clone(),
+                    control: Control::Check(check),
+                });
+                y += RADIO_H + SPACING;
+            }
+            Field::Radio {
+                id,
+                label,
+                options,
+                selected,
+            } => {
+                util::child(
+                    "STATIC",
+                    label,
+                    WS_CHILD | WS_VISIBLE | WS_GROUP,
+                    MARGIN,
+                    y,
+                    CLIENT_W - 2 * MARGIN,
+                    LABEL_H,
+                    hwnd,
+                    0,
+                    font,
+                );
+                y += LABEL_H + 2;
+                let mut buttons = Vec::with_capacity(options.len());
+                for (i, opt) in options.iter().enumerate() {
+                    // WS_GROUP on the first button starts the radio group; the
+                    // next WS_GROUP control (any later field) ends it.
+                    let group = if i == 0 { WS_GROUP | WS_TABSTOP } else { 0 };
+                    let radio = util::child(
+                        "BUTTON",
+                        opt,
+                        WS_CHILD | WS_VISIBLE | group | BS_AUTORADIOBUTTON as u32,
+                        MARGIN + 8,
+                        y,
+                        CLIENT_W - 2 * MARGIN - 8,
+                        RADIO_H,
+                        hwnd,
+                        0,
+                        font,
+                    );
+                    if i == *selected {
+                        unsafe { SendMessageW(radio, BM_SETCHECK, BST_CHECKED as usize, 0) };
+                    }
+                    buttons.push(radio);
+                    y += RADIO_H;
+                }
+                entries.push(Entry {
+                    id: id.clone(),
+                    control: Control::Radio(buttons),
+                });
+                y += SPACING;
+            }
+        }
+    }
+
+    // Button row, right-aligned: [extras...] [cancel] [submit].
+    y += 4;
+    let total = (spec.extra_buttons.len() as i32 + 2) * (BUTTON_W + SPACING) - SPACING;
+    let mut bx = CLIENT_W - MARGIN - total;
+    for (i, btn) in spec.extra_buttons.iter().enumerate() {
+        util::child(
+            "BUTTON",
+            &btn.label,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_PUSHBUTTON as u32,
+            bx,
+            y,
+            BUTTON_W,
+            BUTTON_H,
+            hwnd,
+            ID_EXTRA_BASE + i,
+            font,
+        );
+        bx += BUTTON_W + SPACING;
+    }
+    util::child(
+        "BUTTON",
+        &spec.cancel_label,
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_PUSHBUTTON as u32,
+        bx,
+        y,
+        BUTTON_W,
+        BUTTON_H,
+        hwnd,
+        ID_CANCEL,
+        font,
+    );
+    util::child(
+        "BUTTON",
+        &spec.submit_label,
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_DEFPUSHBUTTON as u32,
+        bx + BUTTON_W + SPACING,
+        y,
+        BUTTON_W,
+        BUTTON_H,
+        hwnd,
+        ID_SUBMIT,
+        font,
+    );
+    y += BUTTON_H + MARGIN;
+
+    util::resize_client(hwnd, STYLE, CLIENT_W, y);
+
+    let state = Box::new(FormState {
+        decision: Cell::new(None),
+        browse,
+        paint,
+    });
+    let state_ptr = Box::into_raw(state);
+    unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, state_ptr as isize) };
+
+    util::show(hwnd);
+    run_loop(hwnd);
+
+    let values = read_values(&entries);
+    let decision = unsafe { (*state_ptr).decision.get() }.unwrap_or(Decision::Cancel);
+    unsafe {
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+        DestroyWindow(hwnd);
+        drop(Box::from_raw(state_ptr));
+    }
+
+    match decision {
+        Decision::Submit => FormOutcome::Submit(values),
+        Decision::Extra(i) => match spec.extra_buttons.get(i) {
+            Some(b) => FormOutcome::Button(b.id.clone(), values),
+            None => FormOutcome::Cancel,
+        },
+        Decision::Cancel => FormOutcome::Cancel,
+    }
+}
+
+/// Standard message loop with dialog navigation (Tab, Enter, Esc).
+fn run_loop(hwnd: HWND) {
+    unsafe {
+        let mut msg: MSG = std::mem::zeroed();
+        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+            if IsDialogMessageW(hwnd, &msg) != 0 {
+                continue;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+}
+
+fn read_values(entries: &[Entry]) -> FormValues {
+    let mut values = FormValues::default();
+    for entry in entries {
+        let value = match &entry.control {
+            Control::Text(edit) => FieldValue::Text(util::window_text(*edit)),
+            Control::List(edit) => FieldValue::List(
+                util::window_text(*edit)
+                    .lines()
+                    .map(|l| l.trim().to_string())
+                    .filter(|l| !l.is_empty())
+                    .collect(),
+            ),
+            Control::Combo(combo) => {
+                let sel = unsafe { SendMessageW(*combo, CB_GETCURSEL, 0, 0) };
+                FieldValue::Index(sel.max(0) as usize)
+            }
+            Control::Check(check) => FieldValue::Bool(
+                unsafe { SendMessageW(*check, BM_GETCHECK, 0, 0) } == BST_CHECKED as isize,
+            ),
+            Control::Radio(buttons) => {
+                let sel = buttons
+                    .iter()
+                    .position(|b| {
+                        (unsafe { SendMessageW(*b, BM_GETCHECK, 0, 0) }) == BST_CHECKED as isize
+                    })
+                    .unwrap_or(0);
+                FieldValue::Index(sel)
+            }
+        };
+        values.0.insert(entry.id.clone(), value);
+    }
+    values
+}
+
+unsafe extern "system" fn form_wndproc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut FormState;
+    if state_ptr.is_null() {
+        return DefWindowProcW(hwnd, msg, wparam, lparam);
+    }
+    let state = &*state_ptr;
+
+    if let Some(result) = state.paint.handle(hwnd, msg, wparam, lparam) {
+        return result;
+    }
+
+    match msg {
+        WM_COMMAND => {
+            let id = wparam & 0xFFFF;
+            match id {
+                ID_SUBMIT => {
+                    state.decision.set(Some(Decision::Submit));
+                    PostQuitMessage(0);
+                }
+                ID_CANCEL => {
+                    state.decision.set(Some(Decision::Cancel));
+                    PostQuitMessage(0);
+                }
+                _ if (ID_EXTRA_BASE..ID_BROWSE_BASE).contains(&id) => {
+                    state
+                        .decision
+                        .set(Some(Decision::Extra(id - ID_EXTRA_BASE)));
+                    PostQuitMessage(0);
+                }
+                _ if id >= ID_BROWSE_BASE => {
+                    if let Some(target) = state.browse.get(id - ID_BROWSE_BASE) {
+                        if let Some(path) = browse(hwnd, target.directory) {
+                            let path = util::wide(&path);
+                            SetWindowTextW(target.edit, path.as_ptr());
+                        }
+                    }
+                }
+                _ => {}
+            }
+            0
+        }
+        WM_CLOSE => {
+            state.decision.set(Some(Decision::Cancel));
+            PostQuitMessage(0);
+            0
+        }
+        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
+}
+
+fn browse(owner: HWND, directory: bool) -> Option<String> {
+    if directory {
+        browse_folder(owner)
+    } else {
+        browse_file(owner)
+    }
+}
+
+fn browse_folder(owner: HWND) -> Option<String> {
+    unsafe {
+        // Required for BIF_NEWDIALOGSTYLE; safe to call repeatedly.
+        CoInitializeEx(std::ptr::null(), COINIT_APARTMENTTHREADED as u32);
+        let mut display = [0u16; 260];
+        let bi = BROWSEINFOW {
+            hwndOwner: owner,
+            pidlRoot: std::ptr::null_mut(),
+            pszDisplayName: display.as_mut_ptr(),
+            lpszTitle: std::ptr::null(),
+            ulFlags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE,
+            lpfn: None,
+            lParam: 0,
+            iImage: 0,
+        };
+        let pidl = SHBrowseForFolderW(&bi);
+        if pidl.is_null() {
+            return None;
+        }
+        let mut path = [0u16; 260];
+        let ok = SHGetPathFromIDListW(pidl, path.as_mut_ptr());
+        CoTaskMemFree(pidl as *const c_void);
+        if ok == 0 {
+            return None;
+        }
+        let len = path.iter().position(|&c| c == 0).unwrap_or(path.len());
+        Some(String::from_utf16_lossy(&path[..len]))
+    }
+}
+
+fn browse_file(owner: HWND) -> Option<String> {
+    unsafe {
+        let mut file = [0u16; 1024];
+        let mut ofn: OPENFILENAMEW = std::mem::zeroed();
+        ofn.lStructSize = std::mem::size_of::<OPENFILENAMEW>() as u32;
+        ofn.hwndOwner = owner;
+        ofn.lpstrFile = file.as_mut_ptr();
+        ofn.nMaxFile = file.len() as u32;
+        ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+        if GetOpenFileNameW(&mut ofn) == 0 {
+            return None;
+        }
+        let len = file.iter().position(|&c| c == 0).unwrap_or(file.len());
+        Some(String::from_utf16_lossy(&file[..len]))
+    }
+}
