@@ -17,6 +17,8 @@ export struct FieldData {
 
 export component MainForm inherits Window {
     in property <string> window-title;
+    in property <length> window-width: 480px;
+    in property <length> window-height: 430px;
     in-out property <[FieldData]> fields;
     in property <string> submit-label: "OK";
     in property <string> cancel-label: "Cancel";
@@ -28,22 +30,29 @@ export component MainForm inherits Window {
     callback browse(int);
     callback list-add(int, string);
     callback list-remove(int, int);
+    callback selection-changed(int, int);
 
     title: window-title;
-    preferred-width: 560px;
-    preferred-height: 540px;
-    min-width: 460px;
+    preferred-width: root.window-width;
+    preferred-height: root.window-height;
+    min-width: 440px;
 
     VerticalBox {
-        padding: 16px;
-        spacing: 10px;
+        padding: 14px;
+        spacing: 8px;
 
         ScrollView {
             vertical-stretch: 1;
             VerticalBox {
-                spacing: 10px;
+                spacing: 8px;
                 for field[idx] in root.fields: VerticalBox {
-                    spacing: 4px;
+                    vertical-stretch: 0;
+                    height: field.kind == "list" ? 198px :
+                            field.kind == "radio" ? 28px :
+                            field.kind == "combo" ? 34px :
+                            field.kind == "check" ? 32px :
+                            field.kind == "section" ? 24px : 57px;
+                    spacing: 5px;
 
                     if field.kind == "section": Text {
                         text: field.label;
@@ -51,7 +60,7 @@ export component MainForm inherits Window {
                         font-size: 15px;
                     }
 
-                    if field.kind != "section" && field.kind != "check": Text {
+                    if field.kind == "text" || field.kind == "path": Text {
                         text: field.label;
                         font-weight: 600;
                     }
@@ -76,19 +85,10 @@ export component MainForm inherits Window {
 
                     if field.kind == "list": VerticalBox {
                         padding: 0;
-                        spacing: 4px;
-                        for item[j] in field.options: HorizontalBox {
-                            padding: 0;
-                            Text {
-                                text: item;
-                                horizontal-stretch: 1;
-                                overflow: elide;
-                                vertical-alignment: center;
-                            }
-                            Button {
-                                text: "Remove";
-                                clicked => { root.list-remove(idx, j); }
-                            }
+                        spacing: 5px;
+                        Text {
+                            text: field.label + ":";
+                            font-weight: 600;
                         }
                         HorizontalBox {
                             padding: 0;
@@ -108,20 +108,75 @@ export component MainForm inherits Window {
                                 }
                             }
                         }
+                        HorizontalBox {
+                            padding: 0;
+                            Text {
+                                text: "Queue:";
+                                font-weight: 600;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: "Remove";
+                                enabled: field.selected >= 0;
+                                clicked => { root.list-remove(idx, field.selected); }
+                            }
+                        }
+                        Rectangle {
+                            height: 96px;
+                            border-width: 1px;
+                            border-color: #555555;
+                            background: #00000010;
+                            ScrollView {
+                                for item[j] in field.options: Rectangle {
+                                    height: 25px;
+                                    background: field.selected == j ? #1687d933 : transparent;
+                                    TouchArea {
+                                        clicked => { root.fields[idx].selected = j; }
+                                    }
+                                    Text {
+                                        x: 6px;
+                                        width: parent.width - 12px;
+                                        height: parent.height;
+                                        text: item;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    if field.kind == "combo": ComboBox {
-                        model: field.options;
-                        current-index: field.selected;
-                        selected(value) => { root.fields[idx].selected = self.current-index; }
-                    }
-
-                    if field.kind == "radio": VerticalBox {
+                    if field.kind == "combo": HorizontalBox {
+                        width: 300px;
+                        horizontal-stretch: 0;
                         padding: 0;
-                        spacing: 2px;
+                        spacing: 8px;
+                        Text {
+                            text: field.label + ":";
+                            vertical-alignment: center;
+                        }
+                        ComboBox {
+                            width: 180px;
+                            model: field.options;
+                            current-index: field.selected;
+                            selected(value) => { root.fields[idx].selected = self.current-index; }
+                        }
+                    }
+
+                    if field.kind == "radio": HorizontalBox {
+                        padding: 0;
+                        spacing: 10px;
+                        if field.label != "": Text {
+                            text: field.label + ":";
+                            vertical-alignment: center;
+                        }
                         for opt[j] in field.options: TouchArea {
-                            height: 26px;
-                            clicked => { root.fields[idx].selected = j; }
+                            width: 86px;
+                            height: 28px;
+                            clicked => {
+                                root.fields[idx].selected = j;
+                                root.selection-changed(idx, j);
+                            }
                             HorizontalBox {
                                 padding: 0;
                                 spacing: 6px;
@@ -141,7 +196,6 @@ export component MainForm inherits Window {
                                 Text {
                                     text: opt;
                                     vertical-alignment: center;
-                                    horizontal-stretch: 1;
                                 }
                             }
                         }
@@ -165,13 +219,13 @@ export component MainForm inherits Window {
             }
             Rectangle { horizontal-stretch: 1; }
             Button {
-                text: root.cancel-label;
-                clicked => { root.cancel(); }
-            }
-            Button {
                 text: root.submit-label;
                 primary: true;
                 clicked => { root.submit(); }
+            }
+            Button {
+                text: root.cancel-label;
+                clicked => { root.cancel(); }
             }
         }
     }

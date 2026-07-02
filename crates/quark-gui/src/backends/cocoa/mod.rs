@@ -81,6 +81,7 @@ pub(crate) fn init_app(mtm: MainThreadMarker) -> Retained<NSApplication> {
     START.call_once(|| unsafe {
         app.finishLaunching();
     });
+    unsafe { app.activate() };
     app
 }
 

@@ -27,7 +27,7 @@ native-kirigami = ["dep:cxx", "dep:cxx-build", "dep:qt-build-utils"]
 
 [dependencies]
 crossbeam-channel = { workspace = true }
-slint = { version = "1.8", optional = true }
+slint = { version = "1.8", optional = true, features = ["unstable-winit-030"] }
 rfd = { version = "0.15", optional = true }
 # Qt backend (feature `native-kirigami`): a small C++ bridge to Qt Widgets.
 cxx = { version = "1", optional = true }
@@ -87,6 +87,7 @@ objc2-app-kit = { version = "0.2", optional = true, features = [
     "NSUserInterfaceLayout",
     "NSGraphics",
     "NSColor",
+    "NSFont",
 ] }
 
 [build-dependencies]

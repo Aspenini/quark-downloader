@@ -3,6 +3,8 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+#[cfg(target_os = "macos")]
+use std::sync::Once;
 use std::time::Duration;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, TimerMode, VecModel};
@@ -60,6 +62,7 @@ fn to_field_data(field: &Field) -> FieldData {
             // Items live in `options`; `text` carries the input placeholder.
             data.options = string_model(items);
             data.text = placeholder.into();
+            data.selected = if items.is_empty() { -1 } else { 0 };
         }
         Field::Radio {
             id,
@@ -83,6 +86,19 @@ fn to_field_data(field: &Field) -> FieldData {
             data.kind = "combo".into();
             data.label = label.into();
             data.options = string_model(options);
+            data.selected = *selected as i32;
+        }
+        Field::DependentCombo {
+            id,
+            label,
+            option_sets,
+            selected,
+            ..
+        } => {
+            data.id = id.into();
+            data.kind = "combo".into();
+            data.label = label.into();
+            data.options = string_model(option_sets.first().map(Vec::as_slice).unwrap_or_default());
             data.selected = *selected as i32;
         }
         Field::Check { id, label, value } => {
@@ -120,7 +136,7 @@ fn read_values(fields: &[Field], model: &Rc<VecModel<FieldData>>) -> FormValues 
                     .filter(|s| !s.trim().is_empty())
                     .collect(),
             ),
-            Field::Radio { .. } | Field::Combo { .. } => {
+            Field::Radio { .. } | Field::Combo { .. } | Field::DependentCombo { .. } => {
                 FieldValue::Index(row.selected.max(0) as usize)
             }
             Field::Check { .. } => FieldValue::Bool(row.checked),
@@ -133,15 +149,19 @@ fn read_values(fields: &[Field], model: &Rc<VecModel<FieldData>>) -> FormValues 
 
 impl Renderer for SlintRenderer {
     fn run_form(&self, spec: FormSpec) -> FormOutcome {
+        initialize_backend();
         let ui = match MainForm::new() {
             Ok(ui) => ui,
             Err(_) => return FormOutcome::Cancel,
         };
 
-        let rows: Vec<FieldData> = spec.fields.iter().map(to_field_data).collect();
+        let mut rows: Vec<FieldData> = spec.fields.iter().map(to_field_data).collect();
+        initialize_dependent_rows(&spec, &mut rows);
         let model = Rc::new(VecModel::from(rows));
         ui.set_fields(ModelRc::from(model.clone()));
         ui.set_window_title(spec.window.title.clone().into());
+        ui.set_window_width(spec.window.width);
+        ui.set_window_height(spec.window.height);
         ui.set_submit_label(spec.submit_label.clone().into());
         ui.set_cancel_label(spec.cancel_label.clone().into());
         let extras: Vec<SharedString> = spec
@@ -216,8 +236,32 @@ impl Renderer for SlintRenderer {
                 if let Some(mut row) = model.row_data(i) {
                     let mut items: Vec<SharedString> = row.options.iter().collect();
                     items.push(value.into());
+                    row.selected = items.len().saturating_sub(1) as i32;
                     row.options = ModelRc::from(Rc::new(VecModel::from(items)));
                     model.set_row_data(i, row);
+                }
+            });
+        }
+        {
+            let links = dependent_links(&spec);
+            let model = model.clone();
+            ui.on_selection_changed(move |controller_idx, selected| {
+                let controller_idx = controller_idx.max(0) as usize;
+                let selected = selected.max(0) as usize;
+                for (_, target_idx, option_sets) in links
+                    .iter()
+                    .filter(|(source_idx, _, _)| *source_idx == controller_idx)
+                {
+                    if let Some(mut row) = model.row_data(*target_idx) {
+                        row.options = string_model(
+                            option_sets
+                                .get(selected)
+                                .map(Vec::as_slice)
+                                .unwrap_or_default(),
+                        );
+                        row.selected = 0;
+                        model.set_row_data(*target_idx, row);
+                    }
                 }
             });
         }
@@ -230,6 +274,11 @@ impl Renderer for SlintRenderer {
                     let mut items: Vec<SharedString> = row.options.iter().collect();
                     if j < items.len() {
                         items.remove(j);
+                        row.selected = if items.is_empty() {
+                            -1
+                        } else {
+                            j.min(items.len() - 1) as i32
+                        };
                         row.options = ModelRc::from(Rc::new(VecModel::from(items)));
                         model.set_row_data(i, row);
                     }
@@ -254,6 +303,7 @@ impl Renderer for SlintRenderer {
     }
 
     fn run_progress(&self, spec: ProgressSpec, channel: ProgressChannel) -> i32 {
+        initialize_backend();
         let ui = match ProgressView::new() {
             Ok(ui) => ui,
             Err(_) => return drain_headless(&channel),
@@ -318,6 +368,7 @@ impl Renderer for SlintRenderer {
     }
 
     fn message(&self, kind: MessageKind, title: &str, body: &str) {
+        initialize_backend();
         let Ok(ui) = MessageDialog::new() else {
             eprintln!("{title}: {body}");
             return;
@@ -335,6 +386,66 @@ impl Renderer for SlintRenderer {
         "slint"
     }
 }
+
+fn initialize_dependent_rows(spec: &FormSpec, rows: &mut [FieldData]) {
+    for (idx, field) in spec.fields.iter().enumerate() {
+        let Field::DependentCombo {
+            controller,
+            option_sets,
+            ..
+        } = field
+        else {
+            continue;
+        };
+        let selected = spec.selected_index(controller);
+        if let Some(row) = rows.get_mut(idx) {
+            row.options = string_model(
+                option_sets
+                    .get(selected)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default(),
+            );
+        }
+    }
+}
+
+type DependentLink = (usize, usize, Vec<Vec<String>>);
+
+fn dependent_links(spec: &FormSpec) -> Vec<DependentLink> {
+    spec.fields
+        .iter()
+        .enumerate()
+        .filter_map(|(target_idx, field)| {
+            let Field::DependentCombo {
+                controller,
+                option_sets,
+                ..
+            } = field
+            else {
+                return None;
+            };
+            let source_idx = spec
+                .fields
+                .iter()
+                .position(|candidate| candidate.id() == Some(controller))?;
+            Some((source_idx, target_idx, option_sets.clone()))
+        })
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn initialize_backend() {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        let _ = slint::BackendSelector::new()
+            .backend_name("winit".into())
+            .with_winit_window_attributes_hook(|attributes| attributes.with_transparent(false))
+            .select();
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn initialize_backend() {}
 
 /// Fallback when the GUI cannot be created: drain updates and return the code.
 fn drain_headless(channel: &ProgressChannel) -> i32 {

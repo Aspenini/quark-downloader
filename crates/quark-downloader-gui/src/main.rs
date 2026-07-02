@@ -19,9 +19,8 @@ use quark_gui::{App, Backend};
 
 use download::DownloadParams;
 
-const FORMAT_OPTIONS: &[&str] = &[
-    "original", "mp4", "mkv", "webm", "mp3", "m4a", "flac", "wav", "opus", "vorbis",
-];
+const VIDEO_FORMAT_OPTIONS: &[&str] = &["original", "mp4", "mkv", "webm"];
+const AUDIO_FORMAT_OPTIONS: &[&str] = &["original", "mp3", "m4a", "flac", "wav", "opus", "vorbis"];
 const TOOL_OPTIONS: &[&str] = &["auto", "path", "bundled"];
 const SPACES_OPTIONS: &[&str] = &["keep", "underscore", "dash", "remove"];
 const BACKEND_OPTIONS: &[&str] = &["slint", "win32", "cocoa", "gtk", "kirigami"];
@@ -75,30 +74,37 @@ fn main_form(settings: &Settings, theme: Theme) -> FormSpec {
         .to_string_lossy()
         .to_string();
 
-    let mut form = FormSpec::new(WindowSpec::new(version::window_title(), theme));
+    let mut window = WindowSpec::new(version::window_title(), theme);
+    window.width = 480.0;
+    window.height = 430.0;
+    let mut form = FormSpec::new(window);
     form.submit_label = "Download".into();
-    form.cancel_label = "Quit".into();
+    form.cancel_label = "Close".into();
     form.extra_buttons.push(ExtraButton {
         id: "settings".into(),
-        label: "Settings".into(),
+        label: "⚙".into(),
     });
     form.fields = vec![
         Field::List {
             id: "urls".into(),
-            label: "URLs".into(),
+            label: "Video or playlist URL".into(),
             items: Vec::new(),
             placeholder: "https://...".into(),
         },
         Field::Radio {
             id: "media_type".into(),
-            label: "Type".into(),
-            options: vec!["audio".into(), "video".into()],
-            selected: 1,
+            label: String::new(),
+            options: vec!["video".into(), "audio".into()],
+            selected: 0,
         },
-        Field::Combo {
+        Field::DependentCombo {
             id: "format".into(),
             label: "Format".into(),
-            options: FORMAT_OPTIONS.iter().map(|s| s.to_string()).collect(),
+            controller: "media_type".into(),
+            option_sets: vec![
+                VIDEO_FORMAT_OPTIONS.iter().map(|s| s.to_string()).collect(),
+                AUDIO_FORMAT_OPTIONS.iter().map(|s| s.to_string()).collect(),
+            ],
             selected: 0,
         },
         Field::Path {
@@ -113,11 +119,16 @@ fn main_form(settings: &Settings, theme: Theme) -> FormSpec {
 
 fn parse_main(values: &FormValues) -> DownloadParams {
     let media_type = if values.index("media_type") == 0 {
-        MediaType::Audio
-    } else {
         MediaType::Video
+    } else {
+        MediaType::Audio
     };
-    let format = FORMAT_OPTIONS
+    let format_options = if media_type == MediaType::Audio {
+        AUDIO_FORMAT_OPTIONS
+    } else {
+        VIDEO_FORMAT_OPTIONS
+    };
+    let format = format_options
         .get(values.index("format"))
         .copied()
         .unwrap_or("original")
@@ -134,12 +145,15 @@ fn parse_main(values: &FormValues) -> DownloadParams {
 
 fn settings_form(settings: &Settings, theme: Theme) -> FormSpec {
     let backend_options = available_backend_options();
-    let mut form = FormSpec::new(WindowSpec::new(version::settings_window_title(), theme));
+    let mut window = WindowSpec::new(version::settings_window_title(), theme);
+    window.width = 480.0;
+    window.height = 600.0;
+    let mut form = FormSpec::new(window);
     form.submit_label = "Save".into();
     form.cancel_label = "Cancel".into();
     form.fields = vec![
         Field::Section {
-            label: "Download".into(),
+            label: "General".into(),
         },
         Field::Path {
             id: "download_dir".into(),
@@ -147,6 +161,12 @@ fn settings_form(settings: &Settings, theme: Theme) -> FormSpec {
             value: settings.download_dir.clone(),
             directory: true,
         },
+        combo(
+            "gui_theme",
+            "Theme",
+            THEME_OPTIONS,
+            settings.gui_theme.as_str(),
+        ),
         Field::Section {
             label: "Download Naming".into(),
         },
@@ -172,6 +192,20 @@ fn settings_form(settings: &Settings, theme: Theme) -> FormSpec {
             value: settings.playlist_folders,
         },
         Field::Section {
+            label: "Downloads".into(),
+        },
+        combo(
+            "gui_download_mode",
+            "Download window",
+            MODE_OPTIONS,
+            settings.gui_download_mode.as_str(),
+        ),
+        Field::Check {
+            id: "download_logs".into(),
+            label: "Create download logs".into(),
+            value: settings.download_logs,
+        },
+        Field::Section {
             label: "Tools".into(),
         },
         combo(
@@ -195,23 +229,6 @@ fn settings_form(settings: &Settings, theme: Theme) -> FormSpec {
             &backend_options,
             settings.gui_backend.as_str(),
         ),
-        combo(
-            "gui_download_mode",
-            "Download mode",
-            MODE_OPTIONS,
-            settings.gui_download_mode.as_str(),
-        ),
-        combo(
-            "gui_theme",
-            "Theme",
-            THEME_OPTIONS,
-            settings.gui_theme.as_str(),
-        ),
-        Field::Check {
-            id: "download_logs".into(),
-            label: "Write download logs".into(),
-            value: settings.download_logs,
-        },
     ];
     form
 }
@@ -264,4 +281,54 @@ fn available_backend_options() -> Vec<&'static str> {
 
 fn option_at<'a>(values: &FormValues, id: &str, options: &'a [&'a str]) -> &'a str {
     options.get(values.index(id)).copied().unwrap_or(options[0])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quark_gui::model::FieldValue;
+
+    #[test]
+    fn format_options_follow_media_type() {
+        let form = main_form(&Settings::default(), Theme::Light);
+        let format = form
+            .fields
+            .iter()
+            .find(|field| field.id() == Some("format"))
+            .expect("format field");
+        let Field::DependentCombo {
+            controller,
+            option_sets,
+            ..
+        } = format
+        else {
+            panic!("format must be a dependent combo");
+        };
+        assert_eq!(controller, "media_type");
+        assert_eq!(
+            option_sets[0],
+            VIDEO_FORMAT_OPTIONS
+                .iter()
+                .map(|format| format.to_string())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            option_sets[1],
+            AUDIO_FORMAT_OPTIONS
+                .iter()
+                .map(|format| format.to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn selected_format_is_read_from_the_active_media_type() {
+        let mut values = FormValues::default();
+        values.0.insert("media_type".into(), FieldValue::Index(1));
+        values.0.insert("format".into(), FieldValue::Index(1));
+        assert_eq!(parse_main(&values).format, "mp3");
+
+        values.0.insert("media_type".into(), FieldValue::Index(0));
+        assert_eq!(parse_main(&values).format, "mp4");
+    }
 }

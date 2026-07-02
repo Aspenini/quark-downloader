@@ -6,9 +6,10 @@ use std::rc::Rc;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2_app_kit::{
-    NSBackingStoreType, NSButton, NSControlStateValueOff, NSControlStateValueOn, NSLayoutAttribute,
-    NSModalResponseOK, NSOpenPanel, NSPopUpButton, NSScrollView, NSStackView, NSTextField,
-    NSTextView, NSUserInterfaceLayoutOrientation, NSView, NSWindow, NSWindowStyleMask,
+    NSBackingStoreType, NSButton, NSControlStateValueOff, NSControlStateValueOn, NSFont,
+    NSLayoutAttribute, NSModalResponseOK, NSOpenPanel, NSPopUpButton, NSScrollView, NSStackView,
+    NSStackViewGravity, NSTextField, NSTextView, NSUserInterfaceLayoutOrientation, NSView,
+    NSWindow, NSWindowStyleMask,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
 
@@ -29,7 +30,15 @@ enum Control {
     List(Retained<NSTextView>),
     Combo(Retained<NSPopUpButton>),
     Check(Retained<NSButton>),
-    Radio(Rc<Cell<usize>>),
+    Radio {
+        selected: Rc<Cell<usize>>,
+        dependents: Rc<RefCell<Vec<ComboDependency>>>,
+    },
+}
+
+struct ComboDependency {
+    popup: Retained<NSPopUpButton>,
+    option_sets: Vec<Vec<String>>,
 }
 
 struct Entry {
@@ -40,7 +49,21 @@ struct Entry {
 pub fn run_form(mtm: MainThreadMarker, spec: FormSpec) -> FormOutcome {
     let app = init_app(mtm);
 
-    let content = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(560.0, 560.0));
+    // Native controls are denser than Slint's widgets. Fit queue-style forms
+    // to their content instead of leaving a large empty lower half.
+    let window_height = if spec
+        .fields
+        .iter()
+        .any(|field| matches!(field, Field::List { .. }))
+    {
+        380.0
+    } else {
+        (spec.window.height as f64).min(550.0)
+    };
+    let content = NSRect::new(
+        NSPoint::new(0.0, 0.0),
+        NSSize::new(spec.window.width as f64, window_height),
+    );
     // No Closable: the window is dismissed via its buttons, so we don't need a
     // window-close delegate to end the modal loop.
     let style = NSWindowStyleMask::Titled
@@ -57,22 +80,24 @@ pub fn run_form(mtm: MainThreadMarker, spec: FormSpec) -> FormOutcome {
     };
     window.setTitle(&NSString::from_str(&spec.window.title));
 
-    let outer = vstack(mtm, 12.0);
+    let margin = 14.0;
+    let content_width = spec.window.width as f64 - margin * 2.0;
+    let content_height = window_height - margin * 2.0;
+    let outer = vstack(mtm, 10.0);
     unsafe {
-        outer.setEdgeInsets(objc2_foundation::NSEdgeInsets {
-            top: 16.0,
-            left: 16.0,
-            bottom: 16.0,
-            right: 16.0,
-        })
-    };
+        outer.setFrame(NSRect::new(
+            NSPoint::new(margin, margin),
+            NSSize::new(content_width, content_height),
+        ));
+    }
     let fields_stack = vstack(mtm, 8.0);
+    set_width(&fields_stack, content_width);
 
     let mut entries: Vec<Entry> = Vec::new();
     let mut targets: Vec<Retained<ActionTarget>> = Vec::new();
 
     for field in &spec.fields {
-        let row = build_field(mtm, field, &mut entries, &mut targets);
+        let row = build_field(mtm, field, content_width, &mut entries, &mut targets);
         unsafe { fields_stack.addArrangedSubview(&row) };
     }
     unsafe { outer.addArrangedSubview(&fields_stack) };
@@ -95,24 +120,26 @@ pub fn run_form(mtm: MainThreadMarker, spec: FormSpec) -> FormOutcome {
         let target = decide(decision.clone(), Decision::Extra(i));
         let b = push_button(mtm, &btn.label, &target);
         targets.push(target);
-        unsafe { buttons.addArrangedSubview(&b) };
-    }
-    {
-        let target = decide(decision.clone(), Decision::Cancel);
-        let b = push_button(mtm, &spec.cancel_label, &target);
-        targets.push(target);
-        unsafe { buttons.addArrangedSubview(&b) };
+        unsafe { buttons.addView_inGravity(&b, NSStackViewGravity::Leading) };
     }
     {
         let target = decide(decision.clone(), Decision::Submit);
         let b = push_button(mtm, &spec.submit_label, &target);
         targets.push(target);
-        unsafe { buttons.addArrangedSubview(&b) };
+        unsafe { buttons.addView_inGravity(&b, NSStackViewGravity::Trailing) };
     }
+    {
+        let target = decide(decision.clone(), Decision::Cancel);
+        let b = push_button(mtm, &spec.cancel_label, &target);
+        targets.push(target);
+        unsafe { buttons.addView_inGravity(&b, NSStackViewGravity::Trailing) };
+    }
+    set_width(&buttons, content_width);
     unsafe { outer.addArrangedSubview(&buttons) };
 
-    let content_view: &NSView = &outer;
-    window.setContentView(Some(content_view));
+    let content_view = unsafe { NSView::initWithFrame(mtm.alloc::<NSView>(), content) };
+    unsafe { content_view.addSubview(&outer) };
+    window.setContentView(Some(&content_view));
     window.center();
     window.makeKeyAndOrderFront(None);
 
@@ -137,31 +164,50 @@ pub fn run_form(mtm: MainThreadMarker, spec: FormSpec) -> FormOutcome {
 fn build_field(
     mtm: MainThreadMarker,
     field: &Field,
+    content_width: f64,
     entries: &mut Vec<Entry>,
     targets: &mut Vec<Retained<ActionTarget>>,
 ) -> Retained<NSStackView> {
     match field {
         Field::Section { label } => {
             let row = vstack(mtm, 2.0);
-            unsafe { row.addArrangedSubview(&label_view(mtm, label)) };
+            let heading = label_view(mtm, label);
+            let font = unsafe { NSFont::boldSystemFontOfSize(13.0) };
+            unsafe {
+                heading.setFont(Some(&font));
+                row.addArrangedSubview(&heading);
+            }
             row
         }
-        Field::Text { id, label, value }
-        | Field::Path {
+        Field::Text { id, label, value } => {
+            let row = vstack(mtm, 4.0);
+            unsafe { row.addArrangedSubview(&label_view(mtm, label)) };
+            let tf = text_field(mtm, value, content_width);
+            unsafe { row.addArrangedSubview(&tf) };
+            entries.push(Entry {
+                id: id.clone(),
+                control: Control::Text(tf),
+            });
+            row
+        }
+        Field::Path {
             id, label, value, ..
         } => {
-            let row = hstack(mtm, 8.0);
+            let row = vstack(mtm, 4.0);
             unsafe { row.addArrangedSubview(&label_view(mtm, label)) };
-            let tf = text_field(mtm, value);
-            unsafe { row.addArrangedSubview(&tf) };
-            if let Field::Path { directory, .. } = field {
-                let tf_cb = tf.clone();
-                let dir = *directory;
-                let target = ActionTarget::new(mtm, Box::new(move || browse(mtm, &tf_cb, dir)));
-                let b = push_button(mtm, "Browse...", &target);
-                targets.push(target);
-                unsafe { row.addArrangedSubview(&b) };
-            }
+            let controls = hstack(mtm, 8.0);
+            let tf = text_field(mtm, value, content_width - 96.0);
+            unsafe { controls.addArrangedSubview(&tf) };
+            let Field::Path { directory, .. } = field else {
+                unreachable!()
+            };
+            let tf_cb = tf.clone();
+            let dir = *directory;
+            let target = ActionTarget::new(mtm, Box::new(move || browse(mtm, &tf_cb, dir)));
+            let b = push_button(mtm, "Browse…", &target);
+            targets.push(target);
+            unsafe { controls.addArrangedSubview(&b) };
+            unsafe { row.addArrangedSubview(&controls) };
             entries.push(Entry {
                 id: id.clone(),
                 control: Control::Text(tf),
@@ -169,11 +215,62 @@ fn build_field(
             row
         }
         Field::List {
-            id, label, items, ..
+            id,
+            label,
+            items,
+            placeholder,
         } => {
-            let row = vstack(mtm, 4.0);
-            unsafe { row.addArrangedSubview(&label_view(mtm, label)) };
-            let (scroll, text_view) = text_area(mtm, &items.join("\n"));
+            let row = vstack(mtm, 5.0);
+            unsafe { row.addArrangedSubview(&label_view(mtm, &format!("{label}:"))) };
+            let entry_row = hstack(mtm, 8.0);
+            let input = text_field(mtm, "", content_width - 66.0);
+            unsafe { input.setPlaceholderString(Some(&NSString::from_str(placeholder))) };
+            unsafe { entry_row.addArrangedSubview(&input) };
+            let (scroll, text_view) = text_area(mtm, &items.join("\n"), content_width);
+            let input_cb = input.clone();
+            let text_cb = text_view.clone();
+            let add_target = ActionTarget::new(
+                mtm,
+                Box::new(move || {
+                    let value = unsafe { input_cb.stringValue() }.to_string();
+                    if value.trim().is_empty() {
+                        return;
+                    }
+                    let current = unsafe { text_cb.string() }.to_string();
+                    let updated = if current.trim().is_empty() {
+                        value
+                    } else {
+                        format!("{current}\n{value}")
+                    };
+                    unsafe {
+                        text_cb.setString(&NSString::from_str(&updated));
+                        input_cb.setStringValue(&NSString::from_str(""));
+                    }
+                }),
+            );
+            let add = push_button(mtm, "Add", &add_target);
+            targets.push(add_target);
+            unsafe { entry_row.addArrangedSubview(&add) };
+            unsafe { row.addArrangedSubview(&entry_row) };
+
+            let queue_header = hstack(mtm, 8.0);
+            let queue_label = label_view(mtm, "Queue:");
+            unsafe { queue_header.addView_inGravity(&queue_label, NSStackViewGravity::Leading) };
+            let text_cb = text_view.clone();
+            let remove_target = ActionTarget::new(
+                mtm,
+                Box::new(move || {
+                    let current = unsafe { text_cb.string() }.to_string();
+                    let mut lines: Vec<&str> = current.lines().collect();
+                    lines.pop();
+                    unsafe { text_cb.setString(&NSString::from_str(&lines.join("\n"))) };
+                }),
+            );
+            let remove = push_button(mtm, "Remove", &remove_target);
+            targets.push(remove_target);
+            unsafe { queue_header.addView_inGravity(&remove, NSStackViewGravity::Trailing) };
+            set_width(&queue_header, content_width);
+            unsafe { row.addArrangedSubview(&queue_header) };
             unsafe { row.addArrangedSubview(&scroll) };
             entries.push(Entry {
                 id: id.clone(),
@@ -188,9 +285,48 @@ fn build_field(
             selected,
         } => {
             let row = hstack(mtm, 8.0);
-            unsafe { row.addArrangedSubview(&label_view(mtm, label)) };
+            unsafe { row.addArrangedSubview(&label_view(mtm, &format!("{label}:"))) };
             let pop = pop_up(mtm, options, *selected);
             unsafe { row.addArrangedSubview(&pop) };
+            entries.push(Entry {
+                id: id.clone(),
+                control: Control::Combo(pop),
+            });
+            row
+        }
+        Field::DependentCombo {
+            id,
+            label,
+            controller,
+            option_sets,
+            selected,
+        } => {
+            let row = hstack(mtm, 8.0);
+            unsafe { row.addArrangedSubview(&label_view(mtm, &format!("{label}:"))) };
+            let controller_selected = entries
+                .iter()
+                .find(|entry| entry.id == *controller)
+                .and_then(|entry| match &entry.control {
+                    Control::Radio { selected, .. } => Some(selected.get()),
+                    _ => None,
+                })
+                .unwrap_or(0);
+            let options = option_sets
+                .get(controller_selected)
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            let pop = pop_up(mtm, options, *selected);
+            unsafe { row.addArrangedSubview(&pop) };
+            if let Some(Control::Radio { dependents, .. }) = entries
+                .iter()
+                .find(|entry| entry.id == *controller)
+                .map(|entry| &entry.control)
+            {
+                dependents.borrow_mut().push(ComboDependency {
+                    popup: pop.clone(),
+                    option_sets: option_sets.clone(),
+                });
+            }
             entries.push(Entry {
                 id: id.clone(),
                 control: Control::Combo(pop),
@@ -213,21 +349,35 @@ fn build_field(
             options,
             selected,
         } => {
-            let row = vstack(mtm, 2.0);
-            unsafe { row.addArrangedSubview(&label_view(mtm, label)) };
+            let row = hstack(mtm, 10.0);
+            if !label.is_empty() {
+                unsafe { row.addArrangedSubview(&label_view(mtm, &format!("{label}:"))) };
+            }
             let state = Rc::new(Cell::new(*selected));
+            let dependents = Rc::new(RefCell::new(Vec::<ComboDependency>::new()));
             let buttons: Rc<Vec<Retained<NSButton>>> =
                 Rc::new(options.iter().map(|o| radio_button(mtm, o)).collect());
             for (i, b) in buttons.iter().enumerate() {
                 unsafe { b.setState(bool_state(i == *selected)) };
                 let state_cb = state.clone();
                 let buttons_cb = buttons.clone();
+                let dependents_cb = dependents.clone();
                 let target = ActionTarget::new(
                     mtm,
                     Box::new(move || {
                         state_cb.set(i);
                         for (j, other) in buttons_cb.iter().enumerate() {
                             unsafe { other.setState(bool_state(j == i)) };
+                        }
+                        for dependency in dependents_cb.borrow().iter() {
+                            reset_pop_up(
+                                &dependency.popup,
+                                dependency
+                                    .option_sets
+                                    .get(i)
+                                    .map(Vec::as_slice)
+                                    .unwrap_or_default(),
+                            );
                         }
                     }),
                 );
@@ -237,7 +387,10 @@ fn build_field(
             }
             entries.push(Entry {
                 id: id.clone(),
-                control: Control::Radio(state),
+                control: Control::Radio {
+                    selected: state,
+                    dependents,
+                },
             });
             row
         }
@@ -261,7 +414,7 @@ fn read_values(entries: &[Entry]) -> FormValues {
                 FieldValue::Index(unsafe { pop.indexOfSelectedItem() }.max(0) as usize)
             }
             Control::Check(b) => FieldValue::Bool(unsafe { b.state() } == NSControlStateValueOn),
-            Control::Radio(state) => FieldValue::Index(state.get()),
+            Control::Radio { selected, .. } => FieldValue::Index(selected.get()),
         };
         values.0.insert(entry.id.clone(), value);
     }
@@ -305,16 +458,20 @@ fn label_view(mtm: MainThreadMarker, text: &str) -> Retained<NSTextField> {
     unsafe { NSTextField::labelWithString(&NSString::from_str(text), mtm) }
 }
 
-fn text_field(mtm: MainThreadMarker, value: &str) -> Retained<NSTextField> {
-    let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(360.0, 24.0));
+fn text_field(mtm: MainThreadMarker, value: &str, width: f64) -> Retained<NSTextField> {
+    let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, 24.0));
     let tf = unsafe { NSTextField::initWithFrame(mtm.alloc::<NSTextField>(), rect) };
     unsafe { tf.setStringValue(&NSString::from_str(value)) };
-    set_width(&tf, 360.0);
+    set_width(&tf, width);
     tf
 }
 
-fn text_area(mtm: MainThreadMarker, value: &str) -> (Retained<NSScrollView>, Retained<NSTextView>) {
-    let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(500.0, 110.0));
+fn text_area(
+    mtm: MainThreadMarker,
+    value: &str,
+    width: f64,
+) -> (Retained<NSScrollView>, Retained<NSTextView>) {
+    let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, 96.0));
     let tv = unsafe { NSTextView::initWithFrame(mtm.alloc::<NSTextView>(), rect) };
     unsafe { tv.setString(&NSString::from_str(value)) };
     let scroll = unsafe { NSScrollView::initWithFrame(mtm.alloc::<NSScrollView>(), rect) };
@@ -323,8 +480,8 @@ fn text_area(mtm: MainThreadMarker, value: &str) -> (Retained<NSScrollView>, Ret
         let doc: &NSView = &tv;
         scroll.setDocumentView(Some(doc));
     }
-    set_width(&scroll, 500.0);
-    set_height(&scroll, 110.0);
+    set_width(&scroll, width);
+    set_height(&scroll, 96.0);
     (scroll, tv)
 }
 
@@ -355,6 +512,16 @@ fn pop_up(mtm: MainThreadMarker, options: &[String], selected: usize) -> Retaine
     }
     unsafe { pop.selectItemAtIndex(selected as isize) };
     pop
+}
+
+fn reset_pop_up(pop: &NSPopUpButton, options: &[String]) {
+    unsafe {
+        pop.removeAllItems();
+        for option in options {
+            pop.addItemWithTitle(&NSString::from_str(option));
+        }
+        pop.selectItemAtIndex(0);
+    }
 }
 
 fn checkbox(mtm: MainThreadMarker, label: &str, value: bool) -> Retained<NSButton> {

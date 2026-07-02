@@ -46,8 +46,9 @@ pub fn run_form(spec: FormSpec) -> FormOutcome {
 
     let mut entries: Vec<Entry> = Vec::new();
     for field in &spec.fields {
-        outer.append(&build_field(&window, field, &mut entries));
+        outer.append(&build_field(&window, &spec, field, &mut entries));
     }
+    wire_dependencies(&spec, &entries);
 
     // Button row, right-aligned: [extras...] [cancel] [submit].
     let decision = Rc::new(Cell::new(None::<Decision>));
@@ -68,10 +69,10 @@ pub fn run_form(spec: FormSpec) -> FormOutcome {
     for (i, btn) in spec.extra_buttons.iter().enumerate() {
         buttons.append(&decide(&btn.label, Decision::Extra(i)));
     }
-    buttons.append(&decide(&spec.cancel_label, Decision::Cancel));
     let submit = decide(&spec.submit_label, Decision::Submit);
     submit.add_css_class("suggested-action");
     buttons.append(&submit);
+    buttons.append(&decide(&spec.cancel_label, Decision::Cancel));
     outer.append(&buttons);
 
     {
@@ -102,7 +103,12 @@ pub fn run_form(spec: FormSpec) -> FormOutcome {
     }
 }
 
-fn build_field(window: &gtk::Window, field: &Field, entries: &mut Vec<Entry>) -> gtk::Widget {
+fn build_field(
+    window: &gtk::Window,
+    spec: &FormSpec,
+    field: &Field,
+    entries: &mut Vec<Entry>,
+) -> gtk::Widget {
     match field {
         Field::Section { label } => {
             let l = gtk::Label::new(None);
@@ -183,6 +189,28 @@ fn build_field(window: &gtk::Window, field: &Field, entries: &mut Vec<Entry>) ->
             });
             row.upcast()
         }
+        Field::DependentCombo {
+            id,
+            label,
+            controller,
+            option_sets,
+            selected,
+        } => {
+            let row = labeled_row(label);
+            let options = option_sets
+                .get(spec.selected_index(controller))
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            let strs: Vec<&str> = options.iter().map(String::as_str).collect();
+            let drop = gtk::DropDown::from_strings(&strs);
+            drop.set_selected(*selected as u32);
+            row.append(&drop);
+            entries.push(Entry {
+                id: id.clone(),
+                control: Control::Combo(drop),
+            });
+            row.upcast()
+        }
         Field::Check { id, label, value } => {
             let check = gtk::CheckButton::with_label(label);
             check.set_active(*value);
@@ -198,8 +226,15 @@ fn build_field(window: &gtk::Window, field: &Field, entries: &mut Vec<Entry>) ->
             options,
             selected,
         } => {
-            let col = gtk::Box::new(gtk::Orientation::Vertical, 2);
-            col.append(&start_label(label));
+            let orientation = if label.is_empty() {
+                gtk::Orientation::Horizontal
+            } else {
+                gtk::Orientation::Vertical
+            };
+            let col = gtk::Box::new(orientation, 8);
+            if !label.is_empty() {
+                col.append(&start_label(label));
+            }
             let mut buttons: Vec<gtk::CheckButton> = Vec::with_capacity(options.len());
             for (i, opt) in options.iter().enumerate() {
                 let b = gtk::CheckButton::with_label(opt);
@@ -215,6 +250,47 @@ fn build_field(window: &gtk::Window, field: &Field, entries: &mut Vec<Entry>) ->
                 control: Control::Radio(buttons),
             });
             col.upcast()
+        }
+    }
+}
+
+fn wire_dependencies(spec: &FormSpec, entries: &[Entry]) {
+    for field in &spec.fields {
+        let Field::DependentCombo {
+            id,
+            controller,
+            option_sets,
+            ..
+        } = field
+        else {
+            continue;
+        };
+        let Some(Control::Combo(drop)) = entries
+            .iter()
+            .find(|entry| entry.id == *id)
+            .map(|entry| &entry.control)
+        else {
+            continue;
+        };
+        let Some(Control::Radio(buttons)) = entries
+            .iter()
+            .find(|entry| entry.id == *controller)
+            .map(|entry| &entry.control)
+        else {
+            continue;
+        };
+        for (index, button) in buttons.iter().enumerate() {
+            let drop = drop.clone();
+            let options = option_sets.get(index).cloned().unwrap_or_default();
+            button.connect_toggled(move |button| {
+                if !button.is_active() {
+                    return;
+                }
+                let strs: Vec<&str> = options.iter().map(String::as_str).collect();
+                let model = gtk::StringList::new(&strs);
+                drop.set_model(Some(&model));
+                drop.set_selected(0);
+            });
         }
     }
 }

@@ -19,8 +19,12 @@
 #include <QRadioButton>
 #include <QStyle>
 #include <QStyleFactory>
+#include <QStringList>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#include <algorithm>
+#include <vector>
 
 namespace quark_gui_qt {
 namespace {
@@ -33,6 +37,7 @@ constexpr std::uint8_t kFieldCombo = 3;
 constexpr std::uint8_t kFieldCheck = 4;
 constexpr std::uint8_t kFieldPath = 5;
 constexpr std::uint8_t kFieldSection = 6;
+constexpr std::uint8_t kFieldDependentCombo = 7;
 
 // Value kinds, mirroring ValueFfi::kind.
 constexpr std::uint8_t kValueText = 0;
@@ -90,6 +95,12 @@ struct BoundField {
   QButtonGroup *radios = nullptr;
 };
 
+struct ComboDependency {
+  QString controller_id;
+  QComboBox *combo = nullptr;
+  std::vector<QStringList> option_sets;
+};
+
 QLabel *section_label(QString const &text) {
   auto *label = new QLabel(text);
   QFont font = label->font();
@@ -118,6 +129,7 @@ FormResultFfi qt_run_form(FormFfi const &form) {
 
   auto *outer = new QVBoxLayout(&dialog);
   std::vector<BoundField> bound;
+  std::vector<ComboDependency> dependencies;
 
   for (FieldFfi const &field : form.fields) {
     BoundField b;
@@ -165,7 +177,8 @@ FormResultFfi qt_run_form(FormFfi const &form) {
       outer->addWidget(b.text);
       break;
     }
-    case kFieldCombo: {
+    case kFieldCombo:
+    case kFieldDependentCombo: {
       auto *row = new QHBoxLayout();
       auto *label = new QLabel(qs(field.label));
       label->setMinimumWidth(150);
@@ -177,6 +190,21 @@ FormResultFfi qt_run_form(FormFfi const &form) {
       b.combo->setCurrentIndex(static_cast<int>(field.selected));
       row->addWidget(b.combo, 1);
       outer->addLayout(row);
+      if (field.kind == kFieldDependentCombo) {
+        ComboDependency dependency;
+        dependency.controller_id = qs(field.controller);
+        dependency.combo = b.combo;
+        std::size_t offset = 0;
+        for (std::size_t size : field.option_set_sizes) {
+          QStringList options;
+          for (std::size_t i = 0; i < size && offset < field.dependent_options.size();
+               ++i, ++offset) {
+            options.append(qs(field.dependent_options[offset]));
+          }
+          dependency.option_sets.push_back(std::move(options));
+        }
+        dependencies.push_back(std::move(dependency));
+      }
       break;
     }
     case kFieldCheck: {
@@ -186,16 +214,21 @@ FormResultFfi qt_run_form(FormFfi const &form) {
       break;
     }
     case kFieldRadio: {
-      outer->addWidget(new QLabel(qs(field.label)));
+      auto *radio_row = new QHBoxLayout();
+      if (!field.label.empty()) {
+        radio_row->addWidget(new QLabel(qs(field.label)));
+      }
       b.radios = new QButtonGroup(&dialog);
       int i = 0;
       for (rust::String const &opt : field.options) {
         auto *radio = new QRadioButton(qs(opt));
         radio->setChecked(static_cast<std::size_t>(i) == field.selected);
         b.radios->addButton(radio, i);
-        outer->addWidget(radio);
+        radio_row->addWidget(radio);
         ++i;
       }
+      radio_row->addStretch(1);
+      outer->addLayout(radio_row);
       break;
     }
     default:
@@ -204,6 +237,26 @@ FormResultFfi qt_run_form(FormFfi const &form) {
     if (field.kind != kFieldSection) {
       bound.push_back(b);
     }
+  }
+
+  for (ComboDependency const &dependency : dependencies) {
+    auto controller =
+        std::find_if(bound.begin(), bound.end(), [&dependency](BoundField const &field) {
+          return field.id == dependency.controller_id && field.radios != nullptr;
+        });
+    if (controller == bound.end()) {
+      continue;
+    }
+    QComboBox *combo = dependency.combo;
+    auto option_sets = dependency.option_sets;
+    QObject::connect(controller->radios, &QButtonGroup::idClicked, &dialog,
+                     [combo, option_sets](int index) {
+                       combo->clear();
+                       if (index >= 0 && static_cast<std::size_t>(index) < option_sets.size()) {
+                         combo->addItems(option_sets[static_cast<std::size_t>(index)]);
+                       }
+                       combo->setCurrentIndex(0);
+                     });
   }
 
   // Button row, right-aligned: [extras...] [cancel] [submit].
@@ -217,13 +270,13 @@ FormResultFfi qt_run_form(FormFfi const &form) {
     buttons->addWidget(button);
     ++extra_index;
   }
-  auto *cancel = new QPushButton(qs(form.cancel_label));
-  QObject::connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
-  buttons->addWidget(cancel);
   auto *submit = new QPushButton(qs(form.submit_label));
   submit->setDefault(true);
   QObject::connect(submit, &QPushButton::clicked, &dialog, &QDialog::accept);
   buttons->addWidget(submit);
+  auto *cancel = new QPushButton(qs(form.cancel_label));
+  QObject::connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
+  buttons->addWidget(cancel);
   outer->addLayout(buttons);
 
   int code = dialog.exec();
@@ -255,6 +308,7 @@ FormResultFfi qt_run_form(FormFfi const &form) {
       break;
     }
     case kFieldCombo:
+    case kFieldDependentCombo:
       value.kind = kValueIndex;
       value.index = static_cast<std::size_t>(std::max(0, b.combo->currentIndex()));
       break;

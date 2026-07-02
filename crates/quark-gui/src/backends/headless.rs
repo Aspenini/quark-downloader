@@ -21,9 +21,9 @@ impl Renderer for HeadlessRenderer {
                     FieldValue::Text(value.clone())
                 }
                 Field::List { items, .. } => FieldValue::List(items.clone()),
-                Field::Radio { selected, .. } | Field::Combo { selected, .. } => {
-                    FieldValue::Index(*selected)
-                }
+                Field::Radio { selected, .. }
+                | Field::Combo { selected, .. }
+                | Field::DependentCombo { selected, .. } => FieldValue::Index(*selected),
                 Field::Check { value, .. } => FieldValue::Bool(*value),
                 Field::Section { .. } => continue,
             };

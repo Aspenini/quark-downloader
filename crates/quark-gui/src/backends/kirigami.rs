@@ -12,7 +12,7 @@ use crate::model::{
 #[cxx::bridge(namespace = "quark_gui_qt")]
 mod ffi {
     /// One form field. `kind`: 0 text, 1 list, 2 radio, 3 combo, 4 check,
-    /// 5 path (`flag` = directory), 6 section.
+    /// 5 path (`flag` = directory), 6 section, 7 dependent combo.
     struct FieldFfi {
         kind: u8,
         id: String,
@@ -21,6 +21,9 @@ mod ffi {
         options: Vec<String>,
         selected: usize,
         flag: bool,
+        controller: String,
+        option_set_sizes: Vec<usize>,
+        dependent_options: Vec<String>,
     }
 
     struct FormFfi {
@@ -189,6 +192,23 @@ fn to_form_ffi(spec: &FormSpec) -> ffi::FormFfi {
                 options,
                 selected,
             } => field_ffi(3, id, label, "", options, *selected, false),
+            Field::DependentCombo {
+                id,
+                label,
+                controller,
+                option_sets,
+                selected,
+            } => {
+                let options = option_sets
+                    .get(spec.selected_index(controller))
+                    .map(Vec::as_slice)
+                    .unwrap_or_default();
+                let mut field = field_ffi(7, id, label, "", options, *selected, false);
+                field.controller = controller.clone();
+                field.option_set_sizes = option_sets.iter().map(Vec::len).collect();
+                field.dependent_options = option_sets.iter().flatten().cloned().collect();
+                field
+            }
             Field::Check { id, label, value } => field_ffi(4, id, label, "", &[], 0, *value),
             Field::Path {
                 id,
@@ -228,6 +248,9 @@ fn field_ffi(
         options: options.to_vec(),
         selected,
         flag,
+        controller: String::new(),
+        option_set_sizes: Vec::new(),
+        dependent_options: Vec::new(),
     }
 }
 

@@ -92,6 +92,19 @@ pub enum Field {
         /// Index of the initially selected item.
         selected: usize,
     },
+    /// A dropdown whose options follow the selected index of another field.
+    DependentCombo {
+        /// Key for reading the value back.
+        id: String,
+        /// Label shown beside the dropdown.
+        label: String,
+        /// ID of the controlling radio field.
+        controller: String,
+        /// One option list per controller selection.
+        option_sets: Vec<Vec<String>>,
+        /// Index of the initially selected item.
+        selected: usize,
+    },
     /// A boolean toggle.
     Check {
         /// Key for reading the value back.
@@ -127,9 +140,20 @@ impl Field {
             | Field::List { id, .. }
             | Field::Radio { id, .. }
             | Field::Combo { id, .. }
+            | Field::DependentCombo { id, .. }
             | Field::Check { id, .. }
             | Field::Path { id, .. } => Some(id),
             Field::Section { .. } => None,
+        }
+    }
+
+    /// Resolve this field's initial selected index, when it has one.
+    pub fn selected_index(&self) -> Option<usize> {
+        match self {
+            Field::Radio { selected, .. }
+            | Field::Combo { selected, .. }
+            | Field::DependentCombo { selected, .. } => Some(*selected),
+            _ => None,
         }
     }
 }
@@ -169,6 +193,15 @@ impl FormSpec {
             extra_buttons: Vec::new(),
         }
     }
+
+    /// Initial selected index for an input field, defaulting to zero.
+    pub fn selected_index(&self, id: &str) -> usize {
+        self.fields
+            .iter()
+            .find(|field| field.id() == Some(id))
+            .and_then(Field::selected_index)
+            .unwrap_or(0)
+    }
 }
 
 /// The value of one field after the user submits.
@@ -178,7 +211,7 @@ pub enum FieldValue {
     Text(String),
     /// From [`Field::List`].
     List(Vec<String>),
-    /// From [`Field::Radio`] and [`Field::Combo`]: the selected index.
+    /// From radio and combo fields: the selected index.
     Index(usize),
     /// From [`Field::Check`].
     Bool(bool),

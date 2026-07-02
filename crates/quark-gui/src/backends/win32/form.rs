@@ -18,9 +18,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, GetWindowLongPtrW,
     IsDialogMessageW, PostQuitMessage, SendMessageW, SetWindowLongPtrW, SetWindowTextW,
     TranslateMessage, BM_GETCHECK, BM_SETCHECK, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL,
-    CB_SETCURSEL, ES_AUTOHSCROLL, ES_AUTOVSCROLL, ES_MULTILINE, ES_WANTRETURN, GWLP_USERDATA, MSG,
-    WINDOW_STYLE, WM_CLOSE, WM_COMMAND, WS_BORDER, WS_CAPTION, WS_CHILD, WS_GROUP, WS_MINIMIZEBOX,
-    WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
+    CB_RESETCONTENT, CB_SETCURSEL, ES_AUTOHSCROLL, ES_AUTOVSCROLL, ES_MULTILINE, ES_WANTRETURN,
+    GWLP_USERDATA, MSG, WINDOW_STYLE, WM_CLOSE, WM_COMMAND, WS_BORDER, WS_CAPTION, WS_CHILD,
+    WS_GROUP, WS_MINIMIZEBOX, WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     BS_AUTOCHECKBOX, BS_AUTORADIOBUTTON, BS_DEFPUSHBUTTON, BS_PUSHBUTTON,
@@ -74,10 +74,17 @@ struct BrowseTarget {
     directory: bool,
 }
 
+struct ComboDependency {
+    radio_buttons: Vec<HWND>,
+    combo: HWND,
+    option_sets: Vec<Vec<String>>,
+}
+
 /// Shared with the wndproc through GWLP_USERDATA.
 struct FormState {
     decision: Cell<Option<Decision>>,
     browse: Vec<BrowseTarget>,
+    dependencies: Vec<ComboDependency>,
     paint: ThemePaint,
 }
 
@@ -295,6 +302,53 @@ pub fn run_form(spec: FormSpec) -> FormOutcome {
                 });
                 y += ROW_H + SPACING;
             }
+            Field::DependentCombo {
+                id,
+                label,
+                controller,
+                option_sets,
+                selected,
+            } => {
+                util::child(
+                    "STATIC",
+                    label,
+                    WS_CHILD | WS_VISIBLE | WS_GROUP,
+                    MARGIN,
+                    y + 4,
+                    LABEL_W,
+                    LABEL_H,
+                    hwnd,
+                    0,
+                    font,
+                );
+                let combo = util::child(
+                    "COMBOBOX",
+                    "",
+                    WS_CHILD
+                        | WS_VISIBLE
+                        | WS_TABSTOP
+                        | WS_GROUP
+                        | WS_VSCROLL
+                        | CBS_DROPDOWNLIST as u32,
+                    control_x,
+                    y,
+                    control_w,
+                    200,
+                    hwnd,
+                    0,
+                    font,
+                );
+                let options = option_sets
+                    .get(spec.selected_index(controller))
+                    .map(Vec::as_slice)
+                    .unwrap_or_default();
+                set_combo_options(combo, options, *selected);
+                entries.push(Entry {
+                    id: id.clone(),
+                    control: Control::Combo(combo),
+                });
+                y += ROW_H + SPACING;
+            }
             Field::Check { id, label, value } => {
                 let check = util::child(
                     "BUTTON",
@@ -323,19 +377,22 @@ pub fn run_form(spec: FormSpec) -> FormOutcome {
                 options,
                 selected,
             } => {
-                util::child(
-                    "STATIC",
-                    label,
-                    WS_CHILD | WS_VISIBLE | WS_GROUP,
-                    MARGIN,
-                    y,
-                    CLIENT_W - 2 * MARGIN,
-                    LABEL_H,
-                    hwnd,
-                    0,
-                    font,
-                );
-                y += LABEL_H + 2;
+                let horizontal = label.is_empty();
+                if !horizontal {
+                    util::child(
+                        "STATIC",
+                        label,
+                        WS_CHILD | WS_VISIBLE | WS_GROUP,
+                        MARGIN,
+                        y,
+                        CLIENT_W - 2 * MARGIN,
+                        LABEL_H,
+                        hwnd,
+                        0,
+                        font,
+                    );
+                    y += LABEL_H + 2;
+                }
                 let mut buttons = Vec::with_capacity(options.len());
                 for (i, opt) in options.iter().enumerate() {
                     // WS_GROUP on the first button starts the radio group; the
@@ -345,9 +402,17 @@ pub fn run_form(spec: FormSpec) -> FormOutcome {
                         "BUTTON",
                         opt,
                         WS_CHILD | WS_VISIBLE | group | BS_AUTORADIOBUTTON as u32,
-                        MARGIN + 8,
+                        if horizontal {
+                            MARGIN + i as i32 * 100
+                        } else {
+                            MARGIN + 8
+                        },
                         y,
-                        CLIENT_W - 2 * MARGIN - 8,
+                        if horizontal {
+                            92
+                        } else {
+                            CLIENT_W - 2 * MARGIN - 8
+                        },
                         RADIO_H,
                         hwnd,
                         0,
@@ -357,6 +422,11 @@ pub fn run_form(spec: FormSpec) -> FormOutcome {
                         unsafe { SendMessageW(radio, BM_SETCHECK, BST_CHECKED as usize, 0) };
                     }
                     buttons.push(radio);
+                    if !horizontal {
+                        y += RADIO_H;
+                    }
+                }
+                if horizontal {
                     y += RADIO_H;
                 }
                 entries.push(Entry {
@@ -389,21 +459,9 @@ pub fn run_form(spec: FormSpec) -> FormOutcome {
     }
     util::child(
         "BUTTON",
-        &spec.cancel_label,
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_PUSHBUTTON as u32,
-        bx,
-        y,
-        BUTTON_W,
-        BUTTON_H,
-        hwnd,
-        ID_CANCEL,
-        font,
-    );
-    util::child(
-        "BUTTON",
         &spec.submit_label,
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_DEFPUSHBUTTON as u32,
-        bx + BUTTON_W + SPACING,
+        bx,
         y,
         BUTTON_W,
         BUTTON_H,
@@ -411,13 +469,27 @@ pub fn run_form(spec: FormSpec) -> FormOutcome {
         ID_SUBMIT,
         font,
     );
+    util::child(
+        "BUTTON",
+        &spec.cancel_label,
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_PUSHBUTTON as u32,
+        bx + BUTTON_W + SPACING,
+        y,
+        BUTTON_W,
+        BUTTON_H,
+        hwnd,
+        ID_CANCEL,
+        font,
+    );
     y += BUTTON_H + MARGIN;
 
     util::resize_client(hwnd, STYLE, CLIENT_W, y);
 
+    let dependencies = collect_dependencies(&spec, &entries);
     let state = Box::new(FormState {
         decision: Cell::new(None),
         browse,
+        dependencies,
         paint,
     });
     let state_ptr = Box::into_raw(state);
@@ -511,6 +583,7 @@ unsafe extern "system" fn form_wndproc(
     match msg {
         WM_COMMAND => {
             let id = wparam & 0xFFFF;
+            update_dependent_combo(state, lparam as HWND);
             match id {
                 ID_SUBMIT => {
                     state.decision.set(Some(Decision::Submit));
@@ -544,6 +617,75 @@ unsafe extern "system" fn form_wndproc(
             0
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
+}
+
+fn collect_dependencies(spec: &FormSpec, entries: &[Entry]) -> Vec<ComboDependency> {
+    spec.fields
+        .iter()
+        .filter_map(|field| {
+            let Field::DependentCombo {
+                id,
+                controller,
+                option_sets,
+                ..
+            } = field
+            else {
+                return None;
+            };
+            let combo =
+                entries
+                    .iter()
+                    .find(|entry| entry.id == *id)
+                    .and_then(|entry| match entry.control {
+                        Control::Combo(combo) => Some(combo),
+                        _ => None,
+                    })?;
+            let radio_buttons = entries
+                .iter()
+                .find(|entry| entry.id == *controller)
+                .and_then(|entry| match &entry.control {
+                    Control::Radio(buttons) => Some(buttons.clone()),
+                    _ => None,
+                })?;
+            Some(ComboDependency {
+                radio_buttons,
+                combo,
+                option_sets: option_sets.clone(),
+            })
+        })
+        .collect()
+}
+
+fn update_dependent_combo(state: &FormState, clicked: HWND) {
+    for dependency in &state.dependencies {
+        let Some(selected) = dependency
+            .radio_buttons
+            .iter()
+            .position(|button| *button == clicked)
+        else {
+            continue;
+        };
+        set_combo_options(
+            dependency.combo,
+            dependency
+                .option_sets
+                .get(selected)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+            0,
+        );
+    }
+}
+
+fn set_combo_options(combo: HWND, options: &[String], selected: usize) {
+    unsafe {
+        SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+        for option in options {
+            let option = util::wide(option);
+            SendMessageW(combo, CB_ADDSTRING, 0, option.as_ptr() as LPARAM);
+        }
+        SendMessageW(combo, CB_SETCURSEL, selected, 0);
     }
 }
 
