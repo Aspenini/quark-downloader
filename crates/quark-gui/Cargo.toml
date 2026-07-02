@@ -4,7 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Reusable cross-platform UI toolkit with selectable backends (Slint + native)."
+repository.workspace = true
+description = "Reusable cross-platform UI toolkit with selectable backends (Slint + native Cocoa/Win32/GTK4/Qt)."
+readme = "README.md"
+keywords = ["gui", "toolkit", "cross-platform", "slint", "qt"]
+categories = ["gui"]
+
+[package.metadata.docs.rs]
+# Native backends need system toolkits absent on docs.rs; document the
+# platform-independent API with the default (Slint) feature set.
+no-default-features = false
 
 [features]
 default = ["slint"]

@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+# App crate, not published; quark-gui is the workspace's publishable library.
+publish = false
 
 [[bin]]
 name = "quark-downloader-gui"

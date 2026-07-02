@@ -28,11 +28,13 @@ pub enum ProgressUpdate {
 /// backend sets when the user closes/cancels the window.
 #[derive(Clone)]
 pub struct ProgressChannel {
+    /// The stream of updates the backend renders.
     pub updates: Receiver<ProgressUpdate>,
     cancel: Arc<AtomicBool>,
 }
 
 impl ProgressChannel {
+    /// Wrap a receiver, with a fresh (uncancelled) cancellation flag.
     pub fn new(updates: Receiver<ProgressUpdate>) -> Self {
         ProgressChannel {
             updates,
@@ -50,6 +52,7 @@ impl ProgressChannel {
         self.cancel.store(true, Ordering::SeqCst);
     }
 
+    /// Whether the user has cancelled the progress view.
     pub fn is_cancelled(&self) -> bool {
         self.cancel.load(Ordering::SeqCst)
     }
@@ -60,6 +63,7 @@ impl ProgressChannel {
 pub struct CancelFlag(Arc<AtomicBool>);
 
 impl CancelFlag {
+    /// Whether the user has cancelled the progress view.
     pub fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::SeqCst)
     }

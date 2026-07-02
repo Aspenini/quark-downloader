@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+# App crate, not published; quark-gui is the workspace's publishable library.
+publish = false
 description = "Engine for Quark Downloader: yt-dlp/ffmpeg orchestration, config, and naming."
 
 [dependencies]

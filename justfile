@@ -39,6 +39,11 @@ lint:
 fmt:
     cargo fmt --all
 
+# Build API docs (warnings are errors, matching CI).
+[group('check')]
+doc:
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+
 # Build the GUI with a native backend feature, e.g. `just build-native native-cocoa`.
 [group('build')]
 build-native feature:

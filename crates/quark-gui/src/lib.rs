@@ -17,11 +17,28 @@
 //!     println!("{}", values.text("name"));
 //! }
 //! ```
+//!
+//! # Backends
+//!
+//! | [`Backend`] | Cargo feature | Notes |
+//! |-------------|---------------|-------|
+//! | `Slint` | `slint` (default) | Pure Rust, no system dependencies |
+//! | `Cocoa` | `native-cocoa` | Native AppKit (macOS) |
+//! | `Win32` | `native-windows` | Native Win32 (Windows) |
+//! | `Gtk` | `native-gtk` | GTK 4 via gtk4-rs (needs the GTK 4 libraries) |
+//! | `Kirigami` | `native-kirigami` | Qt Widgets via a cxx bridge (needs Qt 6) |
+//! | `Headless` | — | Accepts form defaults; for tests and non-interactive use |
+//!
+//! Requesting a backend that is not compiled in falls back to Slint (or
+//! Headless when Slint is disabled too) — see [`App::new`].
+
+#![warn(missing_docs)]
 
 pub mod backend;
-pub mod backends;
 pub mod event;
 pub mod model;
+
+mod backends;
 
 pub use backend::{Backend, Renderer};
 pub use event::{CancelFlag, ProgressChannel, ProgressUpdate};
@@ -49,14 +66,20 @@ impl App {
         self.backend
     }
 
+    /// Show a form and block until the user submits, presses an extra button,
+    /// or cancels.
     pub fn run_form(&self, spec: FormSpec) -> FormOutcome {
         self.renderer.run_form(spec)
     }
 
+    /// Show a progress window, consuming `channel` until a
+    /// [`ProgressUpdate::Done`] arrives or the user closes it. Returns the
+    /// final exit code (or `1` when cancelled early).
     pub fn run_progress(&self, spec: ProgressSpec, channel: ProgressChannel) -> i32 {
         self.renderer.run_progress(spec, channel)
     }
 
+    /// Show a modal message dialog.
     pub fn message(&self, kind: MessageKind, title: &str, body: &str) {
         self.renderer.message(kind, title, body);
     }

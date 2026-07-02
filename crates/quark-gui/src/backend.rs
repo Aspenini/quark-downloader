@@ -19,6 +19,7 @@ pub trait Renderer {
     /// Show a modal message dialog.
     fn message(&self, kind: MessageKind, title: &str, body: &str);
 
+    /// The backend's config-style name, e.g. `"slint"` or `"cocoa"`.
     fn name(&self) -> &'static str;
 }
 
@@ -27,16 +28,23 @@ pub trait Renderer {
 pub enum Backend {
     /// Pick the best native backend for the platform, else Slint.
     Auto,
+    /// Slint (feature `slint`, on by default): pure Rust, all platforms.
     Slint,
+    /// Native Win32 (feature `native-windows`, Windows only).
     Win32,
+    /// Native AppKit (feature `native-cocoa`, macOS only).
     Cocoa,
+    /// GTK 4 (feature `native-gtk`; needs the GTK 4 system libraries).
     Gtk,
+    /// Qt Widgets (feature `native-kirigami`; needs Qt 6).
     Kirigami,
     /// Non-graphical: accepts defaults. For tests and headless reuse.
     Headless,
 }
 
 impl Backend {
+    /// Parse a config-style name (e.g. `"slint"`, `"cocoa"`); unknown names
+    /// yield [`Backend::Auto`].
     pub fn from_name(name: &str) -> Backend {
         match name.trim().to_ascii_lowercase().as_str() {
             "slint" => Backend::Slint,
