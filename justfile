@@ -1,23 +1,37 @@
 set quiet := true
 
+# On Windows, run recipes with PowerShell instead of sh (recipes stay
+# shell-agnostic: plain commands plus exported variables, no sh syntax).
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
+
+gui-features := if os() == "macos" {
+    "quark-downloader-gui/native-cocoa"
+} else if os() == "windows" {
+    "quark-downloader-gui/native-windows"
+} else if os() == "linux" {
+    "quark-downloader-gui/native-gtk,quark-downloader-gui/native-kirigami"
+} else {
+    ""
+}
+
 [default]
 default:
     @just --list
 
-# Build all crates in release mode.
+# Build all crates with every GUI backend supported by this platform.
 [group('build')]
 build:
-    cargo build --workspace --release
+    cargo build --workspace --release --features "{{gui-features}}"
 
 # Run the CLI (pass args after `--`, e.g. `just run -- --url URL`).
 [group('dev')]
 run *args:
     cargo run -p quark-cli {{args}}
 
-# Run the GUI (Slint backend by default).
+# Run the GUI with every backend supported by this platform.
 [group('dev')]
 run-gui:
-    cargo run -p quark-downloader-gui
+    cargo run -p quark-downloader-gui --features "{{gui-features}}"
 
 # Run the standalone QuarkGUI demo (proves the toolkit is reusable).
 [group('dev')]
@@ -41,13 +55,8 @@ fmt:
 
 # Build API docs (warnings are errors, matching CI).
 [group('check')]
-doc:
-    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
-
-# Build the GUI with a native backend feature, e.g. `just build-native native-cocoa`.
-[group('build')]
-build-native feature:
-    cargo build -p quark-gui --features {{feature}}
+doc $RUSTDOCFLAGS="-D warnings":
+    cargo doc --workspace --no-deps
 
 [group('clean')]
 clean:

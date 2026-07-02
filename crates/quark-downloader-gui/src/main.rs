@@ -133,6 +133,7 @@ fn parse_main(values: &FormValues) -> DownloadParams {
 // ---- settings form -------------------------------------------------------
 
 fn settings_form(settings: &Settings, theme: Theme) -> FormSpec {
+    let backend_options = available_backend_options();
     let mut form = FormSpec::new(WindowSpec::new(version::settings_window_title(), theme));
     form.submit_label = "Save".into();
     form.cancel_label = "Cancel".into();
@@ -190,8 +191,8 @@ fn settings_form(settings: &Settings, theme: Theme) -> FormSpec {
         },
         combo(
             "gui_backend",
-            "GUI backend",
-            BACKEND_OPTIONS,
+            "GUI backend (applies next launch)",
+            &backend_options,
             settings.gui_backend.as_str(),
         ),
         combo(
@@ -226,11 +227,13 @@ fn combo(id: &str, label: &str, options: &[&str], current: &str) -> Field {
 }
 
 fn apply_settings(values: &FormValues) -> Settings {
+    let backend_options = available_backend_options();
     Settings {
         download_dir: values.text("download_dir"),
         yt_dlp: ToolSource::parse_lenient(option_at(values, "yt_dlp", TOOL_OPTIONS)).0,
         ffmpeg: ToolSource::parse_lenient(option_at(values, "ffmpeg", TOOL_OPTIONS)).0,
-        gui_backend: GuiBackend::parse_lenient(option_at(values, "gui_backend", BACKEND_OPTIONS)).0,
+        gui_backend: GuiBackend::parse_lenient(option_at(values, "gui_backend", &backend_options))
+            .0,
         gui_download_mode: GuiDownloadMode::parse_lenient(option_at(
             values,
             "gui_download_mode",
@@ -249,6 +252,14 @@ fn apply_settings(values: &FormValues) -> Settings {
         .0,
         playlist_folders: values.bool("playlist_folders"),
     }
+}
+
+fn available_backend_options() -> Vec<&'static str> {
+    BACKEND_OPTIONS
+        .iter()
+        .copied()
+        .filter(|name| Backend::from_name(name).available())
+        .collect()
 }
 
 fn option_at<'a>(values: &FormValues, id: &str, options: &'a [&'a str]) -> &'a str {

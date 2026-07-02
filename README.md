@@ -48,9 +48,10 @@ A Cargo workspace under `crates/`:
 
 ### GUI backends
 
-QuarkGUI renders through a selectable backend. **Slint** is the default on every platform and the
-automatic fallback. Native backends are opt-in via cargo features and chosen at runtime with the
-`gui_backend` setting:
+QuarkGUI renders through a selectable backend. **Slint** is the initial default on every platform
+and the automatic fallback. The normal build includes every backend supported by its target:
+Cocoa on macOS, Win32 on Windows, and GTK plus Qt/Kirigami on Linux. Choose one in the GUI settings;
+the saved backend is used the next time the app starts.
 
 | Setting | Platform | Toolkit (`cargo` feature) |
 | ------- | -------- | ------------------------- |
@@ -70,25 +71,28 @@ Needs a [Rust toolchain](https://rustup.rs/). [just](https://github.com/casey/ju
 the common cargo commands.
 
 ```bash
-just build              # cargo build --workspace --release
+just build              # release build with this platform's GUI backends
 just run -- --help      # run the CLI
-just run-gui            # run the GUI (Slint backend)
+just run-gui            # run the GUI with all backends for this platform
 just demo-gui           # standalone QuarkGUI example (proves the toolkit is reusable)
 just test               # cargo test --workspace
 just lint               # clippy, warnings as errors
-just build-native native-cocoa   # build the GUI crate with a native backend
-
-# Native backends end-to-end (set gui_backend accordingly, or it falls back to Slint):
-cargo run -p quark-downloader-gui --features native-cocoa      # macOS
-cargo run -p quark-downloader-gui --features native-windows    # Windows
-cargo run -p quark-downloader-gui --features native-gtk        # needs GTK 4 libs
-cargo run -p quark-downloader-gui --features native-kirigami   # needs Qt 6 (qmake on PATH)
 ```
 
-The GTK and Qt backends link real system libraries: `apt install libgtk-4-dev` / `qt6-base-dev`
-on Debian-likes, `brew install gtk4` / `qt` on macOS. A scripted, self-closing progress demo
+The Linux build links real GTK and Qt system libraries; install `libgtk-4-dev` and `qt6-base-dev`
+on Debian-like systems. A scripted, self-closing progress demo
 smoke-tests any backend without interaction, e.g.
 `QUARK_GUI_BACKEND=gtk cargo run -p quark-gui --example progress --no-default-features --features native-gtk`.
+
+After `just build`, launch the release binaries directly:
+
+```bash
+./target/release/quark-downloader       # terminal interface
+./target/release/quark-downloader-gui   # graphical interface
+```
+
+On Windows, use the corresponding `.exe` files. Installed Linux packages also provide separate
+“Quark Downloader” (GUI) and “Quark Downloader (CLI)” application-menu entries.
 
 ## CLI
 
