@@ -61,7 +61,7 @@ fn main() {
         return;
     }
 
-    let mut urls = cli.urls.clone();
+    let mut urls = cli.urls;
     if let Some(batch) = &cli.batch_file {
         match std::fs::read_to_string(batch) {
             Ok(text) => {
@@ -83,12 +83,14 @@ fn main() {
     let exit_code = if urls.is_empty() {
         interactive_main(cli.no_pause)
     } else {
+        let settings = config::load(true).unwrap_or_default();
         let media_type = MediaType::parse(&cli.media_type).unwrap_or(MediaType::Video);
         run(
+            &settings,
             urls,
             media_type,
-            cli.format.clone(),
-            cli.output_dir.clone(),
+            cli.format,
+            cli.output_dir,
             cli.no_pause,
         )
     };
@@ -130,6 +132,7 @@ fn interactive_main(no_pause: bool) -> i32 {
     };
 
     run(
+        &settings,
         vec![url],
         media_type,
         format,
@@ -139,14 +142,13 @@ fn interactive_main(no_pause: bool) -> i32 {
 }
 
 fn run(
+    settings: &quark_core::Settings,
     urls: Vec<String>,
     media_type: MediaType,
     format: String,
     output_dir: Option<PathBuf>,
     no_pause: bool,
 ) -> i32 {
-    let settings = config::load(true).unwrap_or_default();
-
     let cancel = CancelToken::new();
     {
         let cancel = cancel.clone();
@@ -180,7 +182,7 @@ fn run(
         hidden_console: false,
     };
 
-    let code = quark_core::run(&request, &settings, sink.as_ref(), &cancel);
+    let code = quark_core::run(&request, settings, sink.as_ref(), &cancel);
     cli_sink.finish();
 
     press_any_key(no_pause);

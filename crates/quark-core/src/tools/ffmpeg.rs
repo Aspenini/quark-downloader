@@ -260,10 +260,19 @@ mod win {
                 None
             };
             if let Some(dest) = dest {
-                let mut out = std::fs::File::create(&dest)
-                    .map_err(|e| ToolError(format!("writing {}: {e}", dest.display())))?;
+                // Extract to a temp name first so an interrupted extraction
+                // never leaves a truncated binary at the final path.
+                let tmp = dest.with_extension("download");
+                let mut out = std::fs::File::create(&tmp)
+                    .map_err(|e| ToolError(format!("writing {}: {e}", tmp.display())))?;
                 std::io::copy(&mut entry, &mut out)
                     .map_err(|e| ToolError(format!("extracting {name}: {e}")))?;
+                drop(out);
+                if dest.exists() {
+                    let _ = std::fs::remove_file(&dest);
+                }
+                std::fs::rename(&tmp, &dest)
+                    .map_err(|e| ToolError(format!("installing {}: {e}", dest.display())))?;
             }
         }
         if !found_ffmpeg {

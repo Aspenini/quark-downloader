@@ -80,14 +80,30 @@ pub fn launch_cli(params: &DownloadParams) -> std::io::Result<()> {
 
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        // Build the `start` line by hand: std only quotes args containing
+        // spaces, and an unquoted `&` in a URL would split the cmd command.
+        let mut line = String::from("start \"\" ");
+        line.push_str(&cmd_quote(&cli.to_string_lossy()));
+        for a in &args {
+            line.push(' ');
+            line.push_str(&cmd_quote(a));
+        }
         let mut cmd = Command::new("cmd");
-        cmd.arg("/c").arg("start").arg("").arg(&cli).args(&args);
+        cmd.arg("/c").raw_arg(line);
         cmd.spawn()?;
         return Ok(());
     }
 
     #[allow(unreachable_code)]
     Ok(())
+}
+
+#[cfg(windows)]
+fn cmd_quote(s: &str) -> String {
+    // Double quotes cannot appear inside a cmd-quoted string; drop them
+    // (they are invalid in URLs and Windows paths anyway).
+    format!("\"{}\"", s.replace('"', ""))
 }
 
 #[cfg(target_os = "macos")]

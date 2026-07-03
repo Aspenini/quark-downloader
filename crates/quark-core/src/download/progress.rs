@@ -1,10 +1,6 @@
 //! Parsing of yt-dlp output: our structured `QPROG` progress line plus the
 //! playlist/post-processing markers the stall watchdog and UI care about.
 
-use std::sync::OnceLock;
-
-use regex::Regex;
-
 /// The progress-template prefix we instruct yt-dlp to print. Owning the format
 /// makes percent/ETA deterministic instead of scraping human output.
 pub const PROGRESS_TOKEN: &str = "QPROG";
@@ -17,24 +13,29 @@ pub struct DownloadProgress {
     pub eta: Option<String>,
 }
 
-fn playlist_item_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"^\[download\] Downloading item (\d+) of (\d+)").unwrap())
-}
+/// Post-processor tags yt-dlp prints as `[Tag] ...` while producing no
+/// download output (`Fixup*` matches all fixup variants).
+const POSTPROCESS_TAGS: &[&str] = &[
+    "Merger",
+    "ExtractAudio",
+    "VideoConvertor",
+    "VideoRemuxer",
+    "Recode",
+    "Metadata",
+    "EmbedSubtitle",
+    "EmbedThumbnail",
+    "SponsorBlock",
+    "ModifyChapters",
+    "SplitChapters",
+];
 
-fn postprocess_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(
-            r"^\[(?:Merger|ExtractAudio|VideoConvertor|VideoRemuxer|Recode|Fixup\w*|Metadata|EmbedSubtitle|EmbedThumbnail|SponsorBlock|ModifyChapters|SplitChapters)\]",
-        )
-        .unwrap()
-    })
-}
-
-fn resume_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"^\[download\]|Extracting URL").unwrap())
+/// Split a leading run of ASCII digits off `s` as a number.
+fn leading_number(s: &str) -> Option<(u32, &str)> {
+    let end = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
+    if end == 0 {
+        return None;
+    }
+    Some((s[..end].parse().ok()?, &s[end..]))
 }
 
 /// Parse a `QPROG\t<percent>\t<eta>\t<bytes>` line into structured progress.
@@ -67,16 +68,28 @@ fn normalize_eta(raw: &str) -> Option<String> {
 
 /// `(item, total)` if the line announces a new playlist item.
 pub fn parse_playlist_item(line: &str) -> Option<(u32, u32)> {
-    let caps = playlist_item_re().captures(line)?;
-    Some((caps[1].parse().ok()?, caps[2].parse().ok()?))
+    let rest = line.strip_prefix("[download] Downloading item ")?;
+    let (item, rest) = leading_number(rest)?;
+    let (total, _) = leading_number(rest.strip_prefix(" of ")?)?;
+    Some((item, total))
 }
 
 pub fn is_postprocessing(line: &str) -> bool {
-    postprocess_re().is_match(line)
+    let Some(rest) = line.strip_prefix('[') else {
+        return false;
+    };
+    let Some(end) = rest.find(']') else {
+        return false;
+    };
+    let tag = &rest[..end];
+    POSTPROCESS_TAGS.contains(&tag)
+        || tag
+            .strip_prefix("Fixup")
+            .is_some_and(|s| s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
 }
 
 pub fn is_resume(line: &str) -> bool {
-    resume_re().is_match(line)
+    line.starts_with("[download]") || line.contains("Extracting URL")
 }
 
 /// A short, display-worthy status line, or `None` to skip.

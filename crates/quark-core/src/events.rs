@@ -65,8 +65,12 @@ impl MultiSink {
 
 impl EventSink for MultiSink {
     fn emit(&self, event: ProgressEvent) {
-        for sink in &self.sinks {
+        let Some((last, rest)) = self.sinks.split_last() else {
+            return;
+        };
+        for sink in rest {
             sink.emit(event.clone());
         }
+        last.emit(event);
     }
 }

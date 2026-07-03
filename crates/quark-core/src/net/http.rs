@@ -56,11 +56,25 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, HttpError> {
     Ok(buf)
 }
 
-/// Download a URL to a file, replacing any existing file.
+/// Download a URL to a file, replacing any existing file. Streams the body
+/// straight to disk, so large tool downloads never sit in memory.
 pub fn download_file(url: &str, dest: &Path) -> Result<(), HttpError> {
-    let bytes = fetch_bytes(url)?;
+    let resp = agent()
+        .get(url)
+        .call()
+        .map_err(|e| HttpError(format!("HTTP request failed: {e}")))?;
     if dest.exists() {
         let _ = std::fs::remove_file(dest);
     }
-    std::fs::write(dest, bytes).map_err(|e| HttpError(format!("writing {}: {e}", dest.display())))
+    let mut file = std::fs::File::create(dest)
+        .map_err(|e| HttpError(format!("writing {}: {e}", dest.display())))?;
+    let written = std::io::copy(&mut resp.into_reader(), &mut file).map_err(|e| {
+        let _ = std::fs::remove_file(dest);
+        HttpError(format!("writing {}: {e}", dest.display()))
+    })?;
+    if written == 0 {
+        let _ = std::fs::remove_file(dest);
+        return Err(HttpError(format!("Empty response from {url}")));
+    }
+    Ok(())
 }

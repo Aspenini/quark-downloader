@@ -8,7 +8,7 @@ pub mod progress;
 pub mod stall;
 pub mod tracker;
 
-use std::io::{BufReader, Read};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -426,7 +426,7 @@ fn process_line(
     tracker: &mut DestinationTracker,
     sink: &dyn EventSink,
 ) {
-    let line = monitor.observe(&raw);
+    let (line, playlist_item) = monitor.observe(&raw);
     tracker.observe(&line);
 
     if let Some(prog) = progress::parse_progress(&line) {
@@ -437,7 +437,7 @@ fn process_line(
         return;
     }
 
-    if let Some((item, total)) = progress::parse_playlist_item(&line) {
+    if let Some((item, total)) = playlist_item {
         sink.emit(ProgressEvent::PlaylistItem {
             item,
             total: Some(total),
@@ -454,21 +454,23 @@ fn process_line(
 fn pump_reader<R: Read>(reader: R, tx: Sender<String>) {
     let mut reader = BufReader::new(reader);
     let mut buf: Vec<u8> = Vec::new();
-    let mut byte = [0u8; 1];
     loop {
-        match reader.read(&mut byte) {
-            Ok(0) => break,
-            Ok(_) => {
-                let c = byte[0];
-                if c == b'\n' || c == b'\r' {
-                    let _ = tx.send(String::from_utf8_lossy(&buf).into_owned());
-                    buf.clear();
-                } else {
-                    buf.push(c);
-                }
+        let chunk = match reader.fill_buf() {
+            Ok([]) | Err(_) => break,
+            Ok(chunk) => chunk,
+        };
+        let len = chunk.len();
+        let mut consumed = 0;
+        for (i, &c) in chunk.iter().enumerate() {
+            if c == b'\n' || c == b'\r' {
+                buf.extend_from_slice(&chunk[consumed..i]);
+                let _ = tx.send(String::from_utf8_lossy(&buf).into_owned());
+                buf.clear();
+                consumed = i + 1;
             }
-            Err(_) => break,
         }
+        buf.extend_from_slice(&chunk[consumed..]);
+        reader.consume(len);
     }
     if !buf.is_empty() {
         let _ = tx.send(String::from_utf8_lossy(&buf).into_owned());

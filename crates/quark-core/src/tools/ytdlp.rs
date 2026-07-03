@@ -342,9 +342,12 @@ fn verify_checksum(
     let expected = expected
         .ok_or_else(|| ToolError(format!("SHA2-256SUMS has no entry for {binary_name}")))?;
 
-    let data =
-        std::fs::read(path).map_err(|e| ToolError(format!("reading {}: {e}", path.display())))?;
-    let actual = format!("{:x}", Sha256::digest(&data));
+    let mut file = std::fs::File::open(path)
+        .map_err(|e| ToolError(format!("reading {}: {e}", path.display())))?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher)
+        .map_err(|e| ToolError(format!("reading {}: {e}", path.display())))?;
+    let actual = format!("{:x}", hasher.finalize());
     if actual != expected {
         let _ = std::fs::remove_file(path);
         return Err(ToolError(format!("Checksum mismatch for {binary_name}")));

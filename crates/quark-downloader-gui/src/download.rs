@@ -58,14 +58,13 @@ fn run_with_progress(app: &App, settings: &Settings, params: DownloadParams, the
     let cancel_engine = cancel.clone();
     let gui_sink = Arc::new(GuiSink::new(tx));
     let engine = thread::spawn(move || {
-        let sink: Box<dyn EventSink> = match FileSink::open() {
-            Some(file) if settings_clone.download_logs => {
-                Box::new(quark_core::events::MultiSink::new(vec![
-                    Box::new(SinkRef(gui_sink.clone())),
-                    Box::new(file),
-                ]))
-            }
-            _ => Box::new(SinkRef(gui_sink.clone())),
+        let file = settings_clone.download_logs.then(FileSink::open).flatten();
+        let sink: Box<dyn EventSink> = match file {
+            Some(file) => Box::new(quark_core::events::MultiSink::new(vec![
+                Box::new(SinkRef(gui_sink.clone())),
+                Box::new(file),
+            ])),
+            None => Box::new(SinkRef(gui_sink.clone())),
         };
         quark_core::run(&request, &settings_clone, sink.as_ref(), &cancel_engine)
     });

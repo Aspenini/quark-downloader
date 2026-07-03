@@ -358,7 +358,7 @@ pub fn load(quiet: bool) -> std::io::Result<Settings> {
     }
 
     let text = std::fs::read_to_string(&path)?;
-    let raw: RawSettings = match toml::from_str(&text) {
+    let raw: RawSettings = match basic_toml::from_str(&text) {
         Ok(raw) => raw,
         Err(err) => {
             if !quiet {
@@ -504,7 +504,7 @@ mod tests {
             ..Settings::default()
         };
         let rendered = s.render();
-        let raw: RawSettings = toml::from_str(&rendered).unwrap();
+        let raw: RawSettings = basic_toml::from_str(&rendered).unwrap();
         let (parsed, missing, warnings) = raw.into_settings();
         assert_eq!(parsed, s);
         assert!(!missing);
