@@ -170,7 +170,9 @@ impl EventSink for GuiSink {
             ProgressEvent::Progress { percent } => Some(ProgressUpdate::Percent(percent)),
             ProgressEvent::Eta(eta) => Some(ProgressUpdate::Eta(eta)),
             ProgressEvent::Status(status) => Some(ProgressUpdate::Status(status)),
-            ProgressEvent::Log(line) => Some(ProgressUpdate::Log(line)),
+            ProgressEvent::Log(line) | ProgressEvent::Debug(line) => {
+                Some(ProgressUpdate::Log(line))
+            }
             ProgressEvent::ItemFinished { .. } => None,
             ProgressEvent::Done { exit_code } => Some(ProgressUpdate::Done(exit_code)),
         };

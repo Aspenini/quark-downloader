@@ -85,7 +85,7 @@ impl FileSink {
 
 impl EventSink for FileSink {
     fn emit(&self, event: ProgressEvent) {
-        if let ProgressEvent::Log(line) = event {
+        if let ProgressEvent::Log(line) | ProgressEvent::Debug(line) = event {
             if let Ok(mut file) = self.file.lock() {
                 let _ = writeln!(file, "{line}");
                 let _ = file.flush();

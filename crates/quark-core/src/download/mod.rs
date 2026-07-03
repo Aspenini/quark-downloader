@@ -255,7 +255,9 @@ fn run_single(
         )
     };
 
-    apply_naming(&tracker, output_path, settings, sink);
+    for path in apply_naming(&tracker, output_path, settings, sink) {
+        sink.emit(ProgressEvent::Log(format!("Saved: {}", path.display())));
+    }
     if is_playlist && tracker.error_count() > 0 {
         sink.emit(ProgressEvent::Log(format!(
             "Playlist finished: {} item(s) failed.",
@@ -326,9 +328,10 @@ fn run_command(
     sink: &dyn EventSink,
     cancel: &CancelToken,
 ) -> i32 {
-    sink.emit(ProgressEvent::Log("\nRunning:".into()));
-    sink.emit(ProgressEvent::Log(quote_command(cmd)));
-    sink.emit(ProgressEvent::Log(String::new()));
+    sink.emit(ProgressEvent::Debug(format!(
+        "Running: {}",
+        quote_command(cmd)
+    )));
 
     let mut builder = Command::new(&cmd[0]);
     builder
@@ -479,18 +482,18 @@ fn pump_reader<R: Read>(reader: R, tx: Sender<String>) {
 
 /// Rename downloaded files per the naming settings. Only touches files yt-dlp
 /// reported, that still exist, inside the output directory. Failures are
-/// logged and never abort.
+/// logged and never abort. Returns the final paths of the surviving files
+/// (renamed or not) so callers can report what was saved.
 fn apply_naming(
     tracker: &DestinationTracker,
     output_path: &Path,
     settings: &Settings,
     sink: &dyn EventSink,
-) {
+) -> Vec<PathBuf> {
     let policy = settings.spaces_policy();
-    if !settings.sanitize_filenames && matches!(policy, naming::SpacesPolicy::Keep) {
-        return;
-    }
+    let renaming = settings.sanitize_filenames || !matches!(policy, naming::SpacesPolicy::Keep);
     let base = std::fs::canonicalize(output_path).unwrap_or_else(|_| output_path.to_path_buf());
+    let mut saved = Vec::new();
 
     for path in tracker.paths() {
         if path.ends_with(".part") || path.ends_with(".ytdl") {
@@ -512,22 +515,35 @@ fn apply_naming(
         ) else {
             continue;
         };
+        if !renaming {
+            saved.push(expanded.clone());
+            continue;
+        }
         let new_name = naming::sanitize_filename(name, settings.sanitize_filenames, policy);
         if new_name == name {
+            saved.push(expanded.clone());
             continue;
         }
         let Some(final_name) = naming::collision_free(dir, &new_name) else {
+            saved.push(expanded.clone());
             continue;
         };
         match std::fs::rename(&expanded, dir.join(&final_name)) {
-            Ok(()) => sink.emit(ProgressEvent::Log(format!(
-                "Renamed: {name} -> {final_name}"
-            ))),
-            Err(e) => sink.emit(ProgressEvent::Log(format!(
-                "Warning: could not rename {path}: {e}"
-            ))),
+            Ok(()) => {
+                sink.emit(ProgressEvent::Debug(format!(
+                    "Renamed: {name} -> {final_name}"
+                )));
+                saved.push(dir.join(&final_name));
+            }
+            Err(e) => {
+                sink.emit(ProgressEvent::Log(format!(
+                    "Warning: could not rename {path}: {e}"
+                )));
+                saved.push(expanded.clone());
+            }
         }
     }
+    saved
 }
 
 fn quote_command(cmd: &[String]) -> String {

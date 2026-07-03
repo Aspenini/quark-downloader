@@ -11,6 +11,9 @@ use std::sync::Arc;
 pub enum ProgressEvent {
     /// A human-readable line (the old `QuarkLogs.puts` passthrough).
     Log(String),
+    /// Diagnostic detail (tool paths, the exact yt-dlp command). Log files
+    /// record it; terminals show it only in verbose mode.
+    Debug(String),
     /// Position in a multi-URL queue, e.g. "URL 2 of 5".
     QueuePosition { index: usize, total: usize },
     /// Current playlist item, e.g. "item 3 of 12".
@@ -38,12 +41,12 @@ impl EventSink for NullSink {
     fn emit(&self, _event: ProgressEvent) {}
 }
 
-/// A sink that prints `Log` lines to stdout/stderr and ignores the rest.
+/// A sink that prints `Log`/`Debug` lines to stdout and ignores the rest.
 /// Used as a simple default and for `external_cli` style output.
 pub struct PlainSink;
 impl EventSink for PlainSink {
     fn emit(&self, event: ProgressEvent) {
-        if let ProgressEvent::Log(line) = event {
+        if let ProgressEvent::Log(line) | ProgressEvent::Debug(line) = event {
             println!("{line}");
         }
     }

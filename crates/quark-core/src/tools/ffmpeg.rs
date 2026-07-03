@@ -11,6 +11,10 @@ fn log(sink: &dyn EventSink, msg: impl Into<String>) {
     sink.emit(ProgressEvent::Log(msg.into()));
 }
 
+fn debug(sink: &dyn EventSink, msg: impl Into<String>) {
+    sink.emit(ProgressEvent::Debug(msg.into()));
+}
+
 pub fn executable_name() -> &'static str {
     if cfg!(windows) {
         "ffmpeg.exe"
@@ -42,9 +46,9 @@ fn bundled_exists() -> bool {
 pub fn detect(source: ToolSource, sink: &dyn EventSink) {
     if let Some((from_path, path)) = locate(source) {
         if from_path {
-            log(sink, format!("Using ffmpeg from PATH: {}", path.display()));
+            debug(sink, format!("Using ffmpeg from PATH: {}", path.display()));
         } else {
-            log(sink, format!("Using ffmpeg from: {}", path.display()));
+            debug(sink, format!("Using ffmpeg from: {}", path.display()));
         }
     } else {
         warn_not_found(sink);
@@ -106,7 +110,7 @@ pub fn ensure(source: ToolSource, sink: &dyn EventSink, quiet: bool) -> Result<P
             ToolSource::Auto => {
                 if let Some(exe) = path_executable() {
                     if !quiet {
-                        log(sink, format!("Using ffmpeg from PATH: {}", exe.display()));
+                        debug(sink, format!("Using ffmpeg from PATH: {}", exe.display()));
                     }
                     return Ok(exe.parent().map(|p| p.to_path_buf()).unwrap_or_default());
                 }
@@ -119,7 +123,7 @@ pub fn ensure(source: ToolSource, sink: &dyn EventSink, quiet: bool) -> Result<P
         let _ = source;
         if let Some(exe) = path_executable() {
             if !quiet {
-                log(sink, format!("Using ffmpeg from PATH: {}", exe.display()));
+                debug(sink, format!("Using ffmpeg from PATH: {}", exe.display()));
             }
             return Ok(exe.parent().map(|p| p.to_path_buf()).unwrap_or_default());
         }
@@ -153,7 +157,7 @@ mod win {
     pub fn ensure_path_only(sink: &dyn EventSink, quiet: bool) -> Result<PathBuf, ToolError> {
         if let Some(exe) = path_executable() {
             if !quiet {
-                log(sink, format!("Using ffmpeg from PATH: {}", exe.display()));
+                debug(sink, format!("Using ffmpeg from PATH: {}", exe.display()));
             }
             return Ok(exe.parent().map(|p| p.to_path_buf()).unwrap_or_default());
         }

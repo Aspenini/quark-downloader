@@ -11,10 +11,11 @@ pub struct CliSink {
     prefix: Mutex<String>,
     eta: Mutex<String>,
     tty: bool,
+    verbose: bool,
 }
 
 impl CliSink {
-    pub fn new(is_tty: bool) -> Self {
+    pub fn new(is_tty: bool, verbose: bool) -> Self {
         let bar = ProgressBar::new(100);
         if is_tty {
             bar.set_style(
@@ -34,6 +35,15 @@ impl CliSink {
             prefix: Mutex::new(String::new()),
             eta: Mutex::new(String::new()),
             tty: is_tty,
+            verbose,
+        }
+    }
+
+    fn println(&self, line: String) {
+        if self.tty {
+            self.bar.println(line);
+        } else {
+            println!("{line}");
         }
     }
 
@@ -50,11 +60,10 @@ impl CliSink {
 impl EventSink for CliSink {
     fn emit(&self, event: ProgressEvent) {
         match event {
-            ProgressEvent::Log(line) => {
-                if self.tty {
-                    self.bar.println(line);
-                } else {
-                    println!("{line}");
+            ProgressEvent::Log(line) => self.println(line),
+            ProgressEvent::Debug(line) => {
+                if self.verbose {
+                    self.println(line);
                 }
             }
             ProgressEvent::Progress { percent } => {

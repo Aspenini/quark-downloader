@@ -21,6 +21,10 @@ fn log(sink: &dyn EventSink, msg: impl Into<String>) {
     sink.emit(ProgressEvent::Log(msg.into()));
 }
 
+fn debug(sink: &dyn EventSink, msg: impl Into<String>) {
+    sink.emit(ProgressEvent::Debug(msg.into()));
+}
+
 pub fn asset_name() -> &'static str {
     #[cfg(windows)]
     {
@@ -66,7 +70,7 @@ fn ensure_auto(sink: &dyn EventSink) -> Result<PathBuf, ToolError> {
     if let Some(path) = path_executable() {
         if let Some(version) = read_version(&path) {
             if version_compare::at_least(&version, MIN_YOUTUBE_YTDLP) {
-                log(sink, format!("Using yt-dlp from PATH: {}", path.display()));
+                debug(sink, format!("Using yt-dlp from PATH: {}", path.display()));
                 warn_youtube_js_runtime(sink);
                 return Ok(path);
             }
@@ -81,7 +85,7 @@ fn ensure_auto(sink: &dyn EventSink) -> Result<PathBuf, ToolError> {
 
 fn ensure_path_only(sink: &dyn EventSink) -> Result<PathBuf, ToolError> {
     if let Some(path) = path_executable() {
-        log(sink, format!("Using yt-dlp from PATH: {}", path.display()));
+        debug(sink, format!("Using yt-dlp from PATH: {}", path.display()));
         warn_if_stale(&path, sink);
         warn_youtube_js_runtime(sink);
         return Ok(path);
@@ -111,7 +115,7 @@ fn ensure_bundled(sink: &dyn EventSink) -> Result<PathBuf, ToolError> {
         return Ok(bundled);
     }
 
-    log(sink, format!("Using yt-dlp from: {}", bundled.display()));
+    debug(sink, format!("Using yt-dlp from: {}", bundled.display()));
     if check_due() {
         check_and_update_if_needed(sink);
     }
