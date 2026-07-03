@@ -6,8 +6,8 @@
     <td align="right">
       <h1>Quark Downloader</h1>
       <p>
-        <a href="https://github.com/Aspenini/quark-downloader/actions/workflows/crystal.yml">
-          <img alt="Crystal CI" src="https://img.shields.io/github/actions/workflow/status/Aspenini/quark-downloader/crystal.yml?branch=main&amp;label=Crystal%20CI&amp;color=purple" />
+        <a href="https://github.com/Aspenini/quark-downloader/actions/workflows/rust.yml">
+          <img alt="Rust CI" src="https://img.shields.io/github/actions/workflow/status/Aspenini/quark-downloader/rust.yml?branch=main&amp;label=Rust%20CI&amp;color=orange" />
         </a>
         <a href="https://github.com/Aspenini/quark-downloader/releases">
           <img alt="GitHub release" src="https://img.shields.io/github/v/release/Aspenini/quark-downloader?label=release" />
@@ -20,78 +20,161 @@
   </tr>
 </table>
 
+A friendly [yt-dlp](https://github.com/yt-dlp/yt-dlp) wrapper — a scriptable CLI and a simple GUI
+for downloading audio/video and whole playlists, with automatic filename cleanup. Written in Rust.
+
 ## Dependencies
 
-| Dependency         | Windows                           | macOS             | Linux                                                 |
-| ------------------ | --------------------------------- | ----------------- | ----------------------------------------------------- |
-| **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH                                                  |
-| **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH                                                  |
-| **GUI (optional)** | Win32                             | AppKit UI         | [Tk](https://www.tcl.tk/) / `wish` (`apt install tk`) |
+| Dependency | Windows | macOS | Linux |
+| ---------- | ------- | ----- | ----- |
+| **yt-dlp** | PATH, or auto-download to `tools/` | PATH (`brew install yt-dlp`) | PATH |
+| **ffmpeg** (only for format conversion) | PATH, or auto-download | PATH (`brew install ffmpeg`) | PATH |
+| **JS runtime** (YouTube) | any of deno / node / quickjs / bun on PATH | same | same |
 
-**Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
+**Note:** Distro/apt yt-dlp is often too old for YouTube. Prefer `pipx install yt-dlp` plus a
+[JS runtime](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes
+the EJS flags automatically when a runtime is on PATH.
 
-**Build:** [Crystal](https://crystal-lang.org/) | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools (`swiftc`) + `just dmg`
+## Workspace
 
-## Binaries
+A Cargo workspace under `crates/`:
 
-| Program | Purpose |
-|---------|---------|
-| `quark-downloader` | Full CLI - interactive in a terminal, or scriptable with flags |
-| `quark-downloader-gui` | Thin UI that collects options and runs the CLI as a subprocess |
-| `quark-downloader-gui-helper` | macOS only: native AppKit windows for the GUI (built with `swiftc`) |
+| Crate | What it is |
+| ----- | ---------- |
+| `quark-core` | The engine: config, tool management, and yt-dlp orchestration. No UI. |
+| `quark-gui` | **QuarkGUI** — a standalone, reusable cross-platform UI toolkit. Write one UI; render it through any backend. Not tied to this app. |
+| `quark-cli` | The `quark-downloader` binary (terminal). |
+| `quark-downloader-gui` | The GUI binary; builds its windows with QuarkGUI and drives `quark-core` in-process. |
 
-The GUI queues multiple URLs (Add/Remove list) and downloads them sequentially with combined progress ("URL 2 of 5"). Playlist URLs download every item into a folder named after the playlist (see `playlist_folders`), with per-item progress and a failure summary.
+### GUI backends
 
-Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, `quark-downloader-gui.tcl` (same directory), [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop), and depends on **Tk** / `wish` (Linux). On macOS the GUI prefers the native `quark-downloader-gui-helper` beside the binary and falls back to Tk when it is missing.
+QuarkGUI renders through selectable native backends. The normal build includes every backend
+supported by its target. Choose one in the GUI settings; the saved backend is used the next time
+the app starts.
 
-Windows shortcuts from the installer open the GUI; the CLI remains in the install folder as **Quark Downloader (CLI)**. Use **Check for updates** in settings to compare against the latest [GitHub release](https://github.com/Aspenini/quark-downloader/releases) and open the installer download when a newer version is published.
+| Setting | Platform | Toolkit (`cargo` feature) |
+| ------- | -------- | ------------------------- |
+| `win32` | Windows; default | native Win32 form, progress, and dialogs (`native-windows`) |
+| `cocoa` | macOS; default | native AppKit form, progress, and dialogs (`native-cocoa`) |
+| `gtk` | macOS and Linux; Linux default | GTK 4 via gtk4-rs (`native-gtk`, needs GTK 4) |
+| `kirigami` | Windows, macOS, and Linux | Qt Widgets via a cxx bridge — Breeze/Kirigami look on KDE (`native-kirigami`, needs Qt 6) |
 
-## Configuration
+All four are complete implementations of the same renderer interface. Requesting a backend that
+isn't compiled into the current build falls back to that platform's default native backend.
+`winui` is accepted as a legacy alias for `win32`.
 
-On first run, Quark creates `quark-downloader.conf` under the user config directory:
+## Build & run
 
-| Setting | Values |
-|---------|--------|
-| `download_dir` | Default output folder (`~` is supported) |
-| `yt_dlp` | `auto`, `path`, or `bundled` |
-| `ffmpeg` | `auto`, `path`, or `bundled` |
-| `gui_download_mode` | `progress` for the GUI progress dialog, or `external_cli` to open the CLI window after Download |
-| `download_logs` | `true` or `false`; applies to both CLI and GUI downloads |
-| `gui_theme` | `light` or `dark`; applies to the macOS/Linux GUI (Windows uses its native light UI) |
-| `strip_video_ids` | `true` (default) drops the trailing ` [VIDEOID]` from filenames |
-| `sanitize_filenames` | `true` (default) makes filenames mostly ASCII-safe on all platforms (`｜` -> `-`, accents transliterated, Windows-invalid characters removed) |
-| `filename_spaces` | `keep` (default), `underscore`, `dash`, or `remove` |
-| `playlist_folders` | `true` (default) saves playlist downloads into a folder named after the playlist (sanitized with the same rules) |
-
-The download-naming settings are grouped under **Download Naming** in the GUI settings. The GUI gear button opens all settings without editing the file by hand. Logs are rotated in the config directory under `logs/`. Existing config files are updated with missing default keys on load.
-
-## Commands
+Needs a [Rust toolchain](https://rustup.rs/). [just](https://github.com/casey/just) recipes wrap
+the common cargo commands.
 
 ```bash
-just run          # crystal run CLI
-just run-gui      # crystal run GUI
-just build        # release -> build/ (both binaries; UPX on Windows; AppKit helper on macOS)
-just dmg          # macOS: build "Quark Downloader.app" + DMG into dist/
-just clean
-crystal spec      # run focused tests
+just build              # release build with this platform's GUI backends
+just run -- --help      # run the CLI
+just run-gui            # run the GUI with all backends for this platform
+just demo-gui           # standalone QuarkGUI example (proves the toolkit is reusable)
+just test               # test the workspace with this platform's GUI backends
+just lint               # clippy, warnings as errors
 ```
 
-The DMG is ad-hoc signed: after downloading, right-click > Open the first time (or `xattr -dr com.apple.quarantine "Quark Downloader.app"`). Inside the app bundle, downloaded tools are stored under `~/.config/quark-downloader/tools/`.
+### Test Windows from macOS or Linux
 
-Build scripts live under [`scripts/`](scripts/README.md), grouped by platform.
-
-### CLI (non-interactive)
+The Windows GNU target can be cross-compiled and exercised through Wine without a Windows machine.
+Install the target plus MinGW-w64 and Wine:
 
 ```bash
-quark-downloader --url 'https://example.com/video' --type video --format mp4 --output-dir ~/Downloads --no-pause
+rustup target add x86_64-pc-windows-gnu
+
+# macOS
+brew install mingw-w64
+brew install --cask wine-stable
+
+# Debian/Ubuntu
+sudo apt install mingw-w64 wine
+```
+
+Then use the Windows recipes:
+
+```bash
+just windows-build                 # cross-compile the Windows CLI and GUI
+just windows-test                  # run Windows test binaries through Wine
+just windows-run-gui               # launch the .exe with the native Win32 backend
+just windows-run-cli --help        # run the Windows CLI
+```
+
+Wine state is isolated under `target/wine`. Set `WINE=/path/to/wine` if the executable is not
+named `wine`. The cross-compiled build contains Win32, which is also the Windows default.
+
+The Linux build links real GTK and Qt system libraries; install `libgtk-4-dev` and `qt6-base-dev`
+on Debian-like systems. On macOS, install `gtk4` and `qt` with Homebrew to build every supported
+backend. Windows needs Qt 6 with `qmake` on `PATH` for the optional Kirigami backend; the native
+Win32-only Wine cross-test does not require Qt. A scripted, self-closing progress demo
+smoke-tests any backend without interaction, e.g.
+`QUARK_GUI_BACKEND=gtk cargo run -p quark-gui --example progress --no-default-features --features native-gtk`.
+
+After `just build`, launch the release binaries directly:
+
+```bash
+./target/release/quark-downloader       # terminal interface
+./target/release/quark-downloader-gui   # graphical interface
+```
+
+On Windows, use the corresponding `.exe` files. Installed Linux packages also provide separate
+“Quark Downloader” (GUI) and “Quark Downloader (CLI)” application-menu entries.
+
+## CLI
+
+```bash
+quark-downloader --url 'https://example.com/video' --type video --format mp4 --output-dir ~/Downloads
 quark-downloader --url 'https://a/1' --url 'https://a/2'   # bulk: repeat --url; failures don't stop the queue
 quark-downloader --batch-file urls.txt                     # one URL per line, # comments ignored
-quark-downloader --url 'https://www.youtube.com/playlist?list=...'  # playlist -> own folder
+quark-downloader --url 'https://www.youtube.com/playlist?list=...'  # playlist -> its own folder
 quark-downloader --print-default-output-dir
 ```
 
-Run with no arguments for the interactive prompt flow.
+Run with no arguments for the interactive prompt flow. A live progress bar shows in a terminal;
+output falls back to plain lines when piped or logged.
 
-## Env (Windows)
+## Configuration
 
-`QUARK_SKIP_YTDLP_UPDATE=1` | `QUARK_SKIP_FFMPEG_DOWNLOAD=1`
+On first run, Quark writes `quark-downloader.toml` in the user config directory
+(`%APPDATA%\quark-downloader` on Windows, `$XDG_CONFIG_HOME/quark-downloader` elsewhere). A legacy
+`quark-downloader.conf` from an older build is migrated to TOML automatically (the original is kept
+as `.conf.bak`).
+
+| Setting | Values |
+| ------- | ------ |
+| `download_dir` | Default output folder (`~` supported) |
+| `yt_dlp` / `ffmpeg` | `auto`, `path`, or `bundled` |
+| `gui_backend` | `win32`, `cocoa`, `gtk`, `kirigami`; default depends on the platform |
+| `gui_download_mode` | `progress` (in-app progress window) or `external_cli` (open the CLI in a terminal) |
+| `gui_theme` | `light` or `dark` |
+| `download_logs` | `true` / `false` — rotated logs under the config dir's `logs/` |
+| `strip_video_ids` | `true` drops the trailing ` [VIDEOID]` from filenames |
+| `sanitize_filenames` | `true` makes filenames mostly ASCII-safe on all platforms |
+| `filename_spaces` | `keep`, `underscore`, `dash`, or `remove` |
+| `playlist_folders` | `true` saves a playlist into a folder named after it |
+
+The GUI's gear/**Settings** button edits all of these without touching the file by hand.
+
+## Using QuarkGUI on its own
+
+QuarkGUI has no dependency on the downloader and can be pulled into any project:
+
+```rust
+use quark_gui::{App, Backend};
+use quark_gui::model::{FormSpec, WindowSpec, Theme, Field, FormOutcome};
+
+let app = App::new(Backend::Auto);
+let mut form = FormSpec::new(WindowSpec::new("Demo", Theme::Light));
+form.fields.push(Field::Text { id: "name".into(), label: "Name".into(), value: String::new() });
+if let FormOutcome::Submit(values) = app.run_form(form) {
+    println!("{}", values.text("name"));
+}
+```
+
+See [`crates/quark-gui/examples/standalone.rs`](crates/quark-gui/examples/standalone.rs).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

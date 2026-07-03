@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/quark-core",
+    "crates/quark-cli",
+    "crates/quark-gui",
+    "crates/quark-downloader-gui",
+]
+
+[workspace.package]
+version = "0.6.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Aspenini/quark-downloader"
+rust-version = "1.82"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+basic-toml = "0.1"
+ureq = { version = "2", features = ["json", "tls"] }
+sha2 = "0.10"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+unicode-normalization = "0.1"
+url = "2"
+crossbeam-channel = "0.5"
+clap = { version = "4", features = ["derive"] }
+indicatif = "0.17"
+ctrlc = "3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1

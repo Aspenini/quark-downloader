@@ -1,0 +1,23 @@
+[package]
+name = "quark-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+# App crate, not published; quark-gui is the workspace's publishable library.
+publish = false
+
+[[bin]]
+name = "quark-downloader"
+path = "src/main.rs"
+
+[build-dependencies]
+clap = { workspace = true }
+clap_complete = "4"
+clap_mangen = "0.2"
+
+[dependencies]
+quark-core = { path = "../quark-core" }
+clap = { workspace = true }
+indicatif = { workspace = true }
+ctrlc = { workspace = true }
