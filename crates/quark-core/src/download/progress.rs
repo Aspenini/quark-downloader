@@ -5,12 +5,13 @@
 /// makes percent/ETA deterministic instead of scraping human output.
 pub const PROGRESS_TOKEN: &str = "QPROG";
 pub const PROGRESS_TEMPLATE: &str =
-    "download:QPROG\t%(progress._percent_str)s\t%(progress.eta)s\t%(progress._total_bytes_estimate_str)s";
+    "download:QPROG\t%(progress._percent_str)s\t%(progress.eta)s\t%(progress._total_bytes_estimate_str)s\t%(progress._speed_str)s";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DownloadProgress {
     pub percent: f64,
     pub eta: Option<String>,
+    pub speed: Option<String>,
 }
 
 /// Post-processor tags yt-dlp prints as `[Tag] ...` while producing no
@@ -38,10 +39,11 @@ fn leading_number(s: &str) -> Option<(u32, &str)> {
     Some((s[..end].parse().ok()?, &s[end..]))
 }
 
-/// Parse a `QPROG\t<percent>\t<eta>\t<bytes>` line into structured progress.
+/// Parse a `QPROG\t<percent>\t<eta>\t<bytes>\t<speed>` line into structured
+/// progress.
 pub fn parse_progress(line: &str) -> Option<DownloadProgress> {
     let rest = line.strip_prefix(PROGRESS_TOKEN)?.strip_prefix('\t')?;
-    let mut fields = rest.splitn(3, '\t');
+    let mut fields = rest.splitn(4, '\t');
     let percent_str = fields.next()?.trim();
     let percent = percent_str
         .trim_end_matches('%')
@@ -49,7 +51,13 @@ pub fn parse_progress(line: &str) -> Option<DownloadProgress> {
         .parse::<f64>()
         .ok()?;
     let eta = fields.next().map(str::trim).and_then(normalize_eta);
-    Some(DownloadProgress { percent, eta })
+    let _bytes = fields.next();
+    let speed = fields.next().map(str::trim).and_then(normalize_speed);
+    Some(DownloadProgress {
+        percent,
+        eta,
+        speed,
+    })
 }
 
 fn normalize_eta(raw: &str) -> Option<String> {
@@ -61,6 +69,16 @@ fn normalize_eta(raw: &str) -> Option<String> {
         || raw.eq_ignore_ascii_case("unknown")
         || raw == "--:--"
     {
+        return None;
+    }
+    Some(raw.to_string())
+}
+
+/// A displayable download rate, or `None` when yt-dlp doesn't know it yet
+/// (it prints `Unknown B/s` while measuring).
+fn normalize_speed(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() || raw.to_ascii_lowercase().starts_with("unknown") {
         return None;
     }
     Some(raw.to_string())
@@ -111,15 +129,23 @@ mod tests {
 
     #[test]
     fn parses_structured_progress() {
-        let p = parse_progress("QPROG\t 42.5%\t00:13\t10.5MiB").unwrap();
+        let p = parse_progress("QPROG\t 42.5%\t00:13\t10.5MiB\t 2.53MiB/s").unwrap();
         assert!((p.percent - 42.5).abs() < 1e-9);
         assert_eq!(p.eta.as_deref(), Some("00:13"));
+        assert_eq!(p.speed.as_deref(), Some("2.53MiB/s"));
     }
 
     #[test]
-    fn unknown_eta_becomes_none() {
-        let p = parse_progress("QPROG\t100%\tNA\t1MiB").unwrap();
+    fn unknown_eta_and_speed_become_none() {
+        let p = parse_progress("QPROG\t100%\tNA\t1MiB\tUnknown B/s").unwrap();
         assert_eq!(p.eta, None);
+        assert_eq!(p.speed, None);
+    }
+
+    #[test]
+    fn missing_speed_field_tolerated() {
+        let p = parse_progress("QPROG\t50%\t00:05\t1MiB").unwrap();
+        assert_eq!(p.speed, None);
     }
 
     #[test]

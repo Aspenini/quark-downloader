@@ -1,5 +1,6 @@
 //! `quark-downloader` — interactive in a terminal, or scriptable with flags.
 
+mod cli;
 mod sink;
 
 use std::io::{IsTerminal, Write};
@@ -7,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::Parser;
+use cli::Cli;
 use quark_core::config;
 use quark_core::download::command::MediaType;
 use quark_core::events::{EventSink, MultiSink, ProgressEvent};
@@ -17,46 +19,6 @@ use sink::CliSink;
 
 const VIDEO_FORMATS: &[&str] = &["original", "mp4", "mkv", "webm"];
 const AUDIO_FORMATS: &[&str] = &["original", "mp3", "m4a", "flac", "wav", "opus", "vorbis"];
-
-#[derive(Parser)]
-#[command(
-    name = "quark-downloader",
-    version,
-    about = "Interactive yt-dlp wrapper. Run with no options for the interactive prompt."
-)]
-struct Cli {
-    /// Video or playlist URL to download (repeatable).
-    #[arg(long = "url", value_name = "URL")]
-    urls: Vec<String>,
-
-    /// File with one URL per line (# comments ignored).
-    #[arg(long = "batch-file", value_name = "FILE")]
-    batch_file: Option<PathBuf>,
-
-    /// audio or video (default: video).
-    #[arg(long = "type", value_name = "TYPE", default_value = "video")]
-    media_type: String,
-
-    /// Output format (default: original).
-    #[arg(long = "format", value_name = "FORMAT", default_value = "original")]
-    format: String,
-
-    /// Output directory.
-    #[arg(long = "output-dir", value_name = "DIR")]
-    output_dir: Option<PathBuf>,
-
-    /// Show diagnostic detail (tool paths, the exact yt-dlp command).
-    #[arg(long, short = 'v')]
-    verbose: bool,
-
-    /// Do not wait for a key press before exiting (Windows).
-    #[arg(long = "no-pause")]
-    no_pause: bool,
-
-    /// Print default output directory and exit.
-    #[arg(long = "print-default-output-dir")]
-    print_default_output_dir: bool,
-}
 
 fn main() {
     let cli = Cli::parse();
@@ -69,6 +31,7 @@ fn main() {
     }
 
     let mut urls = cli.urls;
+    urls.extend(cli.url_flags);
     if let Some(batch) = &cli.batch_file {
         match std::fs::read_to_string(batch) {
             Ok(text) => {
@@ -91,7 +54,11 @@ fn main() {
         interactive_main(cli.verbose, cli.no_pause)
     } else {
         let settings = config::load(true).unwrap_or_default();
-        let media_type = MediaType::parse(&cli.media_type).unwrap_or(MediaType::Video);
+        let media_type = if cli.audio {
+            MediaType::Audio
+        } else {
+            MediaType::parse(&cli.media_type).unwrap_or(MediaType::Video)
+        };
         run(
             &settings,
             urls,

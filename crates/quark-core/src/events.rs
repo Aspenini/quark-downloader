@@ -22,6 +22,8 @@ pub enum ProgressEvent {
     Progress { percent: f64 },
     /// Estimated time remaining for the current item.
     Eta(Option<String>),
+    /// Current download rate (e.g. `2.53MiB/s`), or `None` while unknown.
+    Speed(Option<String>),
     /// A short status string (extracting, merging, ...).
     Status(String),
     /// One queue item finished with the given exit code.

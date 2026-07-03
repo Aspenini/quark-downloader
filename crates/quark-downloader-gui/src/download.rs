@@ -124,6 +124,7 @@ fn run_with_progress(app: &App, settings: &Settings, params: DownloadParams, the
 struct GuiSink {
     tx: Sender<ProgressUpdate>,
     queue: Mutex<(String, String)>, // (url label, item label)
+    rate: Mutex<(Option<String>, Option<String>)>, // (eta, speed)
 }
 
 impl GuiSink {
@@ -131,6 +132,7 @@ impl GuiSink {
         GuiSink {
             tx,
             queue: Mutex::new((String::new(), String::new())),
+            rate: Mutex::new((None, None)),
         }
     }
 
@@ -142,6 +144,20 @@ impl GuiSink {
             .cloned()
             .collect::<Vec<_>>()
             .join(" - ")
+    }
+
+    /// One "ETA · speed" line for the progress window's ETA label.
+    fn combined_rate(&self) -> Option<String> {
+        let r = self.rate.lock().unwrap();
+        let parts: Vec<&str> = [r.0.as_deref(), r.1.as_deref()]
+            .into_iter()
+            .flatten()
+            .collect();
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(" · "))
+        }
     }
 }
 
@@ -168,12 +184,22 @@ impl EventSink for GuiSink {
                 Some(ProgressUpdate::Queue(self.combined_queue()))
             }
             ProgressEvent::Progress { percent } => Some(ProgressUpdate::Percent(percent)),
-            ProgressEvent::Eta(eta) => Some(ProgressUpdate::Eta(eta)),
+            ProgressEvent::Eta(eta) => {
+                self.rate.lock().unwrap().0 = eta;
+                Some(ProgressUpdate::Eta(self.combined_rate()))
+            }
+            ProgressEvent::Speed(speed) => {
+                self.rate.lock().unwrap().1 = speed;
+                Some(ProgressUpdate::Eta(self.combined_rate()))
+            }
             ProgressEvent::Status(status) => Some(ProgressUpdate::Status(status)),
             ProgressEvent::Log(line) | ProgressEvent::Debug(line) => {
                 Some(ProgressUpdate::Log(line))
             }
-            ProgressEvent::ItemFinished { .. } => None,
+            ProgressEvent::ItemFinished { .. } => {
+                *self.rate.lock().unwrap() = (None, None);
+                Some(ProgressUpdate::Eta(None))
+            }
             ProgressEvent::Done { exit_code } => Some(ProgressUpdate::Done(exit_code)),
         };
         if let Some(update) = update {

@@ -10,6 +10,7 @@ pub struct CliSink {
     bar: ProgressBar,
     prefix: Mutex<String>,
     eta: Mutex<String>,
+    speed: Mutex<String>,
     tty: bool,
     verbose: bool,
 }
@@ -34,6 +35,7 @@ impl CliSink {
             bar,
             prefix: Mutex::new(String::new()),
             eta: Mutex::new(String::new()),
+            speed: Mutex::new(String::new()),
             tty: is_tty,
             verbose,
         }
@@ -53,7 +55,13 @@ impl CliSink {
 
     fn refresh_message(&self) {
         let eta = self.eta.lock().unwrap().clone();
-        self.bar.set_message(eta);
+        let speed = self.speed.lock().unwrap().clone();
+        let msg = [eta, speed]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · ");
+        self.bar.set_message(msg);
     }
 }
 
@@ -74,6 +82,10 @@ impl EventSink for CliSink {
             }
             ProgressEvent::Eta(eta) => {
                 *self.eta.lock().unwrap() = eta.map(|e| format!("ETA {e}")).unwrap_or_default();
+                self.refresh_message();
+            }
+            ProgressEvent::Speed(speed) => {
+                *self.speed.lock().unwrap() = speed.unwrap_or_default();
                 self.refresh_message();
             }
             ProgressEvent::Status(status) => {
@@ -103,6 +115,7 @@ impl EventSink for CliSink {
             }
             ProgressEvent::ItemFinished { .. } => {
                 *self.eta.lock().unwrap() = String::new();
+                *self.speed.lock().unwrap() = String::new();
             }
             ProgressEvent::Done { .. } => self.finish(),
         }

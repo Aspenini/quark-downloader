@@ -437,6 +437,7 @@ fn process_line(
             percent: prog.percent,
         });
         sink.emit(ProgressEvent::Eta(prog.eta));
+        sink.emit(ProgressEvent::Speed(prog.speed));
         return;
     }
 
