@@ -1,7 +1,7 @@
 //! The backend-agnostic UI description. You build these once; a
 //! [`Renderer`](crate::backend::Renderer) turns them into real widgets. Kept
-//! deliberately small and form-oriented so it maps cleanly onto Slint and
-//! every native toolkit.
+//! deliberately small and form-oriented so it maps cleanly onto every native
+//! toolkit.
 
 use std::collections::HashMap;
 

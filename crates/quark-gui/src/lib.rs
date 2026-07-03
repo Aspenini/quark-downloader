@@ -1,10 +1,10 @@
 //! QuarkGUI — a small, reusable cross-platform UI toolkit.
 //!
 //! Describe a UI once with [`model`] types, then render it through a
-//! [`backend::Renderer`]. Slint is the default backend on every platform;
-//! native backends (Win32/Cocoa/GTK/Kirigami) plug in behind features
-//! without changing your UI code. The crate is application-agnostic and can be
-//! used by any program, not just Quark Downloader.
+//! [`backend::Renderer`]. Native backends (Win32/Cocoa/GTK/Kirigami) plug in
+//! behind features without changing your UI code. The crate is
+//! application-agnostic and can be used by any program, not just Quark
+//! Downloader.
 //!
 //! ```no_run
 //! use quark_gui::{App, Backend};
@@ -22,15 +22,14 @@
 //!
 //! | [`Backend`] | Cargo feature | Notes |
 //! |-------------|---------------|-------|
-//! | `Slint` | `slint` (default) | Pure Rust, no system dependencies |
 //! | `Cocoa` | `native-cocoa` | Native AppKit (macOS) |
 //! | `Win32` | `native-windows` | Native Win32 (Windows) |
 //! | `Gtk` | `native-gtk` | GTK 4 via gtk4-rs (needs the GTK 4 libraries) |
 //! | `Kirigami` | `native-kirigami` | Qt Widgets via a cxx bridge (needs Qt 6) |
 //! | `Headless` | — | Accepts form defaults; for tests and non-interactive use |
 //!
-//! Requesting a backend that is not compiled in falls back to Slint (or
-//! Headless when Slint is disabled too) — see [`App::new`].
+//! Requesting a backend that is not compiled in falls back to the platform's
+//! default native backend and then Headless — see [`App::new`].
 
 #![warn(missing_docs)]
 

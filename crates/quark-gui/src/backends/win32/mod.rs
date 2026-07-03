@@ -1,5 +1,5 @@
 //! Native Windows (Win32) backend: form, progress, and message dialogs built
-//! directly on the Win32 API via `windows-sys`. No Slint delegation.
+//! directly on the Win32 API via `windows-sys`.
 
 mod form;
 mod progress;

@@ -1,6 +1,6 @@
 //! `quark-downloader-gui` — collects options via QuarkGUI and drives the
-//! quark-core engine in-process. Slint is the default backend; the active
-//! backend is chosen from the `gui_backend` setting.
+//! quark-core engine in-process. The active native backend is chosen from the
+//! `gui_backend` setting.
 
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
@@ -23,13 +23,24 @@ const VIDEO_FORMAT_OPTIONS: &[&str] = &["original", "mp4", "mkv", "webm"];
 const AUDIO_FORMAT_OPTIONS: &[&str] = &["original", "mp3", "m4a", "flac", "wav", "opus", "vorbis"];
 const TOOL_OPTIONS: &[&str] = &["auto", "path", "bundled"];
 const SPACES_OPTIONS: &[&str] = &["keep", "underscore", "dash", "remove"];
-const BACKEND_OPTIONS: &[&str] = &["slint", "win32", "cocoa", "gtk", "kirigami"];
+#[cfg(windows)]
+const BACKEND_OPTIONS: &[&str] = &["win32", "kirigami"];
+#[cfg(target_os = "macos")]
+const BACKEND_OPTIONS: &[&str] = &["cocoa", "kirigami", "gtk"];
+#[cfg(target_os = "linux")]
+const BACKEND_OPTIONS: &[&str] = &["gtk", "kirigami"];
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+const BACKEND_OPTIONS: &[&str] = &["kirigami"];
 const MODE_OPTIONS: &[&str] = &["progress", "external_cli"];
 const THEME_OPTIONS: &[&str] = &["light", "dark"];
 
 fn main() {
     let mut settings = config::load(true).unwrap_or_default();
-    let app = App::new(Backend::from_name(settings.gui_backend.as_str()));
+    let backend = std::env::var("QUARK_GUI_BACKEND")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| settings.gui_backend.as_str().to_owned());
+    let app = App::new(Backend::from_name(&backend));
 
     loop {
         let theme = ui_theme(&settings);
@@ -167,6 +178,12 @@ fn settings_form(settings: &Settings, theme: Theme) -> FormSpec {
             THEME_OPTIONS,
             settings.gui_theme.as_str(),
         ),
+        combo(
+            "gui_backend",
+            "GUI backend (applies next launch)",
+            &backend_options,
+            settings.gui_backend.as_str(),
+        ),
         Field::Section {
             label: "Download Naming".into(),
         },
@@ -219,15 +236,6 @@ fn settings_form(settings: &Settings, theme: Theme) -> FormSpec {
             "ffmpeg source",
             TOOL_OPTIONS,
             settings.ffmpeg.as_str(),
-        ),
-        Field::Section {
-            label: "Interface".into(),
-        },
-        combo(
-            "gui_backend",
-            "GUI backend (applies next launch)",
-            &backend_options,
-            settings.gui_backend.as_str(),
         ),
     ];
     form

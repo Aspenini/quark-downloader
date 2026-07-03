@@ -48,22 +48,20 @@ A Cargo workspace under `crates/`:
 
 ### GUI backends
 
-QuarkGUI renders through a selectable backend. **Slint** is the initial default on every platform
-and the automatic fallback. The normal build includes every backend supported by its target:
-Cocoa on macOS, Win32 on Windows, and GTK plus Qt/Kirigami on Linux. Choose one in the GUI settings;
-the saved backend is used the next time the app starts.
+QuarkGUI renders through selectable native backends. The normal build includes every backend
+supported by its target. Choose one in the GUI settings; the saved backend is used the next time
+the app starts.
 
 | Setting | Platform | Toolkit (`cargo` feature) |
 | ------- | -------- | ------------------------- |
-| `slint` | all | Slint — default, no system dependencies |
-| `cocoa` | macOS | native AppKit form, progress, and dialogs (`native-cocoa`) |
-| `win32` | Windows | native Win32 form, progress, and dialogs (`native-windows`) |
-| `gtk` | Linux (any platform with GTK 4) | GTK 4 via gtk4-rs (`native-gtk`, needs the GTK 4 libraries) |
-| `kirigami` | all | Qt Widgets via a cxx bridge — Breeze/Kirigami look on KDE (`native-kirigami`, needs Qt 6) |
+| `win32` | Windows; default | native Win32 form, progress, and dialogs (`native-windows`) |
+| `cocoa` | macOS; default | native AppKit form, progress, and dialogs (`native-cocoa`) |
+| `gtk` | macOS and Linux; Linux default | GTK 4 via gtk4-rs (`native-gtk`, needs GTK 4) |
+| `kirigami` | Windows, macOS, and Linux | Qt Widgets via a cxx bridge — Breeze/Kirigami look on KDE (`native-kirigami`, needs Qt 6) |
 
-All five are complete implementations of the same renderer interface. Requesting a backend that
-isn't compiled into the current build falls back to Slint automatically. `winui` is accepted as a
-legacy alias for `win32`.
+All four are complete implementations of the same renderer interface. Requesting a backend that
+isn't compiled into the current build falls back to that platform's default native backend.
+`winui` is accepted as a legacy alias for `win32`.
 
 ## Build & run
 
@@ -75,12 +73,42 @@ just build              # release build with this platform's GUI backends
 just run -- --help      # run the CLI
 just run-gui            # run the GUI with all backends for this platform
 just demo-gui           # standalone QuarkGUI example (proves the toolkit is reusable)
-just test               # cargo test --workspace
+just test               # test the workspace with this platform's GUI backends
 just lint               # clippy, warnings as errors
 ```
 
+### Test Windows from macOS or Linux
+
+The Windows GNU target can be cross-compiled and exercised through Wine without a Windows machine.
+Install the target plus MinGW-w64 and Wine:
+
+```bash
+rustup target add x86_64-pc-windows-gnu
+
+# macOS
+brew install mingw-w64
+brew install --cask wine-stable
+
+# Debian/Ubuntu
+sudo apt install mingw-w64 wine
+```
+
+Then use the Windows recipes:
+
+```bash
+just windows-build                 # cross-compile the Windows CLI and GUI
+just windows-test                  # run Windows test binaries through Wine
+just windows-run-gui               # launch the .exe with the native Win32 backend
+just windows-run-cli --help        # run the Windows CLI
+```
+
+Wine state is isolated under `target/wine`. Set `WINE=/path/to/wine` if the executable is not
+named `wine`. The cross-compiled build contains Win32, which is also the Windows default.
+
 The Linux build links real GTK and Qt system libraries; install `libgtk-4-dev` and `qt6-base-dev`
-on Debian-like systems. A scripted, self-closing progress demo
+on Debian-like systems. On macOS, install `gtk4` and `qt` with Homebrew to build every supported
+backend. Windows needs Qt 6 with `qmake` on `PATH` for the optional Kirigami backend; the native
+Win32-only Wine cross-test does not require Qt. A scripted, self-closing progress demo
 smoke-tests any backend without interaction, e.g.
 `QUARK_GUI_BACKEND=gtk cargo run -p quark-gui --example progress --no-default-features --features native-gtk`.
 
@@ -118,7 +146,7 @@ as `.conf.bak`).
 | ------- | ------ |
 | `download_dir` | Default output folder (`~` supported) |
 | `yt_dlp` / `ffmpeg` | `auto`, `path`, or `bundled` |
-| `gui_backend` | `slint` (default), `win32`, `cocoa`, `gtk`, `kirigami` |
+| `gui_backend` | `win32`, `cocoa`, `gtk`, `kirigami`; default depends on the platform |
 | `gui_download_mode` | `progress` (in-app progress window) or `external_cli` (open the CLI in a terminal) |
 | `gui_theme` | `light` or `dark` |
 | `download_logs` | `true` / `false` — rotated logs under the config dir's `logs/` |

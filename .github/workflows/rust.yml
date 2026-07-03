@@ -32,7 +32,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          # Slint needs fontconfig/xcb/xkbcommon; the native backends need GTK 4 and Qt 6.
+          # The Linux native backends need GTK 4 and Qt 6.
           sudo apt-get install -y libfontconfig1-dev libxcb1-dev libxkbcommon-dev \
             libgtk-4-dev qt6-base-dev
 
@@ -63,10 +63,6 @@ jobs:
 
       # GTK 4 and Qt Widgets (`kirigami`) are cross-platform, but linking them
       # needs their system libraries; the Linux runner has both via apt.
-      - name: Check native GTK backend (Linux)
+      - name: Check native GTK and Qt backends together (Linux)
         if: runner.os == 'Linux'
-        run: cargo clippy -p quark-gui --all-targets --features native-gtk -- -D warnings
-
-      - name: Check native Qt backend (Linux)
-        if: runner.os == 'Linux'
-        run: cargo clippy -p quark-gui --all-targets --features native-kirigami -- -D warnings
+        run: cargo clippy -p quark-gui --all-targets --features native-gtk,native-kirigami -- -D warnings

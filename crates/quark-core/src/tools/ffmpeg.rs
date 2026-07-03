@@ -53,8 +53,6 @@ pub fn detect(source: ToolSource, sink: &dyn EventSink) {
 
 /// `(from_path, path)` of an ffmpeg binary to use, if one is available.
 fn locate(source: ToolSource) -> Option<(bool, PathBuf)> {
-    #[cfg(windows)]
-    let source = source;
     #[cfg(not(windows))]
     let source = {
         let _ = source;

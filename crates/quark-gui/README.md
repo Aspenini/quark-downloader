@@ -2,7 +2,7 @@
 
 A small, reusable cross-platform UI toolkit: describe a form, progress window,
 or message dialog once with plain Rust data types, then render it through the
-backend of your choice — Slint by default, or the platform's native toolkit.
+native backend of your choice.
 
 QuarkGUI grew out of [Quark Downloader](https://github.com/Aspenini/quark-downloader)
 but has no dependency on it and can be used by any program.
@@ -36,22 +36,20 @@ if let FormOutcome::Submit(values) = app.run_form(form) {
 
 | `Backend` | Cargo feature | Notes |
 | --------- | ------------- | ----- |
-| `Slint` | `slint` (default) | Pure Rust, no system dependencies, all platforms |
 | `Cocoa` | `native-cocoa` | Native AppKit (macOS) |
 | `Win32` | `native-windows` | Native Win32 (Windows) |
 | `Gtk` | `native-gtk` | GTK 4 via gtk4-rs — needs the GTK 4 libraries |
 | `Kirigami` | `native-kirigami` | Qt Widgets via a cxx bridge — needs Qt 6 (`qmake` on PATH); Breeze/Kirigami look on KDE |
 | `Headless` | — | No UI; accepts form defaults (tests, non-interactive fallback) |
 
-Requesting a backend that isn't compiled in falls back to Slint automatically
-(or Headless when Slint is disabled too), so shipping one binary with optional
-native features is safe.
+Requesting a backend that isn't compiled in falls back to the platform's
+default compiled native backend, then Headless when no GUI backend is present.
 
 ## Examples
 
 ```bash
-# Interactive form demo (Slint):
-cargo run -p quark-gui --example standalone
+# Interactive form demo (macOS Cocoa):
+cargo run -p quark-gui --example standalone --features native-cocoa
 
 # Self-closing progress demo — also a no-interaction smoke test for any backend:
 cargo run -p quark-gui --example progress

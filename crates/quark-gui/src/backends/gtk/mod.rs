@@ -1,5 +1,4 @@
-//! Native GTK 4 backend built with gtk4-rs. Cross-platform wherever the GTK 4
-//! libraries are present (Linux first-class; also builds on macOS/Windows).
+//! Native GTK 4 backend built with gtk4-rs for Linux and macOS.
 
 mod form;
 mod progress;

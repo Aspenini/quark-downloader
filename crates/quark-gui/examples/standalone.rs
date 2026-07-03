@@ -6,14 +6,13 @@
 //! cargo run -p quark-gui --example standalone --no-default-features
 //! ```
 //!
-//! With the default Slint backend (`cargo run -p quark-gui --example standalone`)
-//! it opens a real window instead.
+//! Enable a native backend feature to open a real window instead.
 
 use quark_gui::model::{Field, FormOutcome, FormSpec, Theme, WindowSpec};
 use quark_gui::{App, Backend};
 
 fn main() {
-    // Auto picks Slint when compiled in, else Headless.
+    // Auto picks the platform-native backend when compiled in.
     let app = App::new(Backend::Auto);
     println!("QuarkGUI backend in use: {:?}", app.backend());
 

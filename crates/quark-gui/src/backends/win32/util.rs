@@ -3,11 +3,12 @@
 use std::ffi::c_void;
 use std::sync::Once;
 
-use windows_sys::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows_sys::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, SIZE, WPARAM};
 use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
 use windows_sys::Win32::Graphics::Gdi::{
-    CreateFontIndirectW, CreateSolidBrush, DeleteObject, FillRect, GetSysColorBrush, SetBkMode,
-    SetTextColor, COLOR_BTNFACE, HBRUSH, HDC, HFONT, TRANSPARENT,
+    CreateFontIndirectW, CreateSolidBrush, DeleteObject, FillRect, GetDC, GetSysColorBrush,
+    GetTextExtentPoint32W, ReleaseDC, SelectObject, SetBkMode, SetTextColor, COLOR_BTNFACE, HBRUSH,
+    HDC, HFONT, TRANSPARENT,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Controls::{
@@ -83,6 +84,43 @@ pub fn message_font() -> HFONT {
 
 pub fn set_font(hwnd: HWND, font: HFONT) {
     unsafe { SendMessageW(hwnd, WM_SETFONT, font as usize, 1) };
+}
+
+/// Converts the dialog units used by the original Win32 resource into pixels
+/// for the active message font.
+#[derive(Clone, Copy)]
+pub struct DialogUnits {
+    base_x: i32,
+    base_y: i32,
+}
+
+impl DialogUnits {
+    pub fn from_font(font: HFONT) -> Self {
+        const ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        let text = wide(ALPHABET);
+        unsafe {
+            let dc = GetDC(std::ptr::null_mut());
+            let previous = SelectObject(dc, font);
+            let mut extent = SIZE { cx: 0, cy: 0 };
+            GetTextExtentPoint32W(dc, text.as_ptr(), ALPHABET.len() as i32, &mut extent);
+            SelectObject(dc, previous);
+            ReleaseDC(std::ptr::null_mut(), dc);
+            Self {
+                // This is the algorithm used by Windows for DS_SETFONT dialog
+                // templates (the alphabet contains two copies of 26 letters).
+                base_x: (((extent.cx / 26) + 1) / 2).max(4),
+                base_y: extent.cy.max(8),
+            }
+        }
+    }
+
+    pub fn x(self, value: i32) -> i32 {
+        value * self.base_x / 4
+    }
+
+    pub fn y(self, value: i32) -> i32 {
+        value * self.base_y / 8
+    }
 }
 
 /// Create a child control with the message font applied.

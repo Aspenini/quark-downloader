@@ -3,7 +3,8 @@
 //! any interaction:
 //!
 //! ```text
-//! cargo run -p quark-gui --example progress                       # Slint
+//! QUARK_GUI_BACKEND=cocoa cargo run -p quark-gui --example progress \
+//!     --features native-cocoa                                     # macOS
 //! QUARK_GUI_BACKEND=gtk cargo run -p quark-gui --example progress \
 //!     --no-default-features --features native-gtk                 # GTK 4
 //! QUARK_GUI_BACKEND=kirigami cargo run -p quark-gui --example progress \

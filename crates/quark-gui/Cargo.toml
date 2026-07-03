@@ -5,21 +5,18 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-description = "Reusable cross-platform UI toolkit with selectable backends (Slint + native Cocoa/Win32/GTK4/Qt)."
+description = "Reusable cross-platform UI toolkit with native Cocoa, Win32, GTK4, and Qt backends."
 readme = "README.md"
-keywords = ["gui", "toolkit", "cross-platform", "slint", "qt"]
+keywords = ["gui", "toolkit", "cross-platform", "native", "qt"]
 categories = ["gui"]
 
 [package.metadata.docs.rs]
-# Native backends need system toolkits absent on docs.rs; document the
-# platform-independent API with the default (Slint) feature set.
-no-default-features = false
+# Native backends need system toolkits absent on docs.rs.
+no-default-features = true
 
 [features]
-default = ["slint"]
-slint = ["dep:slint", "dep:slint-build", "dep:rfd"]
-# Native backends. Each is a complete Renderer; enabling one does not pull in
-# Slint (Slint stays the default/fallback via the `slint` feature).
+default = []
+# Each native backend is a complete Renderer.
 native-windows = ["dep:windows-sys"]
 native-cocoa = ["dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
 native-gtk = ["dep:gtk4"]
@@ -27,8 +24,6 @@ native-kirigami = ["dep:cxx", "dep:cxx-build", "dep:qt-build-utils"]
 
 [dependencies]
 crossbeam-channel = { workspace = true }
-slint = { version = "1.8", optional = true, features = ["unstable-winit-030"] }
-rfd = { version = "0.15", optional = true }
 # Qt backend (feature `native-kirigami`): a small C++ bridge to Qt Widgets.
 cxx = { version = "1", optional = true }
 
@@ -59,12 +54,14 @@ objc2-foundation = { version = "0.2", optional = true, features = [
     "NSObjCRuntime",
     "NSURL",
     "NSTimer",
+    "NSThread",
     "NSRunLoop",
     "NSDate",
 ] }
 objc2-app-kit = { version = "0.2", optional = true, features = [
     "NSAlert",
     "NSApplication",
+    "NSRunningApplication",
     "NSResponder",
     "NSWindow",
     "NSView",
@@ -76,6 +73,7 @@ objc2-app-kit = { version = "0.2", optional = true, features = [
     "NSStackView",
     "NSButton",
     "NSButtonCell",
+    "NSBox",
     "NSCell",
     "NSPopUpButton",
     "NSProgressIndicator",
@@ -91,7 +89,6 @@ objc2-app-kit = { version = "0.2", optional = true, features = [
 ] }
 
 [build-dependencies]
-slint-build = { version = "1.8", optional = true }
 cxx-build = { version = "1", optional = true }
 qt-build-utils = { version = "0.9", optional = true }
 

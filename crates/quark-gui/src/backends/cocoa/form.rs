@@ -6,10 +6,10 @@ use std::rc::Rc;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2_app_kit::{
-    NSBackingStoreType, NSButton, NSControlStateValueOff, NSControlStateValueOn, NSFont,
-    NSLayoutAttribute, NSModalResponseOK, NSOpenPanel, NSPopUpButton, NSScrollView, NSStackView,
-    NSStackViewGravity, NSTextField, NSTextView, NSUserInterfaceLayoutOrientation, NSView,
-    NSWindow, NSWindowStyleMask,
+    NSBackingStoreType, NSBox, NSBoxType, NSButton, NSColor, NSControlStateValueOff,
+    NSControlStateValueOn, NSFont, NSLayoutAttribute, NSModalResponseOK, NSOpenPanel,
+    NSPopUpButton, NSScrollView, NSStackView, NSStackViewGravity, NSTextField, NSTextView,
+    NSTitlePosition, NSUserInterfaceLayoutOrientation, NSView, NSWindow, NSWindowStyleMask,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
 
@@ -48,15 +48,21 @@ struct Entry {
 
 pub fn run_form(mtm: MainThreadMarker, spec: FormSpec) -> FormOutcome {
     let app = init_app(mtm);
+    let grouped = spec
+        .fields
+        .iter()
+        .any(|field| matches!(field, Field::Section { .. }));
 
-    // Native controls are denser than Slint's widgets. Fit queue-style forms
-    // to their content instead of leaving a large empty lower half.
+    // Fit queue-style forms to their content instead of leaving a large empty
+    // lower half.
     let window_height = if spec
         .fields
         .iter()
         .any(|field| matches!(field, Field::List { .. }))
     {
         380.0
+    } else if grouped {
+        spec.window.height as f64
     } else {
         (spec.window.height as f64).min(550.0)
     };
@@ -96,9 +102,39 @@ pub fn run_form(mtm: MainThreadMarker, spec: FormSpec) -> FormOutcome {
     let mut entries: Vec<Entry> = Vec::new();
     let mut targets: Vec<Retained<ActionTarget>> = Vec::new();
 
-    for field in &spec.fields {
-        let row = build_field(mtm, field, content_width, &mut entries, &mut targets);
-        unsafe { fields_stack.addArrangedSubview(&row) };
+    if grouped {
+        let mut index = 0;
+        while index < spec.fields.len() {
+            match &spec.fields[index] {
+                Field::Section { label } => {
+                    let start = index + 1;
+                    let end = spec.fields[start..]
+                        .iter()
+                        .position(|field| matches!(field, Field::Section { .. }))
+                        .map_or(spec.fields.len(), |offset| start + offset);
+                    let group = build_group(
+                        mtm,
+                        label,
+                        &spec.fields[start..end],
+                        content_width,
+                        &mut entries,
+                        &mut targets,
+                    );
+                    unsafe { fields_stack.addArrangedSubview(&group) };
+                    index = end;
+                }
+                field => {
+                    let row = build_field(mtm, field, content_width, &mut entries, &mut targets);
+                    unsafe { fields_stack.addArrangedSubview(&row) };
+                    index += 1;
+                }
+            }
+        }
+    } else {
+        for field in &spec.fields {
+            let row = build_field(mtm, field, content_width, &mut entries, &mut targets);
+            unsafe { fields_stack.addArrangedSubview(&row) };
+        }
     }
     unsafe { outer.addArrangedSubview(&fields_stack) };
 
@@ -157,6 +193,58 @@ pub fn run_form(mtm: MainThreadMarker, spec: FormSpec) -> FormOutcome {
             None => FormOutcome::Cancel,
         },
         Decision::Cancel => FormOutcome::Cancel,
+    }
+}
+
+/// Build a compact, titled settings card containing one logical section.
+fn build_group(
+    mtm: MainThreadMarker,
+    title: &str,
+    fields: &[Field],
+    content_width: f64,
+    entries: &mut Vec<Entry>,
+    targets: &mut Vec<Retained<ActionTarget>>,
+) -> Retained<NSBox> {
+    let inset = 12.0;
+    let spacing = 8.0;
+    let inner_width = content_width - inset * 2.0;
+    let stack = vstack(mtm, spacing);
+    set_width(&stack, inner_width);
+
+    for field in fields {
+        let row = build_field(mtm, field, inner_width, entries, targets);
+        unsafe { stack.addArrangedSubview(&row) };
+    }
+
+    let rows_height: f64 = fields.iter().map(field_height).sum();
+    let gaps = fields.len().saturating_sub(1) as f64 * spacing;
+    let height = rows_height + gaps + 30.0;
+    let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(content_width, height));
+    let group = unsafe { NSBox::initWithFrame(mtm.alloc::<NSBox>(), rect) };
+    unsafe {
+        group.setBoxType(NSBoxType::NSBoxCustom);
+        group.setTitle(&NSString::from_str(title));
+        group.setTitlePosition(NSTitlePosition::NSAtTop);
+        group.setTitleFont(&NSFont::boldSystemFontOfSize(13.0));
+        group.setContentViewMargins(NSSize::new(inset, 9.0));
+        group.setCornerRadius(8.0);
+        group.setBorderWidth(1.0);
+        group.setBorderColor(&NSColor::separatorColor());
+        group.setFillColor(&NSColor::controlBackgroundColor());
+        group.setContentView(Some(&stack));
+    }
+    set_width(&group, content_width);
+    set_height(&group, height);
+    group
+}
+
+fn field_height(field: &Field) -> f64 {
+    match field {
+        Field::Text { .. } | Field::Path { .. } => 50.0,
+        Field::List { .. } => 174.0,
+        Field::Radio { .. } | Field::Check { .. } => 22.0,
+        Field::Combo { .. } | Field::DependentCombo { .. } => 26.0,
+        Field::Section { .. } => 0.0,
     }
 }
 

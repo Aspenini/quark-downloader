@@ -19,17 +19,15 @@ pub trait Renderer {
     /// Show a modal message dialog.
     fn message(&self, kind: MessageKind, title: &str, body: &str);
 
-    /// The backend's config-style name, e.g. `"slint"` or `"cocoa"`.
+    /// The backend's config-style name, e.g. `"win32"` or `"cocoa"`.
     fn name(&self) -> &'static str;
 }
 
 /// The available toolkits. Mirrors the config `gui_backend` values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
-    /// Pick the best native backend for the platform, else Slint.
+    /// Pick the default native backend for the platform.
     Auto,
-    /// Slint (feature `slint`, on by default): pure Rust, all platforms.
-    Slint,
     /// Native Win32 (feature `native-windows`, Windows only).
     Win32,
     /// Native AppKit (feature `native-cocoa`, macOS only).
@@ -43,11 +41,10 @@ pub enum Backend {
 }
 
 impl Backend {
-    /// Parse a config-style name (e.g. `"slint"`, `"cocoa"`); unknown names
+    /// Parse a config-style name (e.g. `"win32"`, `"cocoa"`); unknown names
     /// yield [`Backend::Auto`].
     pub fn from_name(name: &str) -> Backend {
         match name.trim().to_ascii_lowercase().as_str() {
-            "slint" => Backend::Slint,
             // "winui" is a legacy alias for the native Windows backend.
             "win32" | "winui" => Backend::Win32,
             "cocoa" => Backend::Cocoa,
@@ -62,74 +59,135 @@ impl Backend {
     pub fn available(self) -> bool {
         match self {
             Backend::Headless | Backend::Auto => true,
-            Backend::Slint => cfg!(feature = "slint"),
             Backend::Win32 => cfg!(all(windows, feature = "native-windows")),
             Backend::Cocoa => cfg!(all(target_os = "macos", feature = "native-cocoa")),
-            // GTK4 and Qt are cross-platform; compiling their feature requires
-            // the system libraries, so the feature flag alone gates them.
-            Backend::Gtk => cfg!(feature = "native-gtk"),
+            Backend::Gtk => cfg!(all(
+                any(target_os = "macos", target_os = "linux"),
+                feature = "native-gtk"
+            )),
             Backend::Kirigami => cfg!(feature = "native-kirigami"),
+        }
+    }
+
+    /// The native backend used when no explicit backend is configured.
+    pub fn platform_default() -> Backend {
+        #[cfg(windows)]
+        {
+            Backend::Win32
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Backend::Cocoa
+        }
+        #[cfg(target_os = "linux")]
+        {
+            Backend::Gtk
+        }
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+        {
+            Backend::Headless
         }
     }
 }
 
-/// Construct a renderer for `preferred`, falling back to Slint (then Headless)
-/// when the requested backend is unavailable. Returns the renderer and the
-/// backend actually chosen so callers can report a fallback.
+/// Construct a renderer for `preferred`, falling back to the platform's native
+/// default and then another compiled native backend when unavailable.
 pub fn renderer(preferred: Backend) -> (Box<dyn Renderer>, Backend) {
-    match preferred {
+    let requested = if preferred == Backend::Auto {
+        Backend::platform_default()
+    } else {
+        preferred
+    };
+    if let Some(renderer) = renderer_for(requested) {
+        return (renderer, requested);
+    }
+
+    for fallback in platform_backends() {
+        if *fallback == requested {
+            continue;
+        }
+        if let Some(renderer) = renderer_for(*fallback) {
+            return (renderer, *fallback);
+        }
+    }
+
+    (
+        Box::new(crate::backends::headless::HeadlessRenderer),
+        Backend::Headless,
+    )
+}
+
+fn renderer_for(backend: Backend) -> Option<Box<dyn Renderer>> {
+    match backend {
         Backend::Headless => {
-            return (
-                Box::new(crate::backends::headless::HeadlessRenderer),
-                Backend::Headless,
-            );
+            return Some(Box::new(crate::backends::headless::HeadlessRenderer));
         }
         #[cfg(all(target_os = "macos", feature = "native-cocoa"))]
         Backend::Cocoa => {
-            return (
-                Box::new(crate::backends::cocoa::CocoaRenderer::new()),
-                Backend::Cocoa,
-            );
+            return Some(Box::new(crate::backends::cocoa::CocoaRenderer::new()));
         }
         #[cfg(all(windows, feature = "native-windows"))]
         Backend::Win32 => {
-            return (
-                Box::new(crate::backends::win32::Win32Renderer::new()),
-                Backend::Win32,
-            );
+            return Some(Box::new(crate::backends::win32::Win32Renderer::new()));
         }
-        #[cfg(feature = "native-gtk")]
+        #[cfg(all(any(target_os = "macos", target_os = "linux"), feature = "native-gtk"))]
         Backend::Gtk => {
-            return (
-                Box::new(crate::backends::gtk::GtkRenderer::new()),
-                Backend::Gtk,
-            );
+            return Some(Box::new(crate::backends::gtk::GtkRenderer::new()));
         }
         #[cfg(feature = "native-kirigami")]
         Backend::Kirigami => {
-            return (
-                Box::new(crate::backends::kirigami::QtRenderer::new()),
-                Backend::Kirigami,
-            );
+            return Some(Box::new(crate::backends::kirigami::QtRenderer::new()));
         }
-        // Anything else (or an unavailable native backend) falls to Slint.
         _ => {}
     }
+    None
+}
 
-    #[cfg(feature = "slint")]
+fn platform_backends() -> &'static [Backend] {
+    #[cfg(windows)]
     {
-        let _ = preferred;
-        (
-            Box::new(crate::backends::slint::SlintRenderer::new()),
-            Backend::Slint,
-        )
+        &[Backend::Win32, Backend::Kirigami]
     }
-    #[cfg(not(feature = "slint"))]
+    #[cfg(target_os = "macos")]
     {
-        let _ = preferred;
-        (
-            Box::new(crate::backends::headless::HeadlessRenderer),
-            Backend::Headless,
-        )
+        &[Backend::Cocoa, Backend::Kirigami, Backend::Gtk]
+    }
+    #[cfg(target_os = "linux")]
+    {
+        &[Backend::Gtk, Backend::Kirigami]
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    {
+        &[]
+    }
+}
+
+#[cfg(all(
+    test,
+    any(
+        all(windows, feature = "native-windows"),
+        all(target_os = "macos", feature = "native-cocoa"),
+        all(target_os = "linux", feature = "native-gtk")
+    )
+))]
+mod tests {
+    use super::*;
+
+    #[cfg(all(windows, feature = "native-windows"))]
+    #[test]
+    fn auto_uses_win32_on_windows() {
+        assert_eq!(renderer(Backend::Auto).1, Backend::Win32);
+    }
+
+    #[cfg(all(target_os = "macos", feature = "native-cocoa"))]
+    #[test]
+    fn auto_uses_cocoa_on_macos() {
+        assert_eq!(renderer(Backend::Auto).1, Backend::Cocoa);
+    }
+
+    #[cfg(all(target_os = "linux", feature = "native-gtk"))]
+    #[test]
+    fn auto_uses_gtk_on_linux() {
+        assert_eq!(renderer(Backend::Auto).1, Backend::Gtk);
     }
 }

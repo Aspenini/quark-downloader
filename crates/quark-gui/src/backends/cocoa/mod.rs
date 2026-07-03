@@ -1,5 +1,5 @@
 //! Native macOS (Cocoa/AppKit) backend: native alerts, form, and progress
-//! windows built with objc2. No Slint delegation.
+//! windows built with objc2.
 
 mod action;
 mod form;

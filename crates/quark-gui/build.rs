@@ -1,9 +1,4 @@
 fn main() {
-    #[cfg(feature = "slint")]
-    {
-        slint_build::compile("ui/app.slint").expect("compile Slint UI");
-    }
-
     // Qt backend: compile the cxx bridge and the Qt Widgets C++ shim.
     // Requires a Qt 6 installation discoverable via qmake on PATH (or QMAKE).
     #[cfg(feature = "native-kirigami")]

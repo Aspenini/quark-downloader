@@ -60,25 +60,64 @@ str_enum!(FilenameSpaces {
     Remove => "remove" | "none",
 } default Keep);
 
-str_enum!(GuiBackend {
-    Slint => "slint",
-    // "winui" is a legacy alias from when a separate WinUI backend was planned.
-    Win32 => "win32" | "winui",
-    Cocoa => "cocoa",
-    Gtk => "gtk",
-    Kirigami => "kirigami",
-} default Slint);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuiBackend {
+    Win32,
+    Cocoa,
+    Gtk,
+    Kirigami,
+}
 
 impl GuiBackend {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Win32 => "win32",
+            Self::Cocoa => "cocoa",
+            Self::Gtk => "gtk",
+            Self::Kirigami => "kirigami",
+        }
+    }
+
+    /// Parse leniently. Unknown values return the platform default.
+    pub fn parse_lenient(value: &str) -> (Self, bool) {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "win32" | "winui" => (Self::Win32, true),
+            "cocoa" => (Self::Cocoa, true),
+            "gtk" => (Self::Gtk, true),
+            "kirigami" => (Self::Kirigami, true),
+            _ => (Self::default(), false),
+        }
+    }
+
     /// Whether this backend is meaningful on the current platform.
     pub fn supported_here(&self) -> bool {
         match self {
-            GuiBackend::Slint => true,
             GuiBackend::Win32 => cfg!(windows),
             GuiBackend::Cocoa => cfg!(target_os = "macos"),
-            // GTK 4 and Qt are cross-platform (Linux first-class; they work
-            // anywhere their system libraries are installed).
-            GuiBackend::Gtk | GuiBackend::Kirigami => true,
+            GuiBackend::Gtk => cfg!(any(target_os = "macos", target_os = "linux")),
+            GuiBackend::Kirigami => cfg!(any(windows, target_os = "macos", target_os = "linux")),
+        }
+    }
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for GuiBackend {
+    fn default() -> Self {
+        #[cfg(windows)]
+        {
+            Self::Win32
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Self::Cocoa
+        }
+        #[cfg(target_os = "linux")]
+        {
+            Self::Gtk
+        }
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+        {
+            Self::Kirigami
         }
     }
 }
@@ -117,7 +156,7 @@ impl Default for Settings {
             download_dir: DEFAULT_DOWNLOAD_DIR.to_string(),
             yt_dlp: ToolSource::Auto,
             ffmpeg: ToolSource::Auto,
-            gui_backend: GuiBackend::Slint,
+            gui_backend: GuiBackend::default(),
             gui_download_mode: GuiDownloadMode::Progress,
             download_logs: true,
             gui_theme: GuiTheme::Light,
@@ -166,8 +205,8 @@ impl Settings {
              yt_dlp = {ytdlp:?}\n\
              ffmpeg = {ffmpeg:?}\n\
              \n\
-             # GUI backend toolkit: slint | win32 | cocoa | gtk | kirigami\n\
-             # slint works everywhere; the rest are native and platform-specific.\n\
+             # GUI backend toolkit: win32 | cocoa | gtk | kirigami\n\
+             # Availability and the default depend on the operating system.\n\
              gui_backend = {backend:?}\n\
              \n\
              # GUI download behavior: progress | external_cli\n\
@@ -225,6 +264,7 @@ impl RawSettings {
                     Some(v) => {
                         let (parsed, ok) = <$ty>::parse_lenient(&v);
                         if !ok {
+                            missing = true;
                             warnings.push(format!(
                                 "invalid {} value {:?}, using {}",
                                 $key,
@@ -432,6 +472,16 @@ mod tests {
     }
 
     #[test]
+    fn gui_backend_default_matches_platform() {
+        #[cfg(windows)]
+        assert_eq!(GuiBackend::default(), GuiBackend::Win32);
+        #[cfg(target_os = "macos")]
+        assert_eq!(GuiBackend::default(), GuiBackend::Cocoa);
+        #[cfg(target_os = "linux")]
+        assert_eq!(GuiBackend::default(), GuiBackend::Gtk);
+    }
+
+    #[test]
     fn legacy_migration_roundtrip() {
         let conf = "download_dir = ~/Movies\nyt_dlp = bundled\nfilename_spaces = underscore\ndownload_logs = no\ngui_download_mode = terminal\n";
         let (settings, _w) = parse_legacy(conf);
@@ -441,7 +491,7 @@ mod tests {
         assert!(!settings.download_logs);
         assert_eq!(settings.gui_download_mode, GuiDownloadMode::ExternalCli);
         // Defaults fill the rest.
-        assert_eq!(settings.gui_backend, GuiBackend::Slint);
+        assert_eq!(settings.gui_backend, GuiBackend::default());
         assert!(settings.playlist_folders);
     }
 
