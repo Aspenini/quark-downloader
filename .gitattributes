@@ -1,5 +1,6 @@
 * text=auto
-*.rs text eol=lf
-*.toml text eol=lf
+*.sh text eol=lf
+*.tcl text eol=lf
 *.iss text eol=lf
+*.cr text eol=lf
 justfile text eol=lf
