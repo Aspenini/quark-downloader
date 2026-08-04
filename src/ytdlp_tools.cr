@@ -27,14 +27,40 @@ module YtDlpTools
     QuarkConfig.app_dir
   end
 
+  # Directory for auto-downloaded yt-dlp (and related state files).
+  #
+  # Prefer tools/ next to the binary for portable installs. When the install
+  # tree is not writable (AUR/system packages under /usr, macOS .app bundles,
+  # etc.) fall back to the user config directory so a normal user never needs
+  # root just to fetch a tool.
   def self.tools_dir : Path
     {% if flag?(:darwin) %}
-      # An installed .app bundle is not a writable place for downloaded tools.
       if app_dir.to_s.includes?(".app/Contents/MacOS")
         return QuarkConfig.config_dir / "tools"
       end
     {% end %}
-    app_dir / "tools"
+
+    beside = app_dir / "tools"
+    {% unless flag?(:windows) %}
+      return QuarkConfig.config_dir / "tools" unless parent_writable?(beside)
+    {% end %}
+    beside
+  end
+
+  # True if we can create `dir` (existing parent is writable, or dir itself is).
+  def self.parent_writable?(dir : Path) : Bool
+    path = dir.to_s
+    return File.writable?(path) if File.directory?(path)
+
+    p = dir
+    loop do
+      parent = p.parent
+      return false if parent == p
+      if File.directory?(parent.to_s)
+        return File.writable?(parent.to_s)
+      end
+      p = parent
+    end
   end
 
   def self.bundled_path : Path
@@ -93,18 +119,33 @@ module YtDlpTools
   end
 
   def self.ensure_bundled! : String
-    Dir.mkdir_p(tools_dir.to_s)
+    begin
+      Dir.mkdir_p(tools_dir.to_s)
+    rescue ex
+      raise Error.new(<<-MSG)
+        Cannot create tools directory:
+          #{tools_dir}
+        #{ex.message}
+        Do not run with sudo. Install yt-dlp on PATH, or fix permissions on that folder.
+        MSG
+    end
 
     unless File.exists?(bundled_path.to_s)
       if skip_update?
         raise Error.new(<<-MSG)
           yt-dlp not found in tools/ (quark-downloader.conf: yt_dlp = bundled).
-          Place #{asset_name} in tools/ or unset QUARK_SKIP_YTDLP_UPDATE to allow download.
+          Place #{asset_name} in #{tools_dir} or unset QUARK_SKIP_YTDLP_UPDATE to allow download.
           MSG
       end
 
-      QuarkLogs.puts "Downloading yt-dlp..."
-      download_latest!
+      QuarkLogs.puts "Downloading yt-dlp to #{tools_dir}..."
+      begin
+        download_latest!
+      rescue ex : Error
+        raise ex
+      rescue ex
+        raise Error.new("Failed to download yt-dlp into #{tools_dir}: #{ex.message}")
+      end
       return bundled_path.to_s
     end
 

@@ -67,8 +67,14 @@ module QuarkDownload
       end
     {% end %}
 
-    QuarkConfig.load!(quiet: true)
+    begin
+      QuarkConfig.load!(quiet: true)
+    rescue ex : QuarkConfig::ConfigError
+      STDERR.puts ex.message
+      exit 1
+    end
     QuarkLogs.open_download_log
+    warn_if_root!
 
     begin
       ytdlp = begin
@@ -222,23 +228,56 @@ module QuarkDownload
                   run_command(cmd + [url], tracker, StallMonitor.new, STALL_TIMEOUT)
                 end
 
-    apply_naming!(tracker, output_path, settings)
+    final_paths = apply_naming!(tracker, output_path, settings)
 
     if playlist && tracker.error_count > 0
       QuarkLogs.puts "Playlist finished: #{tracker.error_count} item(s) failed."
     end
 
+    report_saved_files(final_paths, target_dir) if exit_code == 0 || final_paths.any?
+
     exit_code
+  end
+
+  # Tell the user where files actually landed. Essential after sudo/root runs
+  # (HOME becomes /root) and when playlist folders / renames change the path.
+  def self.report_saved_files(paths : Array(String), target_dir : Path) : Nil
+    QuarkLogs.puts "Output folder: #{target_dir}"
+
+    existing = paths.select do |path|
+      begin
+        !path.ends_with?(".part") && !path.ends_with?(".ytdl") && File.file?(path)
+      rescue
+        false
+      end
+    end
+
+    if existing.empty?
+      QuarkLogs.puts "Look for new files under that folder (names may have been sanitized)."
+    else
+      QuarkLogs.puts "Saved file(s):"
+      existing.each { |p| QuarkLogs.puts "  #{p}" }
+    end
+  end
+
+  def self.warn_if_root! : Nil
+    {% unless flag?(:windows) %}
+      if LibC.getuid == 0
+        QuarkLogs.puts "Warning: running as root/sudo."
+        QuarkLogs.puts "  Config and downloads use root's home (#{QuarkConfig.user_home}), not your user account."
+        QuarkLogs.puts "  Prefer running without sudo so files land in your Downloads."
+      end
+    {% end %}
   end
 
   # Renames downloaded files according to the download-naming settings.
   # Only touches files yt-dlp reported, that still exist, inside the output
   # directory. Failures are logged and never abort the download.
-  def self.apply_naming!(tracker : DestinationTracker, output_path : Path, settings : QuarkConfig::Settings) : Nil
+  # Returns the final absolute paths (post-rename when applied).
+  def self.apply_naming!(tracker : DestinationTracker, output_path : Path, settings : QuarkConfig::Settings) : Array(String)
     policy = settings.filename_spaces.to_policy
-    return unless settings.sanitize_filenames || !policy.keep?
-
     base = File.expand_path(output_path.to_s)
+    finals = [] of String
 
     tracker.paths.each do |path|
       begin
@@ -248,6 +287,11 @@ module QuarkDownload
         next unless expanded == base || expanded.starts_with?(base + File::SEPARATOR)
         next unless File.file?(expanded)
 
+        unless settings.sanitize_filenames || !policy.keep?
+          finals << expanded
+          next
+        end
+
         dir = File.dirname(expanded)
         name = File.basename(expanded)
         new_name = FilenameSanitize.sanitize_filename(
@@ -255,17 +299,27 @@ module QuarkDownload
           settings.sanitize_filenames,
           policy,
         )
-        next if new_name == name
+        if new_name == name
+          finals << expanded
+          next
+        end
 
         final = FilenameSanitize.collision_free(dir, new_name)
-        next unless final
+        unless final
+          finals << expanded
+          next
+        end
 
-        File.rename(expanded, File.join(dir, final))
+        dest = File.join(dir, final)
+        File.rename(expanded, dest)
         QuarkLogs.puts "Renamed: #{name} -> #{final}"
+        finals << dest
       rescue ex
         QuarkLogs.puts "Warning: could not rename #{path}: #{ex.message}"
       end
     end
+
+    finals
   end
 
   # How long yt-dlp may produce no output at all before we treat the current

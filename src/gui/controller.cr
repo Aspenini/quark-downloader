@@ -14,7 +14,12 @@ module QuarkGui
       end
 
       loop do
-        QuarkConfig.load!(quiet: true)
+        begin
+          QuarkConfig.load!(quiet: true)
+        rescue ex : QuarkConfig::ConfigError
+          PlatformUi.show_error(ex.message || ex.to_s)
+          return
+        end
         session = PlatformUi.collect_main_session(
           QuarkGui.default_output_dir(cli),
           QuarkConfig.settings,

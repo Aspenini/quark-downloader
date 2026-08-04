@@ -105,6 +105,8 @@ module QuarkConfig
 
   @@settings = Settings.new
 
+  class ConfigError < Exception; end
+
   def self.app_dir : Path
     if exe = Process.executable_path
       parent = Path[exe].parent
@@ -131,6 +133,13 @@ module QuarkConfig
 
   def self.ensure_config_dir!
     Dir.mkdir_p(config_dir.to_s)
+  rescue ex
+    raise ConfigError.new(<<-MSG)
+      Cannot create config directory:
+        #{config_dir}
+      #{ex.message}
+      Check that HOME is set and you own that path. Do not use sudo.
+      MSG
   end
 
   def self.load!(quiet : Bool = false) : Nil
@@ -142,6 +151,10 @@ module QuarkConfig
     parsed = parse_file_with_keys(path, quiet: quiet)
     @@settings = parsed[0]
     append_missing_defaults!(path, @@settings, parsed[1])
+  rescue ex : ConfigError
+    raise ex
+  rescue ex
+    raise ConfigError.new("Failed to load config at #{config_path}: #{ex.message}")
   end
 
   def self.settings : Settings
@@ -370,9 +383,9 @@ module QuarkConfig
       "playlist_folders = #{settings.playlist_folders}",
       "",
       "# How to locate yt-dlp and ffmpeg",
-      "#   auto    - PATH first, then bundled tools beside the app",
+      "#   auto    - PATH first, then bundled tools (user config tools/ if install is read-only)",
       "#   path    - PATH only",
-      "#   bundled - bundled tools beside the app only (may download if missing)",
+      "#   bundled - bundled tools only (may download if missing; never needs sudo)",
       "yt_dlp = #{settings.yt_dlp.to_config}",
       "ffmpeg = #{settings.ffmpeg.to_config}",
       "",

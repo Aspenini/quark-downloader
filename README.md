@@ -24,7 +24,7 @@
 
 | Dependency         | Windows                           | macOS             | Linux                                                 |
 | ------------------ | --------------------------------- | ----------------- | ----------------------------------------------------- |
-| **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH                                                  |
+| **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH, or auto-download to `~/.config/quark-downloader/tools/` when PATH is missing/old |
 | **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH                                                  |
 | **GUI (optional)** | Win32                             | AppKit UI         | [Tk](https://www.tcl.tk/) / `wish` (`apt install tk`) |
 
@@ -76,7 +76,7 @@ just clean
 crystal spec      # run focused tests
 ```
 
-The DMG is ad-hoc signed: after downloading, right-click > Open the first time (or `xattr -dr com.apple.quarantine "Quark Downloader.app"`). Inside the app bundle, downloaded tools are stored under `~/.config/quark-downloader/tools/`.
+The DMG is ad-hoc signed: after downloading, right-click > Open the first time (or `xattr -dr com.apple.quarantine "Quark Downloader.app"`). On macOS app bundles and Linux system packages (e.g. under `/usr`), auto-downloaded tools go under `~/.config/quark-downloader/tools/` so the app never needs root. **Do not run with sudo** — that writes config and downloads into root's home.
 
 Build scripts live under [`scripts/`](scripts/README.md), grouped by platform.
 
