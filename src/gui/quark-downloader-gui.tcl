@@ -160,8 +160,8 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
 } elseif {[llength $argv] > 0 && [lindex $argv 0] eq "--session"} {
     set default_dir [file normalize "~/Downloads"]
     set current_download_dir "~/Downloads"
-    set current_ytdlp auto
-    set current_ffmpeg auto
+    # yt-dlp / ffmpeg are always PATH on Linux (and Tk macOS fallback); protocol
+    # still reserves slots 3–4 but the GUI does not expose them.
     set current_gui_mode progress
     set current_logs true
     set current_theme light
@@ -172,8 +172,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
 
     if {[llength $argv] > 1} { set default_dir [lindex $argv 1] }
     if {[llength $argv] > 2} { set current_download_dir [lindex $argv 2] }
-    if {[llength $argv] > 3} { set current_ytdlp [lindex $argv 3] }
-    if {[llength $argv] > 4} { set current_ffmpeg [lindex $argv 4] }
+    # argv 3 = yt_dlp, argv 4 = ffmpeg — ignored (PATH only)
     if {[llength $argv] > 5} { set current_gui_mode [lindex $argv 5] }
     if {[llength $argv] > 6} { set current_logs [lindex $argv 6] }
     if {[llength $argv] > 7} { set current_theme [lindex $argv 7] }
@@ -208,8 +207,6 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     set ::session_type_var video
     set ::session_settings_saved 0
     set ::session_download_dir $current_download_dir
-    set ::session_ytdlp $current_ytdlp
-    set ::session_ffmpeg $current_ffmpeg
     set ::session_gui_mode $current_gui_mode
     set ::session_logs [session_bool_value $current_logs]
     set ::session_logs_var $::session_logs
@@ -263,8 +260,6 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         set ::session_playlist_folders_var $::session_playlist_folders
         session_set_combo_value .settings.downloads.mode_combo $::session_gui_mode {progress external_cli}
         set ::session_logs_var $::session_logs
-        session_set_combo_value .settings.tools.ytdlp_combo $::session_ytdlp {auto path bundled}
-        session_set_combo_value .settings.tools.ffmpeg_combo $::session_ffmpeg {auto path bundled}
 
         grid .settings -row 0 -column 0 -sticky nsew
         session_bind_settings_keys
@@ -274,8 +269,9 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     proc session_emit_settings {} {
         puts "__SETTINGS__"
         puts $::session_download_dir
-        puts $::session_ytdlp
-        puts $::session_ffmpeg
+        # Protocol slots for tool sources (Windows-only UI); always PATH here.
+        puts "path"
+        puts "path"
         puts $::session_gui_mode
         puts [expr {$::session_logs ? "true" : "false"}]
         puts $::session_theme
@@ -391,8 +387,6 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         set ::session_playlist_folders $::session_playlist_folders_var
         set ::session_gui_mode [.settings.downloads.mode_combo get]
         set ::session_logs $::session_logs_var
-        set ::session_ytdlp [.settings.tools.ytdlp_combo get]
-        set ::session_ffmpeg [.settings.tools.ffmpeg_combo get]
         set ::session_default_dir $normalized_download_dir
         set ::session_settings_saved 1
         apply_gui_theme $::session_theme
@@ -524,29 +518,17 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
     grid .settings.downloads.logs_check -row 1 -column 0 -columnspan 2 -sticky w -padx 8 -pady {2 6}
     grid columnconfigure .settings.downloads 0 -weight 1
 
-    ttk::labelframe .settings.tools -text "Tools"
-    ttk::label .settings.tools.ytdlp_lbl -text "yt-dlp:"
-    ttk::combobox .settings.tools.ytdlp_combo -state readonly -width 12
-    ttk::label .settings.tools.ffmpeg_lbl -text "ffmpeg:"
-    ttk::combobox .settings.tools.ffmpeg_combo -state readonly -width 12
-    grid .settings.tools.ytdlp_lbl -row 0 -column 0 -sticky w -padx 8 -pady {6 6}
-    grid .settings.tools.ytdlp_combo -row 0 -column 1 -sticky w -padx 4 -pady {6 6}
-    grid .settings.tools.ffmpeg_lbl -row 0 -column 2 -sticky w -padx 8 -pady {6 6}
-    grid .settings.tools.ffmpeg_combo -row 0 -column 3 -sticky w -padx {4 8} -pady {6 6}
-    grid columnconfigure .settings.tools 0 -weight 0
-
     grid .settings.general -row 0 -column 0 -columnspan 3 -sticky ew -padx 10 -pady {10 4}
     grid .settings.naming -row 1 -column 0 -columnspan 3 -sticky ew -padx 10 -pady 4
     grid .settings.downloads -row 2 -column 0 -columnspan 3 -sticky ew -padx 10 -pady 4
-    grid .settings.tools -row 3 -column 0 -columnspan 3 -sticky ew -padx 10 -pady 4
 
     ttk::button .settings.updates_btn -text "Check for updates..." \
         -command invoke_check_for_updates
     ttk::button .settings.save_btn -text "Save" -command session_on_settings_save -default active
     ttk::button .settings.cancel_btn -text "Cancel" -command session_show_main
-    grid .settings.updates_btn -row 4 -column 0 -sticky w -padx 10 -pady 12
-    grid .settings.save_btn -row 4 -column 1 -sticky e -padx 5 -pady 12
-    grid .settings.cancel_btn -row 4 -column 2 -sticky e -padx {0 10} -pady 12
+    grid .settings.updates_btn -row 3 -column 0 -sticky w -padx 10 -pady 12
+    grid .settings.save_btn -row 3 -column 1 -sticky e -padx 5 -pady 12
+    grid .settings.cancel_btn -row 3 -column 2 -sticky e -padx {0 10} -pady 12
 
     grid columnconfigure .settings 0 -weight 1
 

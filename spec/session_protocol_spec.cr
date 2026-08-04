@@ -16,8 +16,9 @@ describe QuarkGui::SessionProtocol do
       playlist_folders: false,
     )
 
+    expected_ytdlp = {% if flag?(:windows) %} "bundled" {% else %} "path" {% end %}
     QuarkGui::SessionProtocol.build_session_args("/tmp/dl", settings).should eq([
-      "--session", "/tmp/dl", "~/Videos", "bundled", "path", "external_cli",
+      "--session", "/tmp/dl", "~/Videos", expected_ytdlp, "path", "external_cli",
       "false", "dark", "false", "true", "underscore", "false",
     ])
   end

@@ -1,75 +1,47 @@
-require "json"
-require "digest/sha256"
-require "./tool_http"
+{% if flag?(:windows) %}
+  require "json"
+  require "digest/sha256"
+  require "./tool_http"
+{% end %}
 require "./config"
 require "./logs"
 require "./version_compare"
 
 module YtDlpTools
-  GITHUB_LATEST_URL = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
-  CHECK_INTERVAL    = 24.hours
-  VERSION_FILE      = ".yt-dlp-version"
-  CHECK_AT_FILE     = ".yt-dlp-check-at"
-
   class Error < Exception; end
 
-  def self.asset_name : String
-    {% if flag?(:windows) %}
+  {% if flag?(:windows) %}
+    GITHUB_LATEST_URL = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
+    CHECK_INTERVAL    = 24.hours
+    VERSION_FILE      = ".yt-dlp-version"
+    CHECK_AT_FILE     = ".yt-dlp-check-at"
+
+    def self.asset_name : String
       "yt-dlp.exe"
-    {% elsif flag?(:darwin) %}
-      "yt-dlp_macos"
-    {% else %}
-      "yt-dlp"
-    {% end %}
-  end
-
-  def self.app_dir : Path
-    QuarkConfig.app_dir
-  end
-
-  # Directory for auto-downloaded yt-dlp (and related state files).
-  #
-  # Prefer tools/ next to the binary for portable installs. When the install
-  # tree is not writable (AUR/system packages under /usr, macOS .app bundles,
-  # etc.) fall back to the user config directory so a normal user never needs
-  # root just to fetch a tool.
-  def self.tools_dir : Path
-    {% if flag?(:darwin) %}
-      if app_dir.to_s.includes?(".app/Contents/MacOS")
-        return QuarkConfig.config_dir / "tools"
-      end
-    {% end %}
-
-    beside = app_dir / "tools"
-    {% unless flag?(:windows) %}
-      return QuarkConfig.config_dir / "tools" unless parent_writable?(beside)
-    {% end %}
-    beside
-  end
-
-  # True if we can create `dir` (existing parent is writable, or dir itself is).
-  def self.parent_writable?(dir : Path) : Bool
-    path = dir.to_s
-    return File.writable?(path) if File.directory?(path)
-
-    p = dir
-    loop do
-      parent = p.parent
-      return false if parent == p
-      if File.directory?(parent.to_s)
-        return File.writable?(parent.to_s)
-      end
-      p = parent
     end
-  end
 
-  def self.bundled_path : Path
-    tools_dir / asset_name
-  end
+    def self.app_dir : Path
+      QuarkConfig.app_dir
+    end
 
-  def self.skip_update? : Bool
-    ENV["QUARK_SKIP_YTDLP_UPDATE"]? == "1"
-  end
+    # Auto-downloaded yt-dlp lives next to the Windows binary under tools/.
+    def self.tools_dir : Path
+      app_dir / "tools"
+    end
+
+    def self.bundled_path : Path
+      tools_dir / asset_name
+    end
+
+    def self.skip_update? : Bool
+      ENV["QUARK_SKIP_YTDLP_UPDATE"]? == "1"
+    end
+  {% else %}
+    # Shared with FfmpegTools on Windows; kept for API symmetry on other platforms.
+    def self.tools_dir : Path
+      QuarkConfig.app_dir / "tools"
+    end
+  {% end %}
 
   def self.path_executable : String?
     Process.find_executable("yt-dlp")
@@ -78,31 +50,38 @@ module YtDlpTools
   MIN_YOUTUBE_YTDLP = "2025.01.26"
 
   def self.ensure! : String
-    case QuarkConfig.yt_dlp_source
-    when .path?
-      ensure_path_only!
-    when .bundled?
-      ensure_bundled!
-    else
-      ensure_auto!
-    end
-  end
-
-  def self.ensure_auto! : String
-    if path = path_executable
-      if version = read_version(path)
-        if VersionCompare.at_least?(version, MIN_YOUTUBE_YTDLP)
-          QuarkLogs.puts "Using yt-dlp from PATH: #{path}"
-          warn_youtube_js_runtime
-          return path
-        end
-
-        QuarkLogs.puts "yt-dlp on PATH (#{version}) is too old for YouTube; using bundled copy."
+    {% if flag?(:windows) %}
+      case QuarkConfig.yt_dlp_source
+      when .path?
+        ensure_path_only!
+      when .bundled?
+        ensure_bundled!
+      else
+        ensure_auto!
       end
-    end
-
-    ensure_bundled!
+    {% else %}
+      # macOS (Homebrew) and Linux (package manager / pipx): PATH only.
+      ensure_path_only!
+    {% end %}
   end
+
+  {% if flag?(:windows) %}
+    def self.ensure_auto! : String
+      if path = path_executable
+        if version = read_version(path)
+          if VersionCompare.at_least?(version, MIN_YOUTUBE_YTDLP)
+            QuarkLogs.puts "Using yt-dlp from PATH: #{path}"
+            warn_youtube_js_runtime
+            return path
+          end
+
+          QuarkLogs.puts "yt-dlp on PATH (#{version}) is too old for YouTube; using bundled copy."
+        end
+      end
+
+      ensure_bundled!
+    end
+  {% end %}
 
   def self.ensure_path_only! : String
     if path = path_executable
@@ -112,52 +91,51 @@ module YtDlpTools
       return path
     end
 
-    raise Error.new(<<-MSG)
-      yt-dlp not found on PATH (quark-downloader.conf: yt_dlp = path).
-      Install yt-dlp and add it to PATH, or set yt_dlp = auto or bundled.
-      MSG
+    raise_not_found
   end
 
-  def self.ensure_bundled! : String
-    begin
-      Dir.mkdir_p(tools_dir.to_s)
-    rescue ex
-      raise Error.new(<<-MSG)
-        Cannot create tools directory:
-          #{tools_dir}
-        #{ex.message}
-        Do not run with sudo. Install yt-dlp on PATH, or fix permissions on that folder.
-        MSG
-    end
-
-    unless File.exists?(bundled_path.to_s)
-      if skip_update?
+  {% if flag?(:windows) %}
+    def self.ensure_bundled! : String
+      begin
+        Dir.mkdir_p(tools_dir.to_s)
+      rescue ex
         raise Error.new(<<-MSG)
-          yt-dlp not found in tools/ (quark-downloader.conf: yt_dlp = bundled).
-          Place #{asset_name} in #{tools_dir} or unset QUARK_SKIP_YTDLP_UPDATE to allow download.
+          Cannot create tools directory:
+            #{tools_dir}
+          #{ex.message}
+          Install yt-dlp on PATH, or fix permissions on that folder.
           MSG
       end
 
-      QuarkLogs.puts "Downloading yt-dlp to #{tools_dir}..."
-      begin
-        download_latest!
-      rescue ex : Error
-        raise ex
-      rescue ex
-        raise Error.new("Failed to download yt-dlp into #{tools_dir}: #{ex.message}")
+      unless File.exists?(bundled_path.to_s)
+        if skip_update?
+          raise Error.new(<<-MSG)
+            yt-dlp not found in tools/ (quark-downloader.conf: yt_dlp = bundled).
+            Place #{asset_name} in #{tools_dir} or unset QUARK_SKIP_YTDLP_UPDATE to allow download.
+            MSG
+        end
+
+        QuarkLogs.puts "Downloading yt-dlp to #{tools_dir}..."
+        begin
+          download_latest!
+        rescue ex : Error
+          raise ex
+        rescue ex
+          raise Error.new("Failed to download yt-dlp into #{tools_dir}: #{ex.message}")
+        end
+        return bundled_path.to_s
       end
-      return bundled_path.to_s
+
+      QuarkLogs.puts "Using yt-dlp from: #{bundled_path}"
+
+      if check_due?
+        check_and_update_if_needed
+      end
+
+      warn_youtube_js_runtime
+      bundled_path.to_s
     end
-
-    QuarkLogs.puts "Using yt-dlp from: #{bundled_path}"
-
-    if check_due?
-      check_and_update_if_needed
-    end
-
-    warn_youtube_js_runtime
-    bundled_path.to_s
-  end
+  {% end %}
 
   def self.raise_not_found
     message = {% if flag?(:darwin) %}
@@ -167,7 +145,6 @@ module YtDlpTools
         yt-dlp not found on PATH.
         Distro packages (apt install yt-dlp) are often too old for YouTube.
         Prefer a current build: pipx install yt-dlp   or   pip install -U yt-dlp
-        Or set yt_dlp = auto in quark-downloader.conf to download a bundled copy.
         MSG
               {% else %}
                 <<-MSG
@@ -212,18 +189,40 @@ module YtDlpTools
   end
 
   def self.youtube_failure_hints : String
-    hints = <<-HINT
-      YouTube download failed. Common fixes:
-        - Let quark-downloader use a bundled yt-dlp (yt_dlp = auto in quark-downloader.conf)
-        - Or update PATH: pipx install -U yt-dlp   (or brew upgrade yt-dlp)
-      HINT
+    hints = {% if flag?(:darwin) %}
+              <<-HINT
+        YouTube download failed. Common fixes:
+          - brew upgrade yt-dlp
+          - Install a JS runtime: brew install node   (or deno)
+        HINT
+            {% elsif flag?(:linux) %}
+              <<-HINT
+        YouTube download failed. Common fixes:
+          - Update yt-dlp: pipx install -U yt-dlp   (or your package manager)
+          - Distro packages are often too old for YouTube
+        HINT
+            {% else %}
+              <<-HINT
+        YouTube download failed. Common fixes:
+          - Let quark-downloader use a bundled yt-dlp (yt_dlp = auto in quark-downloader.conf)
+          - Or update PATH: pipx install -U yt-dlp
+        HINT
+            {% end %}
 
     unless js_runtime
-      hints += <<-HINT
+      hints += {% if flag?(:darwin) %}
+                 <<-HINT
 
-        - Install a JS runtime for YouTube: sudo apt install nodejs
-          https://github.com/yt-dlp/yt-dlp/wiki/EJS
-      HINT
+          - Install a JS runtime: brew install node
+            https://github.com/yt-dlp/yt-dlp/wiki/EJS
+        HINT
+               {% else %}
+                 <<-HINT
+
+          - Install a JS runtime for YouTube: sudo apt install nodejs   (or brew install node)
+            https://github.com/yt-dlp/yt-dlp/wiki/EJS
+        HINT
+               {% end %}
     end
 
     hints
@@ -258,136 +257,135 @@ module YtDlpTools
     QuarkLogs.puts "Warning: No Node.js or Deno on PATH - YouTube may fail until you install one (yt-dlp EJS wiki)."
   end
 
-  def self.check_due? : Bool
-    check_file = tools_dir / CHECK_AT_FILE
-    return true unless File.exists?(check_file.to_s)
+  {% if flag?(:windows) %}
+    def self.check_due? : Bool
+      check_file = tools_dir / CHECK_AT_FILE
+      return true unless File.exists?(check_file.to_s)
 
-    last = File.read(check_file.to_s).chomp.to_i64?
-    return true unless last
+      last = File.read(check_file.to_s).chomp.to_i64?
+      return true unless last
 
-    (Time.utc - Time.unix(last)) >= CHECK_INTERVAL
-  rescue
-    true
-  end
-
-  def self.record_check_time
-    File.write(tools_dir / CHECK_AT_FILE, Time.utc.to_unix.to_s)
-  end
-
-  def self.check_and_update_if_needed
-    record_check_time
-    release = fetch_latest_release
-    latest = release["tag_name"].as_s.lstrip("v")
-    installed = installed_version
-
-    if installed && !VersionCompare.newer?(latest, installed)
-      return
+      (Time.utc - Time.unix(last)) >= CHECK_INTERVAL
+    rescue
+      true
     end
 
-    QuarkLogs.puts "Updating yt-dlp (#{installed || "none"} -> #{latest})..."
-    download_release!(release)
-  rescue ex
-    if File.exists?(bundled_path.to_s)
-      QuarkLogs.puts "yt-dlp update skipped: #{ex.message}"
-    else
-      raise ex
-    end
-  end
-
-  def self.download_latest!
-    release = fetch_latest_release
-    download_release!(release)
-  end
-
-  def self.fetch_latest_release : JSON::Any
-    JSON.parse(ToolHttp.fetch_body(GITHUB_LATEST_URL))
-  end
-
-  def self.download_release!(release : JSON::Any)
-    tag = release["tag_name"].as_s
-    asset = find_asset(release)
-    url = asset["browser_download_url"].as_s
-    name = asset["name"].as_s
-
-    tmp = tools_dir / "#{name}.download"
-    sums = find_checksums_asset(release)
-
-    QuarkLogs.puts "Fetching #{name} (#{tag})..."
-    ToolHttp.download_file(url, tmp)
-    verify_checksum!(release, name, tmp) if sums
-    install_binary(tmp, bundled_path)
-    File.write(tools_dir / VERSION_FILE, tag.lstrip("v"))
-    QuarkLogs.puts "yt-dlp ready (#{tag})."
-  end
-
-  def self.find_asset(release : JSON::Any) : JSON::Any
-    assets = release["assets"].as_a
-    target = asset_name
-
-    assets.each do |asset|
-      return asset if asset["name"].as_s == target
+    def self.record_check_time
+      File.write(tools_dir / CHECK_AT_FILE, Time.utc.to_unix.to_s)
     end
 
-    raise Error.new("Release #{release["tag_name"]} has no asset named #{target}")
-  end
+    def self.check_and_update_if_needed
+      record_check_time
+      release = fetch_latest_release
+      latest = release["tag_name"].as_s.lstrip("v")
+      installed = installed_version
 
-  def self.find_checksums_asset(release : JSON::Any) : JSON::Any?
-    release["assets"].as_a.find do |asset|
-      asset["name"].as_s == "SHA2-256SUMS"
-    end
-  end
+      if installed && !VersionCompare.newer?(latest, installed)
+        return
+      end
 
-  def self.verify_checksum!(release : JSON::Any, binary_name : String, path : Path)
-    sums_asset = find_checksums_asset(release)
-    return unless sums_asset
-
-    url = sums_asset["browser_download_url"].as_s
-    sums_body = ToolHttp.fetch_body(url)
-
-    expected_hash = nil
-    sums_body.split('\n').each do |line|
-      if m = line.match(/^([a-f0-9]{64})\s+(\S+)\s*$/)
-        entry_name = m[2]
-        if entry_name == binary_name || entry_name.ends_with?("/#{binary_name}")
-          expected_hash = m[1]
-          break
-        end
+      QuarkLogs.puts "Updating yt-dlp (#{installed || "none"} -> #{latest})..."
+      download_release!(release)
+    rescue ex
+      if File.exists?(bundled_path.to_s)
+        QuarkLogs.puts "yt-dlp update skipped: #{ex.message}"
+      else
+        raise ex
       end
     end
 
-    unless expected_hash
-      raise Error.new("SHA2-256SUMS has no entry for #{binary_name}")
+    def self.download_latest!
+      release = fetch_latest_release
+      download_release!(release)
     end
 
-    actual = Digest::SHA256.hexdigest(File.read(path.to_s))
-    unless actual == expected_hash
-      File.delete?(path.to_s) if File.exists?(path.to_s)
-      raise Error.new("Checksum mismatch for #{binary_name}")
-    end
-  end
-
-  def self.install_binary(tmp : Path, dest : Path)
-    File.delete?(dest.to_s) if File.exists?(dest.to_s)
-    begin
-      File.rename(tmp.to_s, dest.to_s)
-    rescue
-      File.copy(tmp.to_s, dest.to_s)
-      File.delete?(tmp.to_s)
-    end
-    {% unless flag?(:windows) %}
-      File.chmod(dest.to_s, 0o755)
-    {% end %}
-  end
-
-  def self.installed_version : String?
-    version_file = tools_dir / VERSION_FILE
-    if File.exists?(version_file.to_s)
-      v = File.read(version_file.to_s).chomp
-      return v unless v.empty?
+    def self.fetch_latest_release : JSON::Any
+      JSON.parse(ToolHttp.fetch_body(GITHUB_LATEST_URL))
     end
 
-    return nil unless File.exists?(bundled_path.to_s)
+    def self.download_release!(release : JSON::Any)
+      tag = release["tag_name"].as_s
+      asset = find_asset(release)
+      url = asset["browser_download_url"].as_s
+      name = asset["name"].as_s
 
-    read_version(bundled_path.to_s)
-  end
+      tmp = tools_dir / "#{name}.download"
+      sums = find_checksums_asset(release)
+
+      QuarkLogs.puts "Fetching #{name} (#{tag})..."
+      ToolHttp.download_file(url, tmp)
+      verify_checksum!(release, name, tmp) if sums
+      install_binary(tmp, bundled_path)
+      File.write(tools_dir / VERSION_FILE, tag.lstrip("v"))
+      QuarkLogs.puts "yt-dlp ready (#{tag})."
+    end
+
+    def self.find_asset(release : JSON::Any) : JSON::Any
+      assets = release["assets"].as_a
+      target = asset_name
+
+      assets.each do |asset|
+        return asset if asset["name"].as_s == target
+      end
+
+      raise Error.new("Release #{release["tag_name"]} has no asset named #{target}")
+    end
+
+    def self.find_checksums_asset(release : JSON::Any) : JSON::Any?
+      release["assets"].as_a.find do |asset|
+        asset["name"].as_s == "SHA2-256SUMS"
+      end
+    end
+
+    def self.verify_checksum!(release : JSON::Any, binary_name : String, path : Path)
+      sums_asset = find_checksums_asset(release)
+      return unless sums_asset
+
+      url = sums_asset["browser_download_url"].as_s
+      sums_body = ToolHttp.fetch_body(url)
+
+      expected_hash = nil
+      sums_body.split('\n').each do |line|
+        if m = line.match(/^([a-f0-9]{64})\s+(\S+)\s*$/)
+          entry_name = m[2]
+          if entry_name == binary_name || entry_name.ends_with?("/#{binary_name}")
+            expected_hash = m[1]
+            break
+          end
+        end
+      end
+
+      unless expected_hash
+        raise Error.new("SHA2-256SUMS has no entry for #{binary_name}")
+      end
+
+      actual = Digest::SHA256.hexdigest(File.read(path.to_s))
+      unless actual == expected_hash
+        File.delete?(path.to_s) if File.exists?(path.to_s)
+        raise Error.new("Checksum mismatch for #{binary_name}")
+      end
+    end
+
+    def self.install_binary(tmp : Path, dest : Path)
+      File.delete?(dest.to_s) if File.exists?(dest.to_s)
+      begin
+        File.rename(tmp.to_s, dest.to_s)
+      rescue
+        File.copy(tmp.to_s, dest.to_s)
+        File.delete?(tmp.to_s)
+      end
+    end
+
+    def self.installed_version : String?
+      version_file = tools_dir / VERSION_FILE
+      if File.exists?(version_file.to_s)
+        v = File.read(version_file.to_s).chomp
+        return v unless v.empty?
+      end
+
+      return nil unless File.exists?(bundled_path.to_s)
+
+      read_version(bundled_path.to_s)
+    end
+  {% end %}
 end

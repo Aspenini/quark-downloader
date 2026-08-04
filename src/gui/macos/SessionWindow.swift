@@ -4,15 +4,13 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
     let audioFormats = ["original", "mp3", "m4a", "flac", "wav", "opus", "vorbis"]
     let videoFormats = ["original", "mp4", "mkv", "webm"]
     let spacesValues = ["keep", "underscore", "dash", "remove"]
-    let toolValues = ["auto", "path", "bundled"]
     let modeValues = ["progress", "external_cli"]
     let themeValues = ["light", "dark"]
 
     // Session state; mirrors the variables the Tcl UI keeps.
+    // yt-dlp / ffmpeg are always PATH via Homebrew — no source picker.
     var defaultDir: String
     var downloadDir: String
-    var ytdlp: String
-    var ffmpeg: String
     var guiMode: String
     var logs: Bool
     var theme: String
@@ -45,8 +43,6 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
     var playlistCheck: NSButton!
     let modePopup = NSPopUpButton()
     var logsCheck: NSButton!
-    let ytdlpPopup = NSPopUpButton()
-    let ffmpegPopup = NSPopUpButton()
     var updatesButton: NSButton!
 
     init(arguments: [String]) {
@@ -60,8 +56,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
 
         defaultDir = normalizedPath(arg(0, NSString(string: "~/Downloads").expandingTildeInPath))
         downloadDir = arg(1, "~/Downloads")
-        ytdlp = arg(2, "auto")
-        ffmpeg = arg(3, "auto")
+        // arg 2 = yt_dlp, arg 3 = ffmpeg — ignored (PATH / Homebrew only)
         guiMode = arg(4, "progress")
         logs = boolArg(5, true)
         theme = normalizeTheme(arg(6, "light"))
@@ -202,14 +197,6 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         logsCheck = NSButton(checkboxWithTitle: "Create download logs", target: nil, action: nil)
         let downloadsBox = box("Downloads", rows: [modeRow, logsCheck], fullWidth: [])
 
-        ytdlpPopup.addItems(withTitles: toolValues)
-        ffmpegPopup.addItems(withTitles: toolValues)
-        let toolsRow = hStack([
-            NSTextField(labelWithString: "yt-dlp:"), ytdlpPopup,
-            NSTextField(labelWithString: "ffmpeg:"), ffmpegPopup,
-        ])
-        let toolsBox = box("Tools", rows: [toolsRow], fullWidth: [])
-
         updatesButton = NSButton(title: "Check for updates…", target: self, action: #selector(checkUpdates))
         let saveButton = NSButton(title: "Save", target: self, action: #selector(saveSettings))
         saveButton.keyEquivalent = "\r"
@@ -222,8 +209,8 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         buttonRow.addView(cancelButton, in: .trailing)
 
         return container(rows: [
-            generalBox, namingBox, downloadsBox, toolsBox, buttonRow,
-        ], fullWidth: [generalBox, namingBox, downloadsBox, toolsBox, buttonRow])
+            generalBox, namingBox, downloadsBox, buttonRow,
+        ], fullWidth: [generalBox, namingBox, downloadsBox, buttonRow])
     }
 
     private func populateSettingsFields() {
@@ -235,8 +222,6 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         playlistCheck.state = playlistFolders ? .on : .off
         select(modePopup, guiMode, from: modeValues)
         logsCheck.state = logs ? .on : .off
-        select(ytdlpPopup, ytdlp, from: toolValues)
-        select(ffmpegPopup, ffmpeg, from: toolValues)
     }
 
     // MARK: - Layout helpers
@@ -415,8 +400,6 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         playlistFolders = playlistCheck.state == .on
         guiMode = modePopup.titleOfSelectedItem ?? "progress"
         logs = logsCheck.state == .on
-        ytdlp = ytdlpPopup.titleOfSelectedItem ?? "auto"
-        ffmpeg = ffmpegPopup.titleOfSelectedItem ?? "auto"
         defaultDir = normalizedDir
         settingsSaved = true
         applyTheme(theme)
@@ -499,8 +482,9 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         return [
             "__SETTINGS__",
             downloadDir,
-            ytdlp,
-            ffmpeg,
+            // Protocol slots for tool sources (Windows-only UI); always PATH here.
+            "path",
+            "path",
             guiMode,
             logs ? "true" : "false",
             theme,

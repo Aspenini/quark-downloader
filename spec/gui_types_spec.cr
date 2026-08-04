@@ -15,8 +15,13 @@ describe QuarkGui::SettingsForm do
     settings = form.to_settings
 
     settings.download_dir.should eq("~/Videos")
-    settings.yt_dlp.should eq(QuarkConfig::ToolSource::Bundled)
-    settings.ffmpeg.should eq(QuarkConfig::ToolSource::Path)
+    {% if flag?(:windows) %}
+      settings.yt_dlp.should eq(QuarkConfig::ToolSource::Bundled)
+      settings.ffmpeg.should eq(QuarkConfig::ToolSource::Path)
+    {% else %}
+      settings.yt_dlp.should eq(QuarkConfig::ToolSource::Path)
+      settings.ffmpeg.should eq(QuarkConfig::ToolSource::Path)
+    {% end %}
     settings.gui_download_mode.should eq(QuarkConfig::GuiDownloadMode::ExternalCli)
     settings.download_logs.should be_false
     settings.gui_theme.should eq(QuarkConfig::GuiTheme::Dark)

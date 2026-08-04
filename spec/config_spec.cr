@@ -20,8 +20,16 @@ describe QuarkConfig do
     settings = QuarkConfig.parse_file(path, quiet: true)
 
     settings.download_dir.should eq("~/Media")
-    settings.yt_dlp.should eq(QuarkConfig::ToolSource::Path)
-    settings.ffmpeg.should eq(QuarkConfig::ToolSource::Bundled)
+    {% if flag?(:windows) %}
+      settings.yt_dlp.should eq(QuarkConfig::ToolSource::Path)
+      settings.ffmpeg.should eq(QuarkConfig::ToolSource::Bundled)
+    {% else %}
+      # Tool source keys are ignored; runtime always uses PATH.
+      settings.yt_dlp.should eq(QuarkConfig::ToolSource::Auto)
+      settings.ffmpeg.should eq(QuarkConfig::ToolSource::Auto)
+      QuarkConfig.yt_dlp_source.should eq(QuarkConfig::ToolSource::Path)
+      QuarkConfig.ffmpeg_source.should eq(QuarkConfig::ToolSource::Path)
+    {% end %}
     settings.gui_download_mode.should eq(QuarkConfig::GuiDownloadMode::ExternalCli)
     settings.download_logs.should be_false
     settings.gui_theme.should eq(QuarkConfig::GuiTheme::Dark)
@@ -79,8 +87,14 @@ describe QuarkConfig do
     rendered = QuarkConfig.render(settings)
 
     rendered.includes?("download_dir = D:/Downloads").should be_true
-    rendered.includes?("yt_dlp = bundled").should be_true
-    rendered.includes?("ffmpeg = path").should be_true
+    {% if flag?(:windows) %}
+      rendered.includes?("yt_dlp = bundled").should be_true
+      rendered.includes?("ffmpeg = path").should be_true
+    {% else %}
+      rendered.includes?("yt_dlp =").should be_false
+      rendered.includes?("ffmpeg =").should be_false
+      rendered.includes?("always resolved from PATH").should be_true
+    {% end %}
     rendered.includes?("gui_download_mode = external_cli").should be_true
     rendered.includes?("download_logs = false").should be_true
     rendered.includes?("gui_theme = dark").should be_true

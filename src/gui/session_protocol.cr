@@ -15,12 +15,16 @@ require "./types"
 module QuarkGui
   module SessionProtocol
     def self.build_session_args(default_dir : String, settings : QuarkConfig::Settings) : Array(String)
+      # Protocol still carries yt_dlp/ffmpeg slots for Windows; on macOS/Linux
+      # the values are ignored and always PATH.
+      ytdlp = {% if flag?(:windows) %} settings.yt_dlp.to_config {% else %} "path" {% end %}
+      ffmpeg = {% if flag?(:windows) %} settings.ffmpeg.to_config {% else %} "path" {% end %}
       [
         "--session",
         default_dir,
         settings.download_dir,
-        settings.yt_dlp.to_config,
-        settings.ffmpeg.to_config,
+        ytdlp,
+        ffmpeg,
         settings.gui_download_mode.to_config,
         settings.download_logs.to_s,
         settings.gui_theme.to_config,

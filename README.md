@@ -24,8 +24,8 @@
 
 | Dependency         | Windows                           | macOS             | Linux                                                 |
 | ------------------ | --------------------------------- | ----------------- | ----------------------------------------------------- |
-| **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH, or auto-download to `~/.config/quark-downloader/tools/` when PATH is missing/old |
-| **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH                                                  |
+| **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH (package manager / `pipx`)                       |
+| **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH (package manager)                                |
 | **GUI (optional)** | Win32                             | AppKit UI         | [Tk](https://www.tcl.tk/) / `wish` (`apt install tk`) |
 
 **Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
@@ -53,8 +53,8 @@ On first run, Quark creates `quark-downloader.conf` under the user config direct
 | Setting | Values |
 |---------|--------|
 | `download_dir` | Default output folder (`~` is supported) |
-| `yt_dlp` | `auto`, `path`, or `bundled` |
-| `ffmpeg` | `auto`, `path`, or `bundled` |
+| `yt_dlp` | **Windows only:** `auto`, `path`, or `bundled`. macOS/Linux always use PATH (Homebrew / package manager). |
+| `ffmpeg` | **Windows only:** `auto`, `path`, or `bundled`. macOS/Linux always use PATH. |
 | `gui_download_mode` | `progress` for the GUI progress dialog, or `external_cli` to open the CLI window after Download |
 | `download_logs` | `true` or `false`; applies to both CLI and GUI downloads |
 | `gui_theme` | `light` or `dark`; applies to the macOS/Linux GUI (Windows uses its native light UI) |
@@ -76,7 +76,7 @@ just clean
 crystal spec      # run focused tests
 ```
 
-The DMG is ad-hoc signed: after downloading, right-click > Open the first time (or `xattr -dr com.apple.quarantine "Quark Downloader.app"`). On macOS app bundles and Linux system packages (e.g. under `/usr`), auto-downloaded tools go under `~/.config/quark-downloader/tools/` so the app never needs root. **Do not run with sudo** — that writes config and downloads into root's home.
+The DMG is ad-hoc signed: after downloading, right-click > Open the first time (or `xattr -dr com.apple.quarantine "Quark Downloader.app"`). On macOS and Linux, install **yt-dlp** and **ffmpeg** yourself (`brew install yt-dlp ffmpeg`, or your distro / `pipx`); Quark does not bundle or auto-download them there. **Do not run with sudo** — that writes config and downloads into root's home.
 
 Build scripts live under [`scripts/`](scripts/README.md), grouped by platform.
 

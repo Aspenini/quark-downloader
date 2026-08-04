@@ -98,10 +98,18 @@ module QuarkConfig
 
   CONFIG_NAME = "quark-downloader.conf"
   APP_NAME    = "quark-downloader"
-  CONFIG_KEYS = [
-    "download_dir", "yt_dlp", "ffmpeg", "gui_download_mode", "download_logs", "gui_theme",
-    "strip_video_ids", "sanitize_filenames", "filename_spaces", "playlist_folders",
-  ]
+  # yt_dlp / ffmpeg source selection is Windows-only; macOS and Linux always use PATH.
+  CONFIG_KEYS = {% if flag?(:windows) %}
+                  [
+                    "download_dir", "yt_dlp", "ffmpeg", "gui_download_mode", "download_logs", "gui_theme",
+                    "strip_video_ids", "sanitize_filenames", "filename_spaces", "playlist_folders",
+                  ]
+                {% else %}
+                  [
+                    "download_dir", "gui_download_mode", "download_logs", "gui_theme",
+                    "strip_video_ids", "sanitize_filenames", "filename_spaces", "playlist_folders",
+                  ]
+                {% end %}
 
   @@settings = Settings.new
 
@@ -179,11 +187,19 @@ module QuarkConfig
   end
 
   def self.yt_dlp_source : ToolSource
-    @@settings.yt_dlp
+    {% if flag?(:windows) %}
+      @@settings.yt_dlp
+    {% else %}
+      ToolSource::Path
+    {% end %}
   end
 
   def self.ffmpeg_source : ToolSource
-    @@settings.ffmpeg
+    {% if flag?(:windows) %}
+      @@settings.ffmpeg
+    {% else %}
+      ToolSource::Path
+    {% end %}
   end
 
   def self.gui_download_mode : GuiDownloadMode
@@ -257,9 +273,14 @@ module QuarkConfig
       when "download_dir"
         settings.download_dir = value
       when "yt_dlp"
-        settings.yt_dlp = parse_tool_source(value, "yt_dlp", quiet: quiet)
+        {% if flag?(:windows) %}
+          settings.yt_dlp = parse_tool_source(value, "yt_dlp", quiet: quiet)
+        {% end %}
+        # macOS/Linux: always PATH (Homebrew / package manager); ignore file value.
       when "ffmpeg"
-        settings.ffmpeg = parse_tool_source(value, "ffmpeg", quiet: quiet)
+        {% if flag?(:windows) %}
+          settings.ffmpeg = parse_tool_source(value, "ffmpeg", quiet: quiet)
+        {% end %}
       when "gui_download_mode"
         settings.gui_download_mode = parse_gui_download_mode(value, quiet: quiet)
       when "download_logs"
@@ -297,9 +318,19 @@ module QuarkConfig
 
   def self.config_value(settings : Settings, key : String) : String
     case key
-    when "download_dir"       then settings.download_dir
-    when "yt_dlp"             then settings.yt_dlp.to_config
-    when "ffmpeg"             then settings.ffmpeg.to_config
+    when "download_dir" then settings.download_dir
+    when "yt_dlp"
+      {% if flag?(:windows) %}
+        settings.yt_dlp.to_config
+      {% else %}
+        "path"
+      {% end %}
+    when "ffmpeg"
+      {% if flag?(:windows) %}
+        settings.ffmpeg.to_config
+      {% else %}
+        "path"
+      {% end %}
     when "gui_download_mode"  then settings.gui_download_mode.to_config
     when "download_logs"      then settings.download_logs.to_s
     when "gui_theme"          then settings.gui_theme.to_config
@@ -365,7 +396,7 @@ module QuarkConfig
   end
 
   def self.render(settings : Settings) : String
-    [
+    lines = [
       "# Quark Downloader configuration",
       "# Save and restart to apply changes.",
       "",
@@ -382,13 +413,28 @@ module QuarkConfig
       "filename_spaces = #{settings.filename_spaces.to_config}",
       "playlist_folders = #{settings.playlist_folders}",
       "",
-      "# How to locate yt-dlp and ffmpeg",
-      "#   auto    - PATH first, then bundled tools (user config tools/ if install is read-only)",
-      "#   path    - PATH only",
-      "#   bundled - bundled tools only (may download if missing; never needs sudo)",
-      "yt_dlp = #{settings.yt_dlp.to_config}",
-      "ffmpeg = #{settings.ffmpeg.to_config}",
-      "",
+    ]
+
+    {% if flag?(:windows) %}
+      lines.concat([
+        "# How to locate yt-dlp and ffmpeg",
+        "#   auto    - PATH first, then bundled tools beside the app",
+        "#   path    - PATH only",
+        "#   bundled - bundled tools beside the app only (may download if missing)",
+        "yt_dlp = #{settings.yt_dlp.to_config}",
+        "ffmpeg = #{settings.ffmpeg.to_config}",
+        "",
+      ])
+    {% else %}
+      lines.concat([
+        "# yt-dlp and ffmpeg are always resolved from PATH.",
+        "#   macOS: brew install yt-dlp ffmpeg",
+        "#   Linux: package manager or pipx install yt-dlp; install ffmpeg via apt/dnf/etc.",
+        "",
+      ])
+    {% end %}
+
+    lines.concat([
       "# GUI download behavior",
       "#   progress     - show the GUI progress dialog and completion popup",
       "#   external_cli - open the CLI window after Download and close the GUI",
@@ -402,6 +448,8 @@ module QuarkConfig
       "#   dark  - dark controls and window backgrounds where supported",
       "gui_theme = #{settings.gui_theme.to_config}",
       "",
-    ].join('\n')
+    ])
+
+    lines.join('\n')
   end
 end

@@ -75,8 +75,16 @@ module QuarkGui
     def to_settings : QuarkConfig::Settings
       QuarkConfig::Settings.new(
         download_dir: download_dir,
-        yt_dlp: QuarkConfig.parse_tool_source(yt_dlp, "yt_dlp", quiet: true),
-        ffmpeg: QuarkConfig.parse_tool_source(ffmpeg, "ffmpeg", quiet: true),
+        yt_dlp: {% if flag?(:windows) %}
+                  QuarkConfig.parse_tool_source(yt_dlp, "yt_dlp", quiet: true)
+                {% else %}
+                  QuarkConfig::ToolSource::Path
+                {% end %},
+        ffmpeg: {% if flag?(:windows) %}
+                  QuarkConfig.parse_tool_source(ffmpeg, "ffmpeg", quiet: true)
+                {% else %}
+                  QuarkConfig::ToolSource::Path
+                {% end %},
         gui_download_mode: QuarkConfig.parse_gui_download_mode(gui_download_mode, quiet: true),
         download_logs: download_logs,
         gui_theme: QuarkConfig.parse_gui_theme(gui_theme, quiet: true),

@@ -22,8 +22,11 @@
 
       form = result.settings_form.should_not be_nil
       form.download_dir.should eq("~/Videos")
+      # Protocol may still carry tool-source lines; they are ignored on save (PATH only).
       form.yt_dlp.should eq("bundled")
       form.ffmpeg.should eq("path")
+      form.to_settings.yt_dlp.should eq(QuarkConfig::ToolSource::Path)
+      form.to_settings.ffmpeg.should eq(QuarkConfig::ToolSource::Path)
       form.gui_download_mode.should eq("external_cli")
       form.download_logs.should be_false
       form.gui_theme.should eq("dark")
