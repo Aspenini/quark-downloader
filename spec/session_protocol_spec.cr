@@ -119,4 +119,43 @@ describe QuarkGui::SessionProtocol do
     QuarkGui::SessionProtocol.parse("").action.should be_a(QuarkGui::MainAction::Cancel)
     QuarkGui::SessionProtocol.parse("garbage").action.should be_a(QuarkGui::MainAction::Cancel)
   end
+
+  it "parses JSON v1 download with settings" do
+    result = QuarkGui::SessionProtocol.parse(<<-JSON)
+      {
+        "v": 1,
+        "action": "download",
+        "settings": {
+          "download_dir": "~/Videos",
+          "yt_dlp": "path",
+          "ffmpeg": "path",
+          "gui_download_mode": "progress",
+          "download_logs": false,
+          "gui_theme": "dark",
+          "strip_video_ids": true,
+          "sanitize_filenames": true,
+          "filename_spaces": "keep",
+          "playlist_folders": true
+        },
+        "urls": ["https://example.com/a", "https://example.com/b"],
+        "media_type": "video",
+        "format": "mp4",
+        "output_dir": "/tmp/downloads"
+      }
+      JSON
+
+    form = result.settings_form.should_not be_nil
+    form.gui_theme.should eq("dark")
+    form.download_logs.should be_false
+
+    download = result.action.as(QuarkGui::MainAction::Download)
+    download.params.urls.should eq(["https://example.com/a", "https://example.com/b"])
+    download.params.format.should eq("mp4")
+    download.params.output_dir.should eq("/tmp/downloads")
+  end
+
+  it "parses JSON v1 cancel" do
+    result = QuarkGui::SessionProtocol.parse(%({"v":1,"action":"cancel"}))
+    result.action.should be_a(QuarkGui::MainAction::Cancel)
+  end
 end

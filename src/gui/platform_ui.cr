@@ -1,3 +1,4 @@
+require "../download_result"
 require "./types"
 
 {% if flag?(:windows) %}
@@ -24,14 +25,29 @@ module QuarkGui
       {% end %}
     end
 
-    def self.show_completion(success : Bool, exit_code : Int32 = 0) : Nil
+    def self.show_completion(result : DownloadResult) : Nil
       {% if flag?(:windows) %}
         # Windows shows completion from the progress dialog itself.
       {% elsif flag?(:darwin) %}
-        MacUi.show_completion(success, exit_code)
+        MacUi.show_completion(result)
       {% else %}
-        TkUi.show_completion(success, exit_code)
+        TkUi.show_completion(result)
       {% end %}
+    end
+
+    def self.open_folder(path : String) : Nil
+      return if path.strip.empty?
+
+      {% if flag?(:windows) %}
+        Process.run("explorer", args: [path], error: Process::Redirect::Close)
+      {% elsif flag?(:darwin) %}
+        Process.run("open", args: [path], error: Process::Redirect::Close)
+      {% else %}
+        if xdg = Process.find_executable("xdg-open")
+          Process.run(xdg, args: [path], error: Process::Redirect::Close)
+        end
+      {% end %}
+    rescue
     end
 
     def self.collect_main_session(default_output : String, settings : QuarkConfig::Settings) : MainSessionResult

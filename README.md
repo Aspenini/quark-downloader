@@ -78,6 +78,10 @@ crystal spec      # run focused tests
 
 The DMG is ad-hoc signed: after downloading, right-click > Open the first time (or `xattr -dr com.apple.quarantine "Quark Downloader.app"`). On macOS and Linux, install **yt-dlp** and **ffmpeg** yourself (`brew install yt-dlp ffmpeg`, or your distro / `pipx`); Quark does not bundle or auto-download them there. **Do not run with sudo** — that writes config and downloads into root's home.
 
+**CLI color:** Interactive and TTY output uses ANSI colors when supported. Disable with `NO_COLOR=1` or force with `FORCE_COLOR=1`.
+
+**Stall watchdog:** Playlist items that go silent too long are skipped (`QUARK_STALL_TIMEOUT_SEC`, default ~75s after output starts, ~90s grace before first output). Single-video stalls warn instead of killing.
+
 Build scripts live under [`scripts/`](scripts/README.md), grouped by platform.
 
 ### CLI (non-interactive)
@@ -86,6 +90,7 @@ Build scripts live under [`scripts/`](scripts/README.md), grouped by platform.
 quark-downloader --url 'https://example.com/video' --type video --format mp4 --output-dir ~/Downloads --no-pause
 quark-downloader --url 'https://a/1' --url 'https://a/2'   # bulk: repeat --url; failures don't stop the queue
 quark-downloader --batch-file urls.txt                     # one URL per line, # comments ignored
+quark-downloader --url '…' --emit-result-json              # final __RESULT__ JSON line for tools/GUI
 quark-downloader --url 'https://www.youtube.com/playlist?list=...'  # playlist -> own folder
 quark-downloader --print-default-output-dir
 ```

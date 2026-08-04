@@ -115,7 +115,8 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         urlField.target = self
         urlField.action = #selector(addUrl)
         let addButton = NSButton(title: "Add", target: self, action: #selector(addUrl))
-        let urlRow = hStack([urlField, addButton])
+        let pasteButton = NSButton(title: "Paste", target: self, action: #selector(pasteUrls))
+        let urlRow = hStack([urlField, addButton, pasteButton])
         expand(urlField)
 
         let queueLabel = NSTextField(labelWithString: "Queue:")
@@ -132,6 +133,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         queueTable.delegate = self
         queueTable.allowsMultipleSelection = true
         queueTable.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
+        queueTable.registerForDraggedTypes([.string, .URL, .fileURL])
         let queueScroll = NSScrollView()
         queueScroll.documentView = queueTable
         queueScroll.hasVerticalScroller = true
@@ -314,14 +316,44 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
     // MARK: - Actions
 
     @objc func addUrl() {
-        let url = urlField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        enqueueUrl(urlField.stringValue)
+        urlField.stringValue = ""
+        window.makeFirstResponder(urlField)
+    }
+
+    @objc func pasteUrls() {
+        guard let clip = NSPasteboard.general.string(forType: .string) else { return }
+        clip.split(whereSeparator: \.isNewline).forEach { enqueueUrl(String($0)) }
+    }
+
+    private func enqueueUrl(_ raw: String) {
+        let url = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty else { return }
         if !queue.contains(url) {
             queue.append(url)
             queueTable.reloadData()
         }
-        urlField.stringValue = ""
-        window.makeFirstResponder(urlField)
+    }
+
+    // Drag-and-drop URLs onto the queue table
+    func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo,
+                   proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
+        tableView.setDropRow(-1, dropOperation: .on)
+        return .copy
+    }
+
+    func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo,
+                   row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+        let pb = info.draggingPasteboard
+        if let str = pb.string(forType: .string) {
+            str.split(whereSeparator: \.isNewline).forEach { enqueueUrl(String($0)) }
+            return true
+        }
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            urls.forEach { enqueueUrl($0.absoluteString) }
+            return true
+        }
+        return false
     }
 
     @objc func removeSelected() {
@@ -476,43 +508,58 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         emitCancel()
     }
 
-    // MARK: - Protocol emission
+    // MARK: - Protocol emission (JSON v1)
 
-    private func settingsLines() -> [String] {
+    private func settingsObject() -> [String: Any] {
         return [
-            "__SETTINGS__",
-            downloadDir,
-            // Protocol slots for tool sources (Windows-only UI); always PATH here.
-            "path",
-            "path",
-            guiMode,
-            logs ? "true" : "false",
-            theme,
-            stripIds ? "true" : "false",
-            sanitize ? "true" : "false",
-            spaces,
-            playlistFolders ? "true" : "false",
+            "download_dir": downloadDir,
+            "yt_dlp": "path",
+            "ffmpeg": "path",
+            "gui_download_mode": guiMode,
+            "download_logs": logs,
+            "gui_theme": theme,
+            "strip_video_ids": stripIds,
+            "sanitize_filenames": sanitize,
+            "filename_spaces": spaces,
+            "playlist_folders": playlistFolders,
         ]
     }
 
-    private func emitDownload(urls: [String], mediaType: String, format: String, output: String) -> Never {
-        var lines = ["__SESSION__"]
-        if settingsSaved {
-            lines += settingsLines()
+    private func emitJSON(_ object: [String: Any]) -> Never {
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: []),
+              let text = String(data: data, encoding: .utf8) else {
+            fputs("{}\n", stdout)
+            exit(1)
         }
-        lines += ["__DOWNLOAD_MULTI__", String(urls.count)] + urls + [mediaType, format, output]
-        emitLines(lines)
+        fputs(text + "\n", stdout)
+        fflush(stdout)
         exit(0)
     }
 
-    private func emitCancel() -> Never {
-        var lines = ["__SESSION__"]
+    private func emitDownload(urls: [String], mediaType: String, format: String, output: String) -> Never {
+        var object: [String: Any] = [
+            "v": 1,
+            "action": "download",
+            "urls": urls,
+            "media_type": mediaType,
+            "format": format,
+            "output_dir": output,
+        ]
         if settingsSaved {
-            lines += settingsLines()
+            object["settings"] = settingsObject()
         }
-        lines.append("__CANCEL__")
-        emitLines(lines)
-        exit(0)
+        emitJSON(object)
+    }
+
+    private func emitCancel() -> Never {
+        var object: [String: Any] = [
+            "v": 1,
+            "action": "cancel",
+        ]
+        if settingsSaved {
+            object["settings"] = settingsObject()
+        }
+        emitJSON(object)
     }
 }
 

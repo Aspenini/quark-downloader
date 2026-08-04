@@ -266,48 +266,94 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
         focus .settings.general.download_entry
     }
 
-    proc session_emit_settings {} {
-        puts "__SETTINGS__"
-        puts $::session_download_dir
-        # Protocol slots for tool sources (Windows-only UI); always PATH here.
-        puts "path"
-        puts "path"
-        puts $::session_gui_mode
-        puts [expr {$::session_logs ? "true" : "false"}]
-        puts $::session_theme
-        puts [expr {$::session_strip_ids ? "true" : "false"}]
-        puts [expr {$::session_sanitize ? "true" : "false"}]
-        puts $::session_spaces
-        puts [expr {$::session_playlist_folders ? "true" : "false"}]
+    # JSON string escape for protocol v1
+    proc session_json_str {s} {
+        set s [string map {
+            \\ \\\\
+            \" \\\"
+            \n \\n
+            \r \\r
+            \t \\t
+        } $s]
+        return "\"$s\""
+    }
+
+    proc session_json_bool {v} {
+        return [expr {$v ? "true" : "false"}]
+    }
+
+    proc session_settings_json_object {} {
+        set parts [list]
+        lappend parts "[session_json_str download_dir]:[session_json_str $::session_download_dir]"
+        lappend parts "[session_json_str yt_dlp]:[session_json_str path]"
+        lappend parts "[session_json_str ffmpeg]:[session_json_str path]"
+        lappend parts "[session_json_str gui_download_mode]:[session_json_str $::session_gui_mode]"
+        lappend parts "[session_json_str download_logs]:[session_json_bool $::session_logs]"
+        lappend parts "[session_json_str gui_theme]:[session_json_str $::session_theme]"
+        lappend parts "[session_json_str strip_video_ids]:[session_json_bool $::session_strip_ids]"
+        lappend parts "[session_json_str sanitize_filenames]:[session_json_bool $::session_sanitize]"
+        lappend parts "[session_json_str filename_spaces]:[session_json_str $::session_spaces]"
+        lappend parts "[session_json_str playlist_folders]:[session_json_bool $::session_playlist_folders]"
+        return "\{[join $parts ,]\}"
     }
 
     proc session_emit_download {urls media_type format output} {
-        puts "__SESSION__"
+        set parts [list]
+        lappend parts "[session_json_str v]:1"
+        lappend parts "[session_json_str action]:[session_json_str download]"
         if {$::session_settings_saved} {
-            session_emit_settings
+            lappend parts "[session_json_str settings]:[session_settings_json_object]"
         }
-        puts "__DOWNLOAD_MULTI__"
-        puts [llength $urls]
+        set url_jsons {}
         foreach url $urls {
-            puts $url
+            lappend url_jsons [session_json_str $url]
         }
-        puts $media_type
-        puts $format
-        puts $output
+        lappend parts "[session_json_str urls]:\[[join $url_jsons ,]\]"
+        lappend parts "[session_json_str media_type]:[session_json_str $media_type]"
+        lappend parts "[session_json_str format]:[session_json_str $format]"
+        lappend parts "[session_json_str output_dir]:[session_json_str $output]"
+        puts "\{[join $parts ,]\}"
         flush stdout
         destroy .
         exit 0
     }
 
     proc session_emit_cancel {} {
-        puts "__SESSION__"
+        set parts [list]
+        lappend parts "[session_json_str v]:1"
+        lappend parts "[session_json_str action]:[session_json_str cancel]"
         if {$::session_settings_saved} {
-            session_emit_settings
+            lappend parts "[session_json_str settings]:[session_settings_json_object]"
         }
-        puts "__CANCEL__"
+        puts "\{[join $parts ,]\}"
         flush stdout
         destroy .
         exit 0
+    }
+
+    proc session_add_url {url} {
+        set url [string trim $url]
+        if {$url eq ""} {
+            return
+        }
+        if {[lsearch -exact [session_queue_urls] $url] >= 0} {
+            return
+        }
+        .main.queue_list insert end $url
+    }
+
+    proc session_on_paste {} {
+        if {[catch {clipboard get -type STRING} clip] &&
+            [catch {clipboard get} clip]} {
+            return
+        }
+        foreach line [split $clip "\n"] {
+            set line [string trim $line]
+            # strip CR from Windows-style clipboard
+            set line [string trimright $line "\r"]
+            if {$line eq ""} continue
+            session_add_url $line
+        }
     }
 
     proc session_on_type_change {} {
@@ -321,14 +367,7 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
 
     proc session_on_add {} {
         set url [string trim [.main.url_entry get]]
-        if {$url eq ""} {
-            return
-        }
-        if {[lsearch -exact [session_queue_urls] $url] >= 0} {
-            .main.url_entry delete 0 end
-            return
-        }
-        .main.queue_list insert end $url
+        session_add_url $url
         .main.url_entry delete 0 end
         focus .main.url_entry
     }
@@ -434,18 +473,33 @@ if {[llength $argv] > 0 && [lindex $argv 0] eq "--message"} {
 
     # --- Main view ---------------------------------------------------------
     ttk::label .main.url_lbl -text "Video or playlist URL:"
-    ttk::entry .main.url_entry -width 44
+    ttk::entry .main.url_entry -width 36
     ttk::button .main.add_btn -text "Add" -width 6 -command session_on_add
-    grid .main.url_lbl -row 0 -column 0 -columnspan 3 -sticky w -padx 10 -pady {10 2}
+    ttk::button .main.paste_btn -text "Paste" -width 6 -command session_on_paste
+    grid .main.url_lbl -row 0 -column 0 -columnspan 4 -sticky w -padx 10 -pady {10 2}
     grid .main.url_entry -row 1 -column 0 -columnspan 2 -sticky ew -padx {10 0}
-    grid .main.add_btn -row 1 -column 2 -sticky e -padx {4 10}
+    grid .main.add_btn -row 1 -column 2 -sticky e -padx {4 0}
+    grid .main.paste_btn -row 1 -column 3 -sticky e -padx {4 10}
 
     ttk::label .main.queue_lbl -text "Queue:"
     listbox .main.queue_list -height 4 -activestyle none
     ttk::button .main.remove_btn -text "Remove" -width 8 -command session_on_remove
     grid .main.queue_lbl -row 2 -column 0 -sticky w -padx 10 -pady {8 2}
-    grid .main.remove_btn -row 2 -column 2 -sticky e -padx {4 10} -pady {8 2}
-    grid .main.queue_list -row 3 -column 0 -columnspan 3 -sticky ew -padx 10 -pady {0 8}
+    grid .main.remove_btn -row 2 -column 3 -sticky e -padx {4 10} -pady {8 2}
+    grid .main.queue_list -row 3 -column 0 -columnspan 4 -sticky ew -padx 10 -pady {0 8}
+
+    # Drag-and-drop URLs onto the queue (when TkDnD is available)
+    catch {
+        package require tkdnd
+        tkdnd::drop_target register .main.queue_list DND_Text
+        bind .main.queue_list <<Drop:DND_Text>> {
+            foreach line [split %D "\n"] {
+                set line [string trim [string trimright $line "\r"]]
+                if {$line ne ""} { session_add_url $line }
+            }
+            break
+        }
+    }
 
     ttk::radiobutton .main.rb_video -text "Video" -variable ::session_type_var -value video \
         -command session_on_type_change

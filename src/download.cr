@@ -6,11 +6,26 @@ require "./ffmpeg_tools"
 require "./filename_sanitize"
 require "./playlist"
 require "./destination_tracker"
+require "./download_result"
+require "./term_color"
+require "./version_compare"
 {% if flag?(:windows) %}
   require "./win32_hidden_process"
 {% end %}
 
 module QuarkDownload
+  # Grace period before any yt-dlp output (extraction can be quiet).
+  STALL_GRACE = 90.seconds
+  # Silence after output has started (playlist item kill / single-video warn).
+  STALL_ACTIVE = 75.seconds
+
+  record SingleRunOutcome,
+    exit_code : Int32,
+    files : Array(String),
+    errors : Array(String),
+    target_dir : String,
+    playlist_error_count : Int32
+
   def self.default_downloads_dir : String
     {% if flag?(:windows) %}
       return File.join(QuarkConfig.user_home, "Downloads")
@@ -43,14 +58,24 @@ module QuarkDownload
     QuarkConfig.download_dir(default_downloads_dir)
   end
 
+  def self.stall_timeout_from_env(default : Time::Span) : Time::Span
+    if raw = ENV["QUARK_STALL_TIMEOUT_SEC"]?
+      if secs = raw.to_i?
+        return secs.seconds if secs > 0
+      end
+    end
+    default
+  end
+
   def self.run(
     url : String,
     media_type : String,
     format : String = "original",
     output_dir : String? = nil,
     no_pause : Bool = false,
+    emit_result : Bool = false,
   ) : Int32
-    run_all([url], media_type, format, output_dir, no_pause: no_pause)
+    run_all([url], media_type, format, output_dir, no_pause: no_pause, emit_result: emit_result)
   end
 
   def self.run_all(
@@ -59,7 +84,20 @@ module QuarkDownload
     format : String = "original",
     output_dir : String? = nil,
     no_pause : Bool = false,
+    emit_result : Bool = false,
   ) : Int32
+    result = execute(urls, media_type, format, output_dir, no_pause: no_pause)
+    emit_result_line(result) if emit_result || ENV["QUARK_GUI"]? == "1" || ENV["QUARK_EMIT_RESULT"]? == "1"
+    result.exit_code
+  end
+
+  def self.execute(
+    urls : Array(String),
+    media_type : String,
+    format : String = "original",
+    output_dir : String? = nil,
+    no_pause : Bool = false,
+  ) : DownloadResult
     {% if flag?(:windows) %}
       if ENV["QUARK_GUI"]? == "1"
         STDOUT.sync = true
@@ -67,27 +105,26 @@ module QuarkDownload
       end
     {% end %}
 
+    result = DownloadResult.new
+
     begin
       QuarkConfig.load!(quiet: true)
     rescue ex : QuarkConfig::ConfigError
-      STDERR.puts ex.message
-      exit 1
+      result.exit_code = 1
+      result.errors << (ex.message || ex.to_s)
+      STDERR.puts TermColor.red(ex.message || ex.to_s)
+      return result
     end
+
     QuarkLogs.open_download_log
+    result.log_path = QuarkLogs.active_path.try(&.to_s)
     warn_if_root!
+    warn_if_unwritable_config!
 
     begin
-      ytdlp = begin
-        YtDlpTools.ensure!
-      rescue ex : YtDlpTools::Error
-        abort_with(ex.message || ex.to_s, no_pause)
-      end
-
-      FfmpegTools.detect!
-
       media_type = media_type.downcase
       unless {"audio", "video"}.includes?(media_type)
-        abort_with("Invalid media type: #{media_type.inspect} (expected audio or video)", no_pause)
+        return fail_result(result, "Invalid media type: #{media_type.inspect} (expected audio or video)", no_pause)
       end
 
       format = format.downcase
@@ -95,57 +132,142 @@ module QuarkDownload
 
       dir = output_dir || QuarkConfig.download_dir(default_downloads_dir)
       output_path = Path[File.expand_path(dir)]
+      result.output_dir = output_path.to_s
 
-      begin
-        Dir.mkdir_p(output_path.to_s)
-      rescue ex
-        abort_with("Error creating output directory:\n#{ex}", no_pause)
+      ytdlp = begin
+        preflight!(urls, media_type, format, output_path)
+      rescue ex : YtDlpTools::Error | FfmpegTools::Error | PreflightError
+        return fail_result(result, ex.message || ex.to_s, no_pause)
       end
 
       multi = urls.size > 1
       failed = [] of {String, Int32}
 
       urls.each_with_index do |url, index|
-        QuarkLogs.puts "\n==> URL #{index + 1} of #{urls.size}: #{url}" if multi
+        QuarkLogs.puts "\n#{TermColor.bold("==> URL #{index + 1} of #{urls.size}")}: #{url}" if multi
 
-        code = begin
+        outcome = begin
           run_single(ytdlp, url, media_type, format, output_path)
         rescue ex : YtDlpTools::Error | FfmpegTools::Error
+          msg = ex.message || ex.to_s
           if multi
-            QuarkLogs.puts(ex.message || ex.to_s)
-            1
+            QuarkLogs.puts TermColor.red(msg)
+            SingleRunOutcome.new(1, [] of String, [msg], output_path.to_s, 0)
           else
-            abort_with(ex.message || ex.to_s, no_pause)
+            return fail_result(result, msg, no_pause)
           end
         end
 
-        failed << {url, code} unless code == 0
+        result.files.concat(outcome.files)
+        result.errors.concat(outcome.errors)
+        result.playlist_error_count += outcome.playlist_error_count
+        result.output_dir = outcome.target_dir if urls.size == 1
+
+        unless outcome.exit_code == 0
+          failed << {url, outcome.exit_code}
+          result.failed_urls << url
+        end
       end
+
+      result.files.uniq!
+      result.errors.uniq!
 
       if multi
         QuarkLogs.puts
-        QuarkLogs.puts "==> Finished: #{urls.size - failed.size} of #{urls.size} succeeded."
-        failed.each { |(u, _)| QuarkLogs.puts "  failed: #{u}" }
+        ok = urls.size - failed.size
+        summary = "==> Finished: #{ok} of #{urls.size} succeeded."
+        QuarkLogs.puts(failed.empty? ? TermColor.green(summary) : TermColor.yellow(summary))
+        failed.each { |(u, _)| QuarkLogs.puts TermColor.red("  failed: #{u}") }
         if failed.any? { |(u, _)| YtDlpTools.youtube_url?(u) }
           QuarkLogs.puts
           QuarkLogs.puts YtDlpTools.youtube_failure_hints
         end
         press_any_key(no_pause)
-        return failed.empty? ? 0 : 1
+        result.exit_code = failed.empty? ? 0 : 1
+        return result
       end
 
       if failed.empty?
-        QuarkLogs.puts "Done."
+        QuarkLogs.puts TermColor.green("Done.")
         press_any_key(no_pause)
-        0
+        result.exit_code = 0
+        result
       else
-        url, code = failed.first
+        _, code = failed.first
         message = "Failed with exit code #{code}."
-        message += "\n\n#{YtDlpTools.youtube_failure_hints}" if YtDlpTools.youtube_url?(url)
-        abort_with(message, no_pause, code)
+        message += "\n\n#{YtDlpTools.youtube_failure_hints}" if YtDlpTools.youtube_url?(failed.first[0])
+        fail_result(result, message, no_pause, code)
       end
     ensure
       QuarkLogs.close
+    end
+  end
+
+  class PreflightError < Exception; end
+
+  # Fail-fast checks before any long download work.
+  def self.preflight!(
+    urls : Array(String),
+    media_type : String,
+    format : String,
+    output_path : Path,
+  ) : String
+    begin
+      Dir.mkdir_p(output_path.to_s)
+    rescue ex
+      raise PreflightError.new("Cannot create output directory:\n  #{output_path}\n#{ex.message}")
+    end
+
+    unless dir_writable?(output_path)
+      raise PreflightError.new(<<-MSG)
+        Output directory is not writable:
+          #{output_path}
+        Choose another folder (do not use sudo to "fix" permissions).
+        MSG
+    end
+
+    ytdlp = YtDlpTools.ensure!
+
+    needs_ffmpeg = !{"original", "default.original"}.includes?(format)
+    if needs_ffmpeg
+      begin
+        FfmpegTools.ensure!
+      rescue ex : FfmpegTools::Error
+        raise PreflightError.new(ex.message || ex.to_s)
+      end
+    else
+      FfmpegTools.detect!
+    end
+
+    urls.each do |url|
+      YtDlpTools.preflight_youtube!(url)
+    end
+
+    if urls.any? { |u| YtDlpTools.youtube_url?(u) }
+      if version = YtDlpTools.read_version(ytdlp)
+        unless VersionCompare.at_least?(version, YtDlpTools::MIN_YOUTUBE_YTDLP)
+          QuarkLogs.puts TermColor.yellow(
+            "Warning: yt-dlp #{version} is likely too old for YouTube (want >= #{YtDlpTools::MIN_YOUTUBE_YTDLP})."
+          )
+        end
+      end
+    end
+
+    ytdlp
+  end
+
+  def self.dir_writable?(dir : Path) : Bool
+    path = dir.to_s
+    return false unless File.directory?(path)
+
+    probe = File.join(path, ".quark-write-test-#{Process.pid}")
+    begin
+      File.write(probe, "ok")
+      File.delete(probe)
+      true
+    rescue
+      File.delete?(probe) if File.exists?(probe)
+      false
     end
   end
 
@@ -155,9 +277,7 @@ module QuarkDownload
     media_type : String,
     format : String,
     output_path : Path,
-  ) : Int32
-    YtDlpTools.preflight_youtube!(url)
-
+  ) : SingleRunOutcome
     settings = QuarkConfig.settings
     playlist = QuarkPlaylist.playlist_url?(url)
     target_dir = output_path
@@ -175,12 +295,12 @@ module QuarkDownload
           target_dir = candidate
           count_note = probe.count ? " (#{probe.count} items)" : ""
           QuarkLogs.puts "Playlist: #{probe.title}#{count_note}"
-          QuarkLogs.puts "Saving into: #{target_dir}"
+          QuarkLogs.puts "Saving into: #{TermColor.cyan(target_dir.to_s)}"
         rescue ex
-          QuarkLogs.puts "Warning: could not create playlist folder #{candidate}: #{ex.message}"
+          QuarkLogs.puts TermColor.yellow("Warning: could not create playlist folder #{candidate}: #{ex.message}")
         end
       else
-        QuarkLogs.puts "Warning: could not read playlist info; downloading without a playlist folder."
+        QuarkLogs.puts TermColor.yellow("Warning: could not read playlist info; downloading without a playlist folder.")
       end
     end
 
@@ -190,10 +310,6 @@ module QuarkDownload
     cmd = [ytdlp]
     cmd.concat(playlist ? ["--yes-playlist", "--ignore-errors"] : ["--no-playlist"])
     cmd.concat(["-o", outtmpl])
-    # A stalled connection must not block forever. --socket-timeout turns a silent
-    # socket into an error instead of an infinite read; a few quick retries cover
-    # transient blips. If yt-dlp still produces no output at all, the stall
-    # watchdog in run_command kills it after STALL_TIMEOUT (see run_playlist).
     cmd.concat(["--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3"])
 
     if media_type == "audio"
@@ -222,27 +338,37 @@ module QuarkDownload
     cmd.concat(YtDlpTools.extra_args(url))
 
     tracker = DestinationTracker.new
+    active_timeout = stall_timeout_from_env(STALL_ACTIVE)
+    grace_timeout = stall_timeout_from_env(STALL_GRACE)
+
     exit_code = if playlist
-                  run_playlist(cmd, url, tracker)
+                  run_playlist(cmd, url, tracker, active_timeout, grace_timeout)
                 else
-                  run_command(cmd + [url], tracker, StallMonitor.new, STALL_TIMEOUT)
+                  monitor = StallMonitor.new(kill_on_stall: false)
+                  run_command(cmd + [url], tracker, monitor, active_timeout, grace_timeout)
                 end
 
     final_paths = apply_naming!(tracker, output_path, settings)
 
     if playlist && tracker.error_count > 0
-      QuarkLogs.puts "Playlist finished: #{tracker.error_count} item(s) failed."
+      QuarkLogs.puts TermColor.yellow("Playlist finished: #{tracker.error_count} item(s) failed.")
     end
 
-    report_saved_files(final_paths, target_dir) if exit_code == 0 || final_paths.any?
+    if exit_code == 0 || final_paths.any?
+      report_saved_files(final_paths, target_dir)
+    end
 
-    exit_code
+    SingleRunOutcome.new(
+      exit_code,
+      final_paths,
+      tracker.errors,
+      target_dir.to_s,
+      tracker.error_count,
+    )
   end
 
-  # Tell the user where files actually landed. Essential after sudo/root runs
-  # (HOME becomes /root) and when playlist folders / renames change the path.
   def self.report_saved_files(paths : Array(String), target_dir : Path) : Nil
-    QuarkLogs.puts "Output folder: #{target_dir}"
+    QuarkLogs.puts "#{TermColor.bold("Output folder:")} #{TermColor.cyan(target_dir.to_s)}"
 
     existing = paths.select do |path|
       begin
@@ -253,27 +379,38 @@ module QuarkDownload
     end
 
     if existing.empty?
-      QuarkLogs.puts "Look for new files under that folder (names may have been sanitized)."
+      QuarkLogs.puts TermColor.dim("Look for new files under that folder (names may have been sanitized).")
     else
-      QuarkLogs.puts "Saved file(s):"
-      existing.each { |p| QuarkLogs.puts "  #{p}" }
+      QuarkLogs.puts TermColor.bold("Saved file(s):")
+      existing.each { |p| QuarkLogs.puts "  #{TermColor.cyan(p)}" }
     end
   end
 
   def self.warn_if_root! : Nil
     {% unless flag?(:windows) %}
       if LibC.getuid == 0
-        QuarkLogs.puts "Warning: running as root/sudo."
-        QuarkLogs.puts "  Config and downloads use root's home (#{QuarkConfig.user_home}), not your user account."
-        QuarkLogs.puts "  Prefer running without sudo so files land in your Downloads."
+        QuarkLogs.puts TermColor.yellow("Warning: running as root/sudo.")
+        QuarkLogs.puts TermColor.yellow("  Config and downloads use root's home (#{QuarkConfig.user_home}), not your user account.")
+        QuarkLogs.puts TermColor.yellow("  Re-run without sudo so files land in your Downloads.")
       end
     {% end %}
   end
 
-  # Renames downloaded files according to the download-naming settings.
-  # Only touches files yt-dlp reported, that still exist, inside the output
-  # directory. Failures are logged and never abort the download.
-  # Returns the final absolute paths (post-rename when applied).
+  def self.warn_if_unwritable_config! : Nil
+    {% unless flag?(:windows) %}
+      return if LibC.getuid == 0
+
+      path = QuarkConfig.config_dir.to_s
+      return unless File.directory?(path)
+      return if File.writable?(path)
+
+      QuarkLogs.puts TermColor.yellow("Warning: config directory is not writable:")
+      QuarkLogs.puts TermColor.yellow("  #{path}")
+      QuarkLogs.puts TermColor.yellow("  If you previously ran with sudo, fix ownership (do not keep using sudo):")
+      QuarkLogs.puts TermColor.yellow("  sudo chown -R \"$USER\" #{path}")
+    {% end %}
+  end
+
   def self.apply_naming!(tracker : DestinationTracker, output_path : Path, settings : QuarkConfig::Settings) : Array(String)
     policy = settings.filename_spaces.to_policy
     base = File.expand_path(output_path.to_s)
@@ -315,44 +452,44 @@ module QuarkDownload
         QuarkLogs.puts "Renamed: #{name} -> #{final}"
         finals << dest
       rescue ex
-        QuarkLogs.puts "Warning: could not rename #{path}: #{ex.message}"
+        QuarkLogs.puts TermColor.yellow("Warning: could not rename #{path}: #{ex.message}")
       end
     end
 
     finals
   end
 
-  # How long yt-dlp may produce no output at all before we treat the current
-  # item as stuck, kill it, and move on. yt-dlp prints progress/extraction lines
-  # every second or two while it is working, so this much total silence means a
-  # wedged connection rather than a slow-but-alive download.
-  STALL_TIMEOUT = 30.seconds
-
   PLAYLIST_ITEM_LINE_RE = /^\[download\] Downloading item (\d+) of (\d+)/
-  # ffmpeg post-processing (merge/recode/extract) runs silently and can take far
-  # longer than STALL_TIMEOUT; suspend the watchdog while it is in progress.
-  POSTPROCESS_RE = /^\[(?:Merger|ExtractAudio|VideoConvertor|VideoRemuxer|Recode|Fixup\w*|Metadata|EmbedSubtitle|EmbedThumbnail|SponsorBlock|ModifyChapters|SplitChapters)\]/
-  RESUME_RE      = /^\[download\]|Extracting URL/
+  POSTPROCESS_RE       = /^\[(?:Merger|ExtractAudio|VideoConvertor|VideoRemuxer|Recode|Fixup\w*|Metadata|EmbedSubtitle|EmbedThumbnail|SponsorBlock|ModifyChapters|SplitChapters)\]/
+  RESUME_RE            = /^\[download\]|Extracting URL/
+  PROGRESS_HINT_RE     = /(\d+(?:\.\d+)?)%|Downloading item|Destination:/
 
-  # Watches a single yt-dlp run: tracks the last time it emitted output, the
-  # current playlist item, and whether the run is in silent post-processing.
-  # When a playlist is restarted past a stuck item, item numbers are rewritten
-  # back to absolute (yt-dlp renumbers from 1 after --playlist-start).
+  # Watches a single yt-dlp run for silence. Grace timeout applies before any
+  # output; active timeout after. Playlist runs may kill on stall; single
+  # video runs only warn (kill_on_stall: false).
   class StallMonitor
     @lock = Mutex.new
     @last = Time.instant
+    @started = Time.instant
+    @had_output = false
     @suspended = false
     @killed = false
     @finished = false
+    @warned = false
     getter current_item : Int32?
     getter total_items : Int32?
 
-    def initialize(@offset : Int32 = 0, @total_items : Int32? = nil)
+    def initialize(
+      @offset : Int32 = 0,
+      @total_items : Int32? = nil,
+      @kill_on_stall : Bool = true,
+    )
     end
 
     def observe(line : String) : String
       @lock.synchronize do
         @last = Time.instant
+        @had_output = true
         if m = line.match(PLAYLIST_ITEM_LINE_RE)
           @total_items ||= m[2].to_i + @offset
           abs = m[1].to_i + @offset
@@ -363,22 +500,36 @@ module QuarkDownload
 
         if line.matches?(POSTPROCESS_RE)
           @suspended = true
-        elsif line.matches?(RESUME_RE)
+        elsif line.matches?(RESUME_RE) || line.matches?(PROGRESS_HINT_RE)
           @suspended = false
         end
         line
       end
     end
 
-    def stalled?(timeout : Time::Span) : Bool
+    def stalled?(active_timeout : Time::Span, grace_timeout : Time::Span) : Bool
       @lock.synchronize do
         return false if @suspended || @finished
-        Time.instant - @last >= timeout
+        timeout = @had_output ? active_timeout : grace_timeout
+        anchor = @had_output ? @last : @started
+        Time.instant - anchor >= timeout
       end
+    end
+
+    def kill_on_stall? : Bool
+      @kill_on_stall
     end
 
     def mark_killed : Nil
       @lock.synchronize { @killed = true }
+    end
+
+    def mark_warned : Nil
+      @lock.synchronize { @warned = true }
+    end
+
+    def warned? : Bool
+      @lock.synchronize { @warned }
     end
 
     def finish : Nil
@@ -392,36 +543,42 @@ module QuarkDownload
     def finished? : Bool
       @lock.synchronize { @finished }
     end
+
+    def had_output? : Bool
+      @lock.synchronize { @had_output }
+    end
   end
 
-  # Runs a playlist, restarting past any item that goes silent for STALL_TIMEOUT.
-  # Already-downloaded items are skipped instantly on restart, so resuming from
-  # the next item is cheap. A stuck item is abandoned so the rest still downloads.
-  def self.run_playlist(opts : Array(String), url : String, tracker : DestinationTracker) : Int32
+  def self.run_playlist(
+    opts : Array(String),
+    url : String,
+    tracker : DestinationTracker,
+    active_timeout : Time::Span,
+    grace_timeout : Time::Span,
+  ) : Int32
     total : Int32? = nil
     start = 1
     exit_code = 0
 
     loop do
       cmd = opts.dup
-      # "N:" selects item N through the end; yt-dlp renumbers the slice from 1,
-      # which StallMonitor's offset rewrites back to absolute item numbers.
       cmd.concat(["--playlist-items", "#{start}:"]) if start > 1
       cmd << url
 
-      monitor = StallMonitor.new(offset: start - 1, total_items: total)
-      exit_code = run_command(cmd, tracker, monitor, STALL_TIMEOUT)
+      monitor = StallMonitor.new(offset: start - 1, total_items: total, kill_on_stall: true)
+      exit_code = run_command(cmd, tracker, monitor, active_timeout, grace_timeout)
       total ||= monitor.total_items
 
       break unless monitor.killed?
 
       item = monitor.current_item
       unless item
-        QuarkLogs.puts "\nStopped: no response from the server."
+        QuarkLogs.puts TermColor.yellow("\nStopped: no response from the server.")
         break
       end
 
-      QuarkLogs.puts "\nSkipping item #{item}: no response for #{STALL_TIMEOUT.total_seconds.to_i}s."
+      secs = active_timeout.total_seconds.to_i
+      QuarkLogs.puts TermColor.yellow("\nSkipping item #{item}: no response for #{secs}s.")
       start = item + 1
       break if (t = total) && start > t
     end
@@ -433,16 +590,18 @@ module QuarkDownload
     cmd : Array(String),
     tracker : DestinationTracker? = nil,
     monitor : StallMonitor? = nil,
-    stall_timeout : Time::Span? = nil,
+    active_timeout : Time::Span? = nil,
+    grace_timeout : Time::Span? = nil,
   ) : Int32
     {% if flag?(:windows) %}
       if ENV["QUARK_GUI"]? == "1"
-        return run_command_hidden(cmd, tracker, monitor, stall_timeout)
+        return run_command_hidden(cmd, tracker, monitor, active_timeout, grace_timeout)
       end
     {% end %}
 
-    QuarkLogs.puts "\nRunning:"
-    QuarkLogs.puts cmd.map { |x| x.includes?(' ') ? %("#{x}") : x }.join(' ')
+    QuarkLogs.puts
+    QuarkLogs.puts TermColor.dim("Running:")
+    QuarkLogs.puts TermColor.dim(cmd.map { |x| x.includes?(' ') ? %("#{x}") : x }.join(' '))
     QuarkLogs.puts
 
     process = Process.new(
@@ -452,15 +611,20 @@ module QuarkDownload
       error: Process::Redirect::Pipe,
     )
 
-    if monitor && (timeout = stall_timeout)
+    if monitor && (active = active_timeout) && (grace = grace_timeout)
       spawn do
         loop do
           sleep 1.second
           break if monitor.finished?
-          if monitor.stalled?(timeout)
-            monitor.mark_killed
-            process.terminate rescue nil
-            break
+          if monitor.stalled?(active, grace)
+            if monitor.kill_on_stall?
+              monitor.mark_killed
+              process.terminate rescue nil
+              break
+            elsif !monitor.warned?
+              monitor.mark_warned
+              QuarkLogs.puts TermColor.yellow("\nWarning: no response for a while; still waiting…")
+            end
           end
         end
       end
@@ -471,7 +635,7 @@ module QuarkDownload
     monitor.try(&.finish)
     QuarkProcess.exit_code(status, 127)
   rescue File::NotFoundError
-    QuarkLogs.puts "Error: #{cmd.first} was not found."
+    QuarkLogs.puts TermColor.red("Error: #{cmd.first} was not found.")
     127
   end
 
@@ -513,7 +677,8 @@ module QuarkDownload
       cmd : Array(String),
       tracker : DestinationTracker? = nil,
       monitor : StallMonitor? = nil,
-      stall_timeout : Time::Span? = nil,
+      active_timeout : Time::Span? = nil,
+      grace_timeout : Time::Span? = nil,
     ) : Int32
       STDOUT.sync = true
       STDERR.sync = true
@@ -551,14 +716,19 @@ module QuarkDownload
         end
       end
 
-      if monitor && (timeout = stall_timeout)
+      if monitor && (active = active_timeout) && (grace = grace_timeout)
         Thread.new(name: "cli-ytdlp-watchdog") do
           loop do
-            break if runner.wait(1000_u32) # finished within the second
-            if monitor.stalled?(timeout)
-              monitor.mark_killed
-              runner.terminate
-              break
+            break if runner.wait(1000_u32)
+            if monitor.stalled?(active, grace)
+              if monitor.kill_on_stall?
+                monitor.mark_killed
+                runner.terminate
+                break
+              elsif !monitor.warned?
+                monitor.mark_warned
+                QuarkLogs.puts "\nWarning: no response for a while; still waiting…"
+              end
             end
           end
         end
@@ -588,10 +758,17 @@ module QuarkDownload
     {% end %}
   end
 
-  def self.abort_with(message : String, no_pause : Bool, code = 1) : Nil
-    QuarkLogs.puts message
+  def self.fail_result(result : DownloadResult, message : String, no_pause : Bool, code = 1) : DownloadResult
+    QuarkLogs.puts TermColor.red(message)
+    result.errors << message unless result.errors.includes?(message)
+    result.exit_code = code
     press_any_key(no_pause)
-    QuarkLogs.close
-    exit(code)
+    result
+  end
+
+  def self.emit_result_line(result : DownloadResult) : Nil
+    puts result.to_emit_line
+    STDOUT.flush
+  rescue IO::Error
   end
 end

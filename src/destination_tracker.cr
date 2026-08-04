@@ -1,6 +1,6 @@
 # Watches yt-dlp output lines for the files it writes, so the naming rules
-# can be applied after the download finishes. Also counts ERROR: lines for
-# the playlist failure summary.
+# can be applied after the download finishes. Also records ERROR: lines for
+# the playlist failure summary and GUI completion dialogs.
 class DestinationTracker
   DESTINATION_PATTERNS = [
     /^\[download\] Destination: (.+)$/,
@@ -14,6 +14,7 @@ class DestinationTracker
   getter error_count = 0
 
   @paths = [] of String
+  @errors = [] of String
   @lock = Mutex.new
 
   def observe(line : String) : Nil
@@ -23,7 +24,10 @@ class DestinationTracker
       next if part.empty?
 
       if part.starts_with?("ERROR:")
-        @lock.synchronize { @error_count += 1 }
+        @lock.synchronize do
+          @error_count += 1
+          @errors << part unless @errors.includes?(part)
+        end
         next
       end
 
@@ -40,5 +44,9 @@ class DestinationTracker
 
   def paths : Array(String)
     @lock.synchronize { @paths.dup }
+  end
+
+  def errors : Array(String)
+    @lock.synchronize { @errors.dup }
   end
 end

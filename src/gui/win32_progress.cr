@@ -2,6 +2,7 @@
   require "../win32_hidden_process"
   require "../config"
   require "../logs"
+  require "../download_result"
   require "./progress_parse"
   require "./win32_ui"
 
@@ -43,6 +44,7 @@
       @@cli_runner : Win32HiddenProcess::Runner? = nil
       @@cli_finished = false
       @@cli_exit_code = 1
+      @@download_result : DownloadResult? = nil
       @@cancelled = false
       @@percent = 0.0
       @@status = "Starting download..."
@@ -91,6 +93,7 @@
         @@pending_args = cmd_args
         @@cli_finished = false
         @@cli_exit_code = 1
+        @@download_result = nil
         @@cancelled = false
         @@percent = 0.0
         @@status = "Starting download..."
@@ -190,6 +193,11 @@
       end
 
       def self.apply_line(line : String) : Nil
+        if parsed = DownloadResult.parse_emit_line(line)
+          @@download_result = parsed
+          return
+        end
+
         @@last_output_ms = LibKernel32.GetTickCount64
 
         if m = line.match(QuarkGui::QUEUE_URL_RE)
@@ -287,16 +295,23 @@
       def self.finish_download(hdlg : WinHWND, exit_code : Int32) : Nil
         LibUser32.KillTimer(hdlg, TIMER_ID)
 
-        if exit_code == 0
+        result = @@download_result || DownloadResult.new(exit_code: exit_code)
+        result.exit_code = exit_code if @@download_result.nil?
+
+        if result.success?
           @@percent = 100.0
           @@status = "Done."
           @@eta = nil
           update_controls(hdlg, force_eta: true)
           Win32Ui.set_dialog_title(hdlg, "#{WINDOW_TITLE} - Done")
-          Win32Ui.message_box("Download Complete!")
+          body = "Download complete!\n\n#{result.dialog_body}"
+          Win32Ui.message_box(body)
+          unless result.output_dir.empty?
+            Win32Ui.open_url(result.output_dir)
+          end
         else
-          message = "Download failed."
-          message += "\n\nLogs: #{QuarkLogs.logs_dir}" if QuarkConfig.download_logs?
+          message = result.dialog_body
+          message = "Download failed." if message.strip.empty?
           Win32Ui.message_box(message, true)
         end
 
