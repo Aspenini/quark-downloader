@@ -1,11 +1,11 @@
 require "../process_status"
+require "../download_result"
 require "./progress_parse"
 
 {% if flag?(:windows) %}
   require "./win32_progress"
 {% else %}
   require "./platform_ui"
-  require "./tk_ui"
 {% end %}
 
 module QuarkGui
@@ -48,6 +48,7 @@ module QuarkGui
       progress = spawn_progress_ui
       prog_in = progress.input.not_nil!
       relay = ProgressRelay.new
+      result_holder = [] of DownloadResult
 
       env = ENV.to_h.merge({"QUARK_GUI" => "1"})
       cli_process = Process.new(
@@ -58,8 +59,6 @@ module QuarkGui
         error: Process::Redirect::Pipe,
       )
 
-      # Closing the progress window means cancel: stop the download instead
-      # of letting it run on invisibly.
       download_finished = false
       user_closed = false
       progress_exited = Channel(Nil).new(1)
@@ -78,10 +77,14 @@ module QuarkGui
       ui_alive = true
       done = Channel(Nil).new(2)
       forward = ->(io : IO) do
-        # Keep draining CLI output even after the UI is gone, so the CLI
-        # never blocks on a full pipe while shutting down.
         begin
           io.each_line do |line|
+            if parsed = DownloadResult.parse_emit_line(line)
+              result_holder.clear
+              result_holder << parsed
+              next
+            end
+
             next unless ui_alive
             begin
               relay.relay(line, prog_in)
@@ -123,7 +126,6 @@ module QuarkGui
       exit_code = QuarkProcess.exit_code(status)
 
       if user_closed
-        # Cancelled by the user; no completion popup.
         return 1
       end
 
@@ -136,7 +138,9 @@ module QuarkGui
 
       progress_exited.receive
 
-      PlatformUi.show_completion(exit_code == 0, exit_code)
+      result = result_holder.first? || DownloadResult.new(exit_code: exit_code)
+      result.exit_code = exit_code if result_holder.empty?
+      PlatformUi.show_completion(result)
       exit_code
     end
   {% end %}

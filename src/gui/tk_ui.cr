@@ -2,6 +2,7 @@
 require "../config"
 require "../logs"
 require "../process_status"
+require "../download_result"
 require "./session_protocol"
 require "./types"
 
@@ -108,12 +109,13 @@ module QuarkGui
       {code, output.to_s}
     end
 
-    def self.show_completion(success : Bool, _exit_code : Int32 = 0) : Nil
-      if success
-        run_wish(["--message", "ok", APP_TITLE, "Download Complete!"])
+    def self.show_completion(result : DownloadResult) : Nil
+      if result.success?
+        body = "Download complete!\n\n#{result.dialog_body}"
+        run_wish(["--message", "ok", APP_TITLE, body])
       else
-        body = "Download failed."
-        body += "\n\nLogs: #{QuarkLogs.logs_dir}" if QuarkConfig.download_logs?
+        body = result.dialog_body
+        body = "Download failed." if body.strip.empty?
         run_wish(["--message", "error", APP_TITLE, body])
       end
     end

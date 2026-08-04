@@ -5,6 +5,11 @@
       {"gnome-terminal", ["--wait", "--"]},
       {"konsole", ["-e"]},
       {"xfce4-terminal", ["-e"]},
+      {"tilix", ["-e"]},
+      {"terminator", ["-x"]},
+      {"kitty", ["-e"]},
+      {"wezterm", ["start", "--"]},
+      {"ghostty", ["-e"]},
       {"alacritty", ["-e"]},
       {"foot", ["-e"]},
     ] of {String, Array(String)}

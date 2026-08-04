@@ -46,5 +46,9 @@ describe DestinationTracker do
 
     tracker.error_count.should eq(2)
     tracker.paths.should eq(["/tmp/c.mp4"])
+    tracker.errors.should eq([
+      "ERROR: [youtube] abc: Video unavailable",
+      "ERROR: [youtube] def: Private video",
+    ])
   end
 end
