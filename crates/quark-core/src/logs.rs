@@ -179,29 +179,15 @@ fn local_offset_secs() -> i64 {
 
 #[cfg(windows)]
 fn local_offset_secs_windows() -> i64 {
-    #[repr(C)]
-    struct SystemTime {
-        w_year: u16,
-        w_month: u16,
-        w_day_of_week: u16,
-        w_day: u16,
-        w_hour: u16,
-        w_minute: u16,
-        w_second: u16,
-        w_milliseconds: u16,
-    }
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn GetLocalTime(lpSystemTime: *mut SystemTime);
-        fn GetSystemTime(lpSystemTime: *mut SystemTime);
-    }
+    use windows_sys::Win32::Foundation::SYSTEMTIME;
+    use windows_sys::Win32::System::SystemInformation::{GetLocalTime, GetSystemTime};
     unsafe {
-        let mut local = std::mem::zeroed::<SystemTime>();
-        let mut utc = std::mem::zeroed::<SystemTime>();
+        let mut local = std::mem::zeroed::<SYSTEMTIME>();
+        let mut utc = std::mem::zeroed::<SYSTEMTIME>();
         GetLocalTime(&mut local);
         GetSystemTime(&mut utc);
-        let local_secs = i64::from(local.w_hour) * 3600 + i64::from(local.w_minute) * 60;
-        let utc_secs = i64::from(utc.w_hour) * 3600 + i64::from(utc.w_minute) * 60;
+        let local_secs = i64::from(local.wHour) * 3600 + i64::from(local.wMinute) * 60;
+        let utc_secs = i64::from(utc.wHour) * 3600 + i64::from(utc.wMinute) * 60;
         let mut delta = local_secs - utc_secs;
         if delta > 12 * 3600 {
             delta -= 24 * 3600;

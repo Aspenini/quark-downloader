@@ -5,236 +5,40 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::atomic::{AtomicU8, Ordering};
 
-pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-pub const CREATE_SUSPENDED: u32 = 0x0000_0004;
-pub const CREATE_UNICODE_ENVIRONMENT: u32 = 0x0000_0400;
-pub const STARTF_USESTDHANDLES: u32 = 0x0000_0100;
-pub const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
-pub const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x0000_2000;
-pub const INFINITE: u32 = 0xFFFF_FFFF;
-pub const STD_OUTPUT_HANDLE: u32 = 0xFFFF_FFF5; // -11 as u32
-pub const ENABLE_VIRTUAL_TERMINAL_PROCESSING: u32 = 0x0004;
-const INVALID_HANDLE_VALUE: isize = -1;
-const CP_UTF8: u32 = 65001;
-const WINHTTP_ACCESS_TYPE_DEFAULT_PROXY: u32 = 0;
-const WINHTTP_FLAG_SECURE: u32 = 0x0080_0000;
-const WINHTTP_QUERY_STATUS_CODE: u32 = 19;
-const WINHTTP_QUERY_LOCATION: u32 = 33;
-const WINHTTP_QUERY_FLAG_NUMBER: u32 = 0x2000_0000;
-const BCRYPT_HASH_LENGTH: u32 = 0x0000_0001;
-const BCRYPT_ALG_HANDLE_HMAC_FLAG: u32 = 0; // unused, keep silence
+use windows_sys::Win32::Foundation::{
+    CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation,
+    WAIT_OBJECT_0,
+};
+use windows_sys::Win32::Networking::WinHttp::{
+    WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_FLAG_SECURE, WINHTTP_QUERY_FLAG_NUMBER,
+    WINHTTP_QUERY_LOCATION, WINHTTP_QUERY_STATUS_CODE, WinHttpCloseHandle, WinHttpConnect,
+    WinHttpOpen, WinHttpOpenRequest, WinHttpQueryDataAvailable, WinHttpQueryHeaders,
+    WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest,
+};
+use windows_sys::Win32::Security::Cryptography::{
+    BCRYPT_OBJECT_LENGTH, BCRYPT_SHA256_ALGORITHM, BCryptCloseAlgorithmProvider, BCryptCreateHash,
+    BCryptDestroyHash, BCryptFinishHash, BCryptGetProperty, BCryptHashData,
+    BCryptOpenAlgorithmProvider,
+};
+use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
+use windows_sys::Win32::Storage::FileSystem::{ReadFile, SearchPathW};
+use windows_sys::Win32::System::Console::{
+    ENABLE_VIRTUAL_TERMINAL_PROCESSING, GetConsoleMode, GetStdHandle, STD_OUTPUT_HANDLE,
+    SetConsoleMode,
+};
+use windows_sys::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+    SetInformationJobObject, TerminateJobObject,
+};
+use windows_sys::Win32::System::Pipes::CreatePipe;
+use windows_sys::Win32::System::Threading::{
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
+    GetExitCodeProcess, INFINITE, PROCESS_INFORMATION, ResumeThread, STARTF_USESTDHANDLES,
+    STARTUPINFOW, WaitForSingleObject,
+};
 
-type Handle = *mut core::ffi::c_void;
-type Bool = i32;
-type Dword = u32;
-
-#[repr(C)]
-struct SecurityAttributes {
-    n_length: Dword,
-    lp_security_descriptor: *mut core::ffi::c_void,
-    b_inherit_handle: Bool,
-}
-
-#[repr(C)]
-struct StartupInfoW {
-    cb: Dword,
-    reserved: *mut u16,
-    desktop: *mut u16,
-    title: *mut u16,
-    dw_x: Dword,
-    dw_y: Dword,
-    dw_x_size: Dword,
-    dw_y_size: Dword,
-    dw_x_count_chars: Dword,
-    dw_y_count_chars: Dword,
-    dw_fill_attribute: Dword,
-    dw_flags: Dword,
-    w_show_window: u16,
-    cb_reserved2: u16,
-    lp_reserved2: *mut u8,
-    h_std_input: Handle,
-    h_std_output: Handle,
-    h_std_error: Handle,
-}
-
-#[repr(C)]
-struct ProcessInformation {
-    h_process: Handle,
-    h_thread: Handle,
-    dw_process_id: Dword,
-    dw_thread_id: Dword,
-}
-
-// JOBOBJECT_EXTENDED_LIMIT_INFORMATION (class 9) — only LimitFlags is set.
-#[repr(C)]
-struct IoCounters {
-    read_op: u64,
-    write_op: u64,
-    other_op: u64,
-    read_xfer: u64,
-    write_xfer: u64,
-    other_xfer: u64,
-}
-
-#[repr(C)]
-struct JobObjectBasicLimitInformation {
-    per_process_user_time_limit: i64,
-    per_job_user_time_limit: i64,
-    limit_flags: Dword,
-    minimum_working_set_size: usize,
-    maximum_working_set_size: usize,
-    active_process_limit: Dword,
-    affinity: usize,
-    priority_class: Dword,
-    scheduling_class: Dword,
-}
-
-#[repr(C)]
-struct JobObjectExtendedLimit {
-    basic_limit_information: JobObjectBasicLimitInformation,
-    io_info: IoCounters,
-    process_memory_limit: usize,
-    job_memory_limit: usize,
-    peak_process_memory_used: usize,
-    peak_job_memory_used: usize,
-}
-
-#[link(name = "kernel32")]
-unsafe extern "system" {
-    fn GetStdHandle(nStdHandle: Dword) -> Handle;
-    fn GetConsoleMode(hConsoleHandle: Handle, lpMode: *mut Dword) -> Bool;
-    fn SetConsoleMode(hConsoleHandle: Handle, dwMode: Dword) -> Bool;
-    fn CreatePipe(
-        hReadPipe: *mut Handle,
-        hWritePipe: *mut Handle,
-        lpPipeAttributes: *mut SecurityAttributes,
-        nSize: Dword,
-    ) -> Bool;
-    fn SetHandleInformation(hObject: Handle, dwMask: Dword, dwFlags: Dword) -> Bool;
-    fn CreateProcessW(
-        lpApplicationName: *const u16,
-        lpCommandLine: *mut u16,
-        lpProcessAttributes: *mut SecurityAttributes,
-        lpThreadAttributes: *mut SecurityAttributes,
-        bInheritHandles: Bool,
-        dwCreationFlags: Dword,
-        lpEnvironment: *mut core::ffi::c_void,
-        lpCurrentDirectory: *const u16,
-        lpStartupInfo: *mut StartupInfoW,
-        lpProcessInformation: *mut ProcessInformation,
-    ) -> Bool;
-    fn CreateJobObjectW(lpJobAttributes: *mut SecurityAttributes, lpName: *const u16) -> Handle;
-    fn SetInformationJobObject(
-        hJob: Handle,
-        jobObjectInformationClass: i32,
-        lpJobObjectInformation: *const core::ffi::c_void,
-        cbJobObjectInformationLength: Dword,
-    ) -> Bool;
-    fn AssignProcessToJobObject(hJob: Handle, hProcess: Handle) -> Bool;
-    fn ResumeThread(hThread: Handle) -> Dword;
-    fn WaitForSingleObject(hHandle: Handle, dwMilliseconds: Dword) -> Dword;
-    fn GetExitCodeProcess(hProcess: Handle, lpExitCode: *mut Dword) -> Bool;
-    fn TerminateJobObject(hJob: Handle, uExitCode: u32) -> Bool;
-    fn CloseHandle(hObject: Handle) -> Bool;
-    fn ReadFile(
-        hFile: Handle,
-        lpBuffer: *mut u8,
-        nNumberOfBytesToRead: Dword,
-        lpNumberOfBytesRead: *mut Dword,
-        lpOverlapped: *mut core::ffi::c_void,
-    ) -> Bool;
-    fn SearchPathW(
-        lpPath: *const u16,
-        lpFileName: *const u16,
-        lpExtension: *const u16,
-        nBufferLength: Dword,
-        lpBuffer: *mut u16,
-        lpFilePart: *mut *mut u16,
-    ) -> Dword;
-}
-
-#[link(name = "bcrypt")]
-unsafe extern "system" {
-    fn BCryptOpenAlgorithmProvider(
-        phAlgorithm: *mut Handle,
-        pszAlgId: *const u16,
-        pszImplementation: *const u16,
-        dwFlags: Dword,
-    ) -> i32;
-    fn BCryptGetProperty(
-        hObject: Handle,
-        pszProperty: *const u16,
-        pbOutput: *mut u8,
-        cbOutput: Dword,
-        pcbResult: *mut Dword,
-        dwFlags: Dword,
-    ) -> i32;
-    fn BCryptCreateHash(
-        hAlgorithm: Handle,
-        phHash: *mut Handle,
-        pbHashObject: *mut u8,
-        cbHashObject: Dword,
-        pbSecret: *mut u8,
-        cbSecret: Dword,
-        dwFlags: Dword,
-    ) -> i32;
-    fn BCryptHashData(hHash: Handle, pbInput: *const u8, cbInput: Dword, dwFlags: Dword) -> i32;
-    fn BCryptFinishHash(hHash: Handle, pbOutput: *mut u8, cbOutput: Dword, dwFlags: Dword) -> i32;
-    fn BCryptDestroyHash(hHash: Handle) -> i32;
-    fn BCryptCloseAlgorithmProvider(hAlgorithm: Handle, dwFlags: Dword) -> i32;
-}
-
-#[link(name = "winhttp")]
-unsafe extern "system" {
-    fn WinHttpOpen(
-        pszAgentW: *const u16,
-        dwAccessType: Dword,
-        pszProxyW: *const u16,
-        pszProxyBypassW: *const u16,
-        dwFlags: Dword,
-    ) -> Handle;
-    fn WinHttpConnect(
-        hSession: Handle,
-        pswzServerName: *const u16,
-        nServerPort: u16,
-        dwReserved: Dword,
-    ) -> Handle;
-    fn WinHttpOpenRequest(
-        hConnect: Handle,
-        pwszVerb: *const u16,
-        pwszObjectName: *const u16,
-        pwszVersion: *const u16,
-        pwszReferrer: *const u16,
-        ppwszAcceptTypes: *mut *const u16,
-        dwFlags: Dword,
-    ) -> Handle;
-    fn WinHttpSendRequest(
-        hRequest: Handle,
-        lpszHeaders: *const u16,
-        dwHeadersLength: Dword,
-        lpOptional: *mut core::ffi::c_void,
-        dwOptionalLength: Dword,
-        dwTotalLength: Dword,
-        dwContext: usize,
-    ) -> Bool;
-    fn WinHttpReceiveResponse(hRequest: Handle, lpReserved: *mut core::ffi::c_void) -> Bool;
-    fn WinHttpQueryHeaders(
-        hRequest: Handle,
-        dwInfoLevel: Dword,
-        pwszName: *const u16,
-        lpBuffer: *mut core::ffi::c_void,
-        lpdwBufferLength: *mut Dword,
-        lpdwIndex: *mut Dword,
-    ) -> Bool;
-    fn WinHttpQueryDataAvailable(hRequest: Handle, lpdwNumberOfBytesAvailable: *mut Dword) -> Bool;
-    fn WinHttpReadData(
-        hRequest: Handle,
-        lpBuffer: *mut core::ffi::c_void,
-        dwNumberOfBytesToRead: Dword,
-        lpdwNumberOfBytesRead: *mut Dword,
-    ) -> Bool;
-    fn WinHttpCloseHandle(hInternet: Handle) -> Bool;
-}
+pub type Handle = HANDLE;
 
 fn wide(s: impl AsRef<OsStr>) -> Vec<u16> {
     s.as_ref().encode_wide().chain(std::iter::once(0)).collect()
@@ -246,10 +50,10 @@ pub fn enable_virtual_terminal(tried: &AtomicU8) {
     }
     unsafe {
         let handle = GetStdHandle(STD_OUTPUT_HANDLE);
-        if handle.is_null() || handle as isize == INVALID_HANDLE_VALUE {
+        if handle.is_null() || handle == INVALID_HANDLE_VALUE {
             return;
         }
-        let mut mode: Dword = 0;
+        let mut mode = 0u32;
         if GetConsoleMode(handle, &mut mode) == 0 {
             return;
         }
@@ -270,7 +74,7 @@ pub fn which(name: &str) -> Option<PathBuf> {
             ptr::null(),
             wname.as_ptr(),
             ptr::null(),
-            buf.len() as Dword,
+            buf.len() as u32,
             buf.as_mut_ptr(),
             ptr::null_mut(),
         );
@@ -283,20 +87,18 @@ pub fn which(name: &str) -> Option<PathBuf> {
 
 pub fn sha256_hex(path: &Path) -> io::Result<String> {
     let data = std::fs::read(path)?;
-    let alg = wide("SHA256");
-    let prop = wide("ObjectLength");
     unsafe {
-        let mut h_alg: Handle = ptr::null_mut();
-        if BCryptOpenAlgorithmProvider(&mut h_alg, alg.as_ptr(), ptr::null(), 0) != 0 {
+        let mut h_alg = ptr::null_mut();
+        if BCryptOpenAlgorithmProvider(&mut h_alg, BCRYPT_SHA256_ALGORITHM, ptr::null(), 0) != 0 {
             return Err(io::Error::other("BCryptOpenAlgorithmProvider failed"));
         }
-        let mut obj_len: Dword = 0;
-        let mut cb: Dword = 0;
+        let mut obj_len = 0u32;
+        let mut cb = 0u32;
         if BCryptGetProperty(
             h_alg,
-            prop.as_ptr(),
+            BCRYPT_OBJECT_LENGTH,
             (&raw mut obj_len).cast(),
-            size_of::<Dword>() as Dword,
+            size_of::<u32>() as u32,
             &mut cb,
             0,
         ) != 0
@@ -305,7 +107,7 @@ pub fn sha256_hex(path: &Path) -> io::Result<String> {
             return Err(io::Error::other("BCryptGetProperty failed"));
         }
         let mut obj = vec![0u8; obj_len as usize];
-        let mut h_hash: Handle = ptr::null_mut();
+        let mut h_hash = ptr::null_mut();
         if BCryptCreateHash(
             h_alg,
             &mut h_hash,
@@ -319,7 +121,7 @@ pub fn sha256_hex(path: &Path) -> io::Result<String> {
             BCryptCloseAlgorithmProvider(h_alg, 0);
             return Err(io::Error::other("BCryptCreateHash failed"));
         }
-        if BCryptHashData(h_hash, data.as_ptr(), data.len() as Dword, 0) != 0 {
+        if BCryptHashData(h_hash, data.as_ptr(), data.len() as u32, 0) != 0 {
             BCryptDestroyHash(h_hash);
             BCryptCloseAlgorithmProvider(h_alg, 0);
             return Err(io::Error::other("BCryptHashData failed"));
@@ -424,9 +226,9 @@ fn winhttp_request(url: &str, user_agent: &str) -> io::Result<(u32, Option<Strin
             WinHttpCloseHandle(session);
             return Err(io::Error::other("WinHttp request failed"));
         }
-        let mut status: Dword = 0;
-        let mut status_len = size_of::<Dword>() as Dword;
-        let mut index: Dword = 0;
+        let mut status = 0u32;
+        let mut status_len = size_of::<u32>() as u32;
+        let mut index = 0u32;
         let _ = WinHttpQueryHeaders(
             request,
             WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
@@ -437,7 +239,7 @@ fn winhttp_request(url: &str, user_agent: &str) -> io::Result<(u32, Option<Strin
         );
         let mut location = None;
         if matches!(status, 301 | 302 | 303 | 307 | 308) {
-            let mut loc_len: Dword = 0;
+            let mut loc_len = 0u32;
             index = 0;
             WinHttpQueryHeaders(
                 request,
@@ -470,7 +272,7 @@ fn winhttp_request(url: &str, user_agent: &str) -> io::Result<(u32, Option<Strin
         }
         let mut body = Vec::new();
         loop {
-            let mut available: Dword = 0;
+            let mut available = 0u32;
             if WinHttpQueryDataAvailable(request, &mut available) == 0 {
                 break;
             }
@@ -478,7 +280,7 @@ fn winhttp_request(url: &str, user_agent: &str) -> io::Result<(u32, Option<Strin
                 break;
             }
             let mut chunk = vec![0u8; available as usize];
-            let mut read: Dword = 0;
+            let mut read = 0u32;
             if WinHttpReadData(request, chunk.as_mut_ptr().cast(), available, &mut read) == 0 {
                 break;
             }
@@ -587,38 +389,38 @@ impl HiddenProcess {
         let cmdline =
             quote_windows(std::iter::once(command).chain(args.iter().map(String::as_str)));
         let mut cmd_wide = wide(&cmdline);
-        let mut sa = SecurityAttributes {
-            n_length: size_of::<SecurityAttributes>() as Dword,
-            lp_security_descriptor: ptr::null_mut(),
-            b_inherit_handle: 1,
+        let mut sa = SECURITY_ATTRIBUTES {
+            nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: ptr::null_mut(),
+            bInheritHandle: 1,
         };
-        let mut stdout_r: Handle = ptr::null_mut();
-        let mut stdout_w: Handle = ptr::null_mut();
-        let mut stderr_r: Handle = ptr::null_mut();
-        let mut stderr_w: Handle = ptr::null_mut();
+        let mut stdout_r = ptr::null_mut();
+        let mut stdout_w = ptr::null_mut();
+        let mut stderr_r = ptr::null_mut();
+        let mut stderr_w = ptr::null_mut();
         unsafe {
-            if CreatePipe(&mut stdout_r, &mut stdout_w, &mut sa, 0) == 0
-                || CreatePipe(&mut stderr_r, &mut stderr_w, &mut sa, 0) == 0
+            if CreatePipe(&mut stdout_r, &mut stdout_w, &raw mut sa, 0) == 0
+                || CreatePipe(&mut stderr_r, &mut stderr_w, &raw mut sa, 0) == 0
             {
                 return Err(io::Error::last_os_error());
             }
             SetHandleInformation(stdout_r, HANDLE_FLAG_INHERIT, 0);
             SetHandleInformation(stderr_r, HANDLE_FLAG_INHERIT, 0);
-            let mut si: StartupInfoW = std::mem::zeroed();
-            si.cb = size_of::<StartupInfoW>() as Dword;
-            si.dw_flags = STARTF_USESTDHANDLES;
-            si.h_std_output = stdout_w;
-            si.h_std_error = stderr_w;
-            let mut pi: ProcessInformation = std::mem::zeroed();
-            let job = CreateJobObjectW(ptr::null_mut(), ptr::null());
+            let mut si: STARTUPINFOW = std::mem::zeroed();
+            si.cb = size_of::<STARTUPINFOW>() as u32;
+            si.dwFlags = STARTF_USESTDHANDLES;
+            si.hStdOutput = stdout_w;
+            si.hStdError = stderr_w;
+            let mut pi: PROCESS_INFORMATION = std::mem::zeroed();
+            let job = CreateJobObjectW(ptr::null(), ptr::null());
             if !job.is_null() {
-                let mut info: JobObjectExtendedLimit = std::mem::zeroed();
-                info.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+                info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
                 let _ = SetInformationJobObject(
                     job,
-                    9, // JobObjectExtendedLimitInformation
+                    JobObjectExtendedLimitInformation,
                     (&raw const info).cast(),
-                    size_of::<JobObjectExtendedLimit>() as Dword,
+                    size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
                 );
             }
             let flags = CREATE_NO_WINDOW | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT;
@@ -631,7 +433,7 @@ impl HiddenProcess {
                 flags,
                 ptr::null_mut(),
                 ptr::null(),
-                &mut si,
+                &si,
                 &mut pi,
             ) == 0
             {
@@ -645,15 +447,15 @@ impl HiddenProcess {
                 return Err(io::Error::last_os_error());
             }
             if !job.is_null() {
-                let _ = AssignProcessToJobObject(job, pi.h_process);
+                let _ = AssignProcessToJobObject(job, pi.hProcess);
             }
-            ResumeThread(pi.h_thread);
-            CloseHandle(pi.h_thread);
+            ResumeThread(pi.hThread);
+            CloseHandle(pi.hThread);
             CloseHandle(stdout_w);
             CloseHandle(stderr_w);
             let _ = cmdline;
             Ok(Self {
-                process: pi.h_process,
+                process: pi.hProcess,
                 job,
                 stdout: stdout_r,
                 stderr: stderr_r,
@@ -672,8 +474,8 @@ impl HiddenProcess {
     pub fn wait_ms(&self, ms: u32) -> Option<u32> {
         unsafe {
             let r = WaitForSingleObject(self.process, ms);
-            if r == 0 {
-                let mut code: Dword = 1;
+            if r == WAIT_OBJECT_0 {
+                let mut code = 1u32;
                 GetExitCodeProcess(self.process, &mut code);
                 Some(code)
             } else {
@@ -718,12 +520,12 @@ pub fn read_handle_lines(handle: Handle, mut on_line: impl FnMut(&str)) {
     let mut leftover = Vec::new();
     let mut buf = [0u8; 4096];
     loop {
-        let mut read: Dword = 0;
+        let mut read = 0u32;
         let ok = unsafe {
             ReadFile(
                 handle,
                 buf.as_mut_ptr(),
-                buf.len() as Dword,
+                buf.len() as u32,
                 &mut read,
                 ptr::null_mut(),
             )
@@ -799,9 +601,9 @@ pub fn spawn_cmd_start_wait(title: &str, command: &str, args: &[String]) -> i32 
         quote_windows(std::iter::once("cmd.exe").chain(spawn_args.iter().map(String::as_str)));
     let mut cmd_wide = wide(&cmdline);
     unsafe {
-        let mut si: StartupInfoW = std::mem::zeroed();
-        si.cb = size_of::<StartupInfoW>() as Dword;
-        let mut pi: ProcessInformation = std::mem::zeroed();
+        let mut si: STARTUPINFOW = std::mem::zeroed();
+        si.cb = size_of::<STARTUPINFOW>() as u32;
+        let mut pi: PROCESS_INFORMATION = std::mem::zeroed();
         if CreateProcessW(
             ptr::null(),
             cmd_wide.as_mut_ptr(),
@@ -811,25 +613,18 @@ pub fn spawn_cmd_start_wait(title: &str, command: &str, args: &[String]) -> i32 
             CREATE_NO_WINDOW,
             ptr::null_mut(),
             ptr::null(),
-            &mut si,
+            &si,
             &mut pi,
         ) == 0
         {
             return 1;
         }
-        WaitForSingleObject(pi.h_process, INFINITE);
-        let mut code: Dword = 0;
-        GetExitCodeProcess(pi.h_process, &mut code);
-        CloseHandle(pi.h_process);
-        CloseHandle(pi.h_thread);
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        let mut code = 0u32;
+        GetExitCodeProcess(pi.hProcess, &mut code);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
         let _ = cmdline;
         code as i32
     }
 }
-
-#[allow(dead_code)]
-const _: u32 = CP_UTF8;
-#[allow(dead_code)]
-const _: u32 = BCRYPT_HASH_LENGTH;
-#[allow(dead_code)]
-const _: u32 = BCRYPT_ALG_HANDLE_HMAC_FLAG;

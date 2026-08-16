@@ -13,8 +13,32 @@ use quark_core::result::DownloadResult;
 use quark_core::session::{DownloadParams, MainAction, MainSessionResult, SettingsForm};
 use quark_core::version;
 
-type Handle = *mut core::ffi::c_void;
-type Bool = i32;
+use windows_sys::Win32::Foundation::{GetLastError, HWND};
+use windows_sys::Win32::System::LibraryLoader::{
+    FindResourceExW, FindResourceW, GetModuleHandleW, LoadResource, LockResource,
+};
+use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+use windows_sys::Win32::UI::Controls::{
+    CheckDlgButton, ICC_WIN95_CLASSES, INITCOMMONCONTROLSEX, InitCommonControlsEx,
+    IsDlgButtonChecked, PBM_SETPOS, PBM_SETRANGE,
+};
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{EnableWindow, VK_ESCAPE, VK_RETURN};
+use windows_sys::Win32::UI::Shell::{
+    BFFM_INITIALIZED, BFFM_SETSELECTIONW, BIF_NEWDIALOGSTYLE, BIF_RETURNONLYFSDIRS, BROWSEINFOW,
+    SHBrowseForFolderW, SHGetPathFromIDListW, ShellExecuteW,
+};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    BN_CLICKED, CB_ADDSTRING, CB_GETCURSEL, CB_GETLBTEXT, CB_RESETCONTENT, CB_SETCURSEL,
+    DialogBoxIndirectParamW, DrawMenuBar, EnableMenuItem, EndDialog, GetDlgItem, GetDlgItemTextW,
+    GetSystemMenu, IDYES, KillTimer, LB_ADDSTRING, LB_DELETESTRING, LB_GETCOUNT, LB_GETCURSEL,
+    LB_GETTEXT, MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MB_YESNO, MF_BYCOMMAND, MF_DISABLED,
+    MF_GRAYED, MessageBoxW, PostMessageW, RT_DIALOG, SC_CLOSE, SW_HIDE, SW_SHOW, SendMessageW,
+    SetDlgItemTextW, SetTimer, SetWindowTextW, ShowWindow, WM_APP, WM_CLOSE, WM_COMMAND,
+    WM_INITDIALOG, WM_KEYDOWN, WM_SYSCOMMAND, WM_TIMER,
+};
+use windows_sys::core::PCWSTR;
+
+type Handle = HWND;
 
 const IDD_MAIN: i32 = 101;
 const IDD_PROGRESS: i32 = 102;
@@ -96,126 +120,12 @@ const TOOL_SOURCE_VALUES: &[&str] = &["auto", "path", "bundled"];
 const GUI_MODE_VALUES: &[&str] = &["progress", "external_cli"];
 const SPACES_VALUES: &[&str] = &["keep", "underscore", "dash", "remove"];
 
-const SW_HIDE: i32 = 0;
-const SW_SHOW: i32 = 5;
-const WM_INITDIALOG: u32 = 0x0110;
-const WM_COMMAND: u32 = 0x0111;
-const WM_SYSCOMMAND: u32 = 0x0112;
-const WM_TIMER: u32 = 0x0113;
-const WM_CLOSE: u32 = 0x0010;
-const WM_KEYDOWN: u32 = 0x0100;
-const BN_CLICKED: u32 = 0;
-const VK_RETURN: usize = 0x0D;
-const VK_ESCAPE: usize = 0x1B;
-const CB_ADDSTRING: u32 = 0x0143;
-const CB_GETCURSEL: u32 = 0x0147;
-const CB_GETLBTEXT: u32 = 0x0148;
-const CB_SETCURSEL: u32 = 0x014E;
-const CB_RESETCONTENT: u32 = 0x014B;
-const LB_ADDSTRING: u32 = 0x0180;
-const LB_DELETESTRING: u32 = 0x0182;
-const LB_GETCURSEL: u32 = 0x0188;
-const LB_GETTEXT: u32 = 0x0189;
-const LB_GETCOUNT: u32 = 0x018B;
-const BFFM_INITIALIZED: u32 = 1;
-const BFFM_SETSELECTIONW: u32 = 0x0467;
-const BIF_RETURNONLYFSDIRS: u32 = 0x0001;
-const BIF_NEWDIALOGSTYLE: u32 = 0x0040;
-const MB_OK: u32 = 0;
-const MB_YESNO: u32 = 4;
-const MB_ICONERROR: u32 = 0x10;
-const MB_ICONINFORMATION: u32 = 0x40;
-const IDYES: i32 = 6;
-const RT_DIALOG: i32 = 5;
-const WM_APP_DONE: u32 = 0x8001;
-const WM_APP_PROGRESS: u32 = 0x8002;
-const WM_APP_UPDATE_CHECK_DONE: u32 = 0x8003;
-const PBM_SETRANGE: u32 = 0x0401;
-const PBM_SETPOS: u32 = 0x0402;
+const WM_APP_DONE: u32 = WM_APP + 1;
+const WM_APP_PROGRESS: u32 = WM_APP + 2;
+const WM_APP_UPDATE_CHECK_DONE: u32 = WM_APP + 3;
 const TIMER_ID: usize = 1;
 const TIMER_MS: u32 = 100;
 const ETA_UPDATE_MS: u64 = 1500;
-const SC_CLOSE: usize = 0xF060;
-const MF_BYCOMMAND: u32 = 0;
-const MF_DISABLED: u32 = 2;
-const MF_GRAYED: u32 = 1;
-const ICC_WIN95_CLASSES: u32 = 0xFF;
-
-#[repr(C)]
-struct InitCommonControlsEx {
-    dw_size: u32,
-    dw_icc: u32,
-}
-
-#[repr(C)]
-struct BrowseInfoW {
-    hwnd_owner: Handle,
-    pidl_root: Handle,
-    psz_display_name: *mut u16,
-    lpsz_title: *const u16,
-    ul_flags: u32,
-    lpfn: Option<unsafe extern "system" fn(Handle, u32, isize, isize) -> i32>,
-    l_param: isize,
-    i_image: i32,
-}
-
-#[link(name = "user32")]
-unsafe extern "system" {
-    fn MessageBoxW(hwnd: Handle, text: *const u16, caption: *const u16, flags: u32) -> i32;
-    fn FindResourceExW(module: Handle, r#type: Handle, name: Handle, lang: u16) -> Handle;
-    fn FindResourceW(module: Handle, name: Handle, r#type: Handle) -> Handle;
-    fn LoadResource(module: Handle, info: Handle) -> Handle;
-    fn LockResource(data: Handle) -> Handle;
-    fn DialogBoxIndirectParamW(
-        instance: Handle,
-        template: Handle,
-        parent: Handle,
-        proc: unsafe extern "system" fn(Handle, u32, usize, isize) -> isize,
-        param: isize,
-    ) -> isize;
-    fn EndDialog(dlg: Handle, result: isize) -> Bool;
-    fn GetDlgItem(dlg: Handle, id: i32) -> Handle;
-    fn SendMessageW(hwnd: Handle, msg: u32, wparam: usize, lparam: isize) -> isize;
-    fn SetDlgItemTextW(dlg: Handle, id: i32, text: *const u16) -> Bool;
-    fn GetDlgItemTextW(dlg: Handle, id: i32, buf: *mut u16, max: i32) -> u32;
-    fn CheckDlgButton(dlg: Handle, id: i32, check: u32) -> Bool;
-    fn IsDlgButtonChecked(dlg: Handle, id: i32) -> u32;
-    fn ShowWindow(hwnd: Handle, cmd: i32) -> Bool;
-    fn SetWindowTextW(hwnd: Handle, text: *const u16) -> Bool;
-    fn EnableWindow(hwnd: Handle, enable: Bool) -> Bool;
-    fn PostMessageW(hwnd: Handle, msg: u32, wparam: usize, lparam: isize) -> Bool;
-    fn SetTimer(hwnd: Handle, id: usize, elapse: u32, func: Handle) -> usize;
-    fn KillTimer(hwnd: Handle, id: usize) -> Bool;
-    fn GetSystemMenu(hwnd: Handle, revert: Bool) -> Handle;
-    fn EnableMenuItem(menu: Handle, item: u32, enable: u32) -> Bool;
-    fn DrawMenuBar(hwnd: Handle) -> Bool;
-}
-
-#[link(name = "kernel32")]
-unsafe extern "system" {
-    fn GetModuleHandleW(name: *const u16) -> Handle;
-    fn GetLastError() -> u32;
-    fn GetTickCount64() -> u64;
-}
-
-#[link(name = "shell32")]
-unsafe extern "system" {
-    fn SHBrowseForFolderW(bi: *mut BrowseInfoW) -> Handle;
-    fn SHGetPathFromIDListW(pidl: Handle, path: *mut u16) -> Bool;
-    fn ShellExecuteW(
-        hwnd: Handle,
-        op: *const u16,
-        file: *const u16,
-        params: *const u16,
-        dir: *const u16,
-        show: i32,
-    ) -> Handle;
-}
-
-#[link(name = "comctl32")]
-unsafe extern "system" {
-    fn InitCommonControlsEx(icc: *const InitCommonControlsEx) -> Bool;
-}
 
 fn wide(s: &str) -> Vec<u16> {
     std::ffi::OsStr::new(s)
@@ -231,8 +141,8 @@ fn from_wide(buf: &[u16]) -> String {
         .into_owned()
 }
 
-fn int_resource(id: i32) -> Handle {
-    id as usize as Handle
+fn int_resource(id: i32) -> PCWSTR {
+    id as u16 as usize as PCWSTR
 }
 
 fn module_handle() -> Handle {
@@ -240,9 +150,9 @@ fn module_handle() -> Handle {
 }
 
 fn ensure_common_controls() {
-    let icc = InitCommonControlsEx {
-        dw_size: size_of::<InitCommonControlsEx>() as u32,
-        dw_icc: ICC_WIN95_CLASSES,
+    let icc = INITCOMMONCONTROLSEX {
+        dwSize: size_of::<INITCOMMONCONTROLSEX>() as u32,
+        dwICC: ICC_WIN95_CLASSES,
     };
     unsafe {
         InitCommonControlsEx(&icc);
@@ -253,10 +163,9 @@ fn load_dialog_template(id: i32) -> Handle {
     unsafe {
         let module = module_handle();
         let name = int_resource(id);
-        let ty = int_resource(RT_DIALOG);
-        let mut info = FindResourceExW(module, ty, name, 0);
+        let mut info = FindResourceExW(module, RT_DIALOG, name, 0);
         if info.is_null() {
-            info = FindResourceW(module, name, ty);
+            info = FindResourceW(module, name, RT_DIALOG);
         }
         if info.is_null() {
             return ptr::null_mut();
@@ -441,18 +350,18 @@ fn browse_folder_for(dlg: Handle, edit_id: i32, fallback: &str, title: &str) -> 
     with_session(|s| s.browse_initial = initial);
     let title_w = wide(title);
     let mut display = vec![0u16; 260];
-    let mut bi = BrowseInfoW {
-        hwnd_owner: dlg,
-        pidl_root: ptr::null_mut(),
-        psz_display_name: display.as_mut_ptr(),
-        lpsz_title: title_w.as_ptr(),
-        ul_flags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE,
+    let bi = BROWSEINFOW {
+        hwndOwner: dlg,
+        pidlRoot: ptr::null_mut(),
+        pszDisplayName: display.as_mut_ptr(),
+        lpszTitle: title_w.as_ptr(),
+        ulFlags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE,
         lpfn: Some(browse_cb),
-        l_param: 0,
-        i_image: 0,
+        lParam: 0,
+        iImage: 0,
     };
     unsafe {
-        let pidl = SHBrowseForFolderW(&mut bi);
+        let pidl = SHBrowseForFolderW(&bi);
         if pidl.is_null() {
             return None;
         }
@@ -754,14 +663,14 @@ unsafe extern "system" fn main_dialog_proc(
             }
             1
         }
-        WM_KEYDOWN if wparam == VK_RETURN => {
+        WM_KEYDOWN if wparam == VK_RETURN as usize => {
             if with_session(|s| s.dialog_view == View::Settings).unwrap_or(false) {
                 try_save_settings(dlg)
             } else {
                 try_confirm(dlg)
             }
         }
-        WM_KEYDOWN if wparam == VK_ESCAPE => {
+        WM_KEYDOWN if wparam == VK_ESCAPE as usize => {
             if with_session(|s| s.dialog_view == View::Settings).unwrap_or(false) {
                 show_main_view(dlg);
                 1
@@ -863,9 +772,9 @@ pub fn collect_main_session(
     let result = unsafe {
         DialogBoxIndirectParamW(
             module_handle(),
-            template,
+            template.cast(),
             ptr::null_mut(),
-            main_dialog_proc,
+            Some(main_dialog_proc),
             0,
         )
     };
@@ -973,7 +882,13 @@ mod progress_impl {
             return 1;
         }
         let result = unsafe {
-            DialogBoxIndirectParamW(module_handle(), template, ptr::null_mut(), progress_proc, 0)
+            DialogBoxIndirectParamW(
+                module_handle(),
+                template.cast(),
+                ptr::null_mut(),
+                Some(progress_proc),
+                0,
+            )
         };
         let (cancelled, code) = with(|s| (s.cancelled, s.exit_code)).unwrap_or((true, 1));
         if cancelled || result == -1 { 1 } else { code }
@@ -1131,7 +1046,7 @@ mod progress_impl {
         unsafe {
             let bar = GetDlgItem(dlg, IDC_PROGRESS_BAR);
             SendMessageW(bar, PBM_SETRANGE, 0, 100isize << 16);
-            SetTimer(dlg, TIMER_ID, TIMER_MS, ptr::null_mut());
+            SetTimer(dlg, TIMER_ID, TIMER_MS, None);
         }
     }
 
@@ -1198,11 +1113,7 @@ mod progress_impl {
                 unsafe {
                     let menu = GetSystemMenu(dlg, 0);
                     if !menu.is_null() {
-                        EnableMenuItem(
-                            menu,
-                            SC_CLOSE as u32,
-                            MF_BYCOMMAND | MF_DISABLED | MF_GRAYED,
-                        );
+                        EnableMenuItem(menu, SC_CLOSE, MF_BYCOMMAND | MF_DISABLED | MF_GRAYED);
                         DrawMenuBar(dlg);
                     }
                 }
@@ -1213,7 +1124,7 @@ mod progress_impl {
                 start_download(dlg);
                 1
             }
-            WM_CLOSE | WM_SYSCOMMAND if (wparam & 0xFFF0) == SC_CLOSE => 1,
+            WM_CLOSE | WM_SYSCOMMAND if (wparam & 0xFFF0) == SC_CLOSE as usize => 1,
             WM_TIMER => {
                 update_controls(dlg, false);
                 if let Some(code) = with(|s| s.runner.as_ref().and_then(|r| r.try_wait())).flatten()
@@ -1245,7 +1156,7 @@ mod progress_impl {
                 }
                 0
             }
-            WM_KEYDOWN if wparam == VK_ESCAPE => {
+            WM_KEYDOWN if wparam == VK_ESCAPE as usize => {
                 cancel_download(dlg);
                 1
             }

@@ -15,6 +15,9 @@ license = "MIT"
 repository = "https://github.com/Aspenini/quark-downloader"
 homepage = "https://github.com/Aspenini/quark-downloader"
 
+[workspace.dependencies]
+windows-sys = { version = "0.59", default-features = false }
+
 [profile.release]
 opt-level = "z"
 lto = true
