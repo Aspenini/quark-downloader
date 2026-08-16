@@ -3,11 +3,9 @@ use crate::json::{self, Value};
 use crate::result::DownloadResult;
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const CLI_NAME: &str = if cfg!(windows) {
-    "quark-downloader.exe"
-} else {
-    "quark-downloader"
-};
+pub fn cli_name() -> &'static str {
+    quark_platform::cli_name()
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DownloadParams {
@@ -80,12 +78,12 @@ impl SettingsForm {
     pub fn to_settings(&self) -> Settings {
         Settings {
             download_dir: self.download_dir.clone(),
-            yt_dlp: if cfg!(windows) {
+            yt_dlp: if quark_platform::allows_bundled_tools() {
                 config::parse_tool_source(&self.yt_dlp, "yt_dlp", true)
             } else {
                 ToolSource::Path
             },
-            ffmpeg: if cfg!(windows) {
+            ffmpeg: if quark_platform::allows_bundled_tools() {
                 config::parse_tool_source(&self.ffmpeg, "ffmpeg", true)
             } else {
                 ToolSource::Path
@@ -124,12 +122,12 @@ impl MainSessionResult {
 }
 
 pub fn build_session_args(default_dir: &str, settings: &Settings) -> Vec<String> {
-    let ytdlp = if cfg!(windows) {
+    let ytdlp = if quark_platform::allows_bundled_tools() {
         settings.yt_dlp.as_str()
     } else {
         "path"
     };
-    let ffmpeg = if cfg!(windows) {
+    let ffmpeg = if quark_platform::allows_bundled_tools() {
         settings.ffmpeg.as_str()
     } else {
         "path"
@@ -409,17 +407,17 @@ pub fn resolve_cli() -> Option<std::path::PathBuf> {
     {
         let s = parent.to_string_lossy().replace('\\', "/");
         if !s.contains("/crystal/cache") {
-            let sibling = parent.join(CLI_NAME);
+            let sibling = parent.join(cli_name());
             if sibling.exists() {
                 return Some(sibling);
             }
         }
     }
-    let dev = PathBuf::from("build").join(CLI_NAME);
+    let dev = PathBuf::from("build").join(cli_name());
     if dev.exists() {
         return Some(dev);
     }
-    let target_rel = PathBuf::from("target").join("release").join(CLI_NAME);
+    let target_rel = PathBuf::from("target").join("release").join(cli_name());
     if target_rel.exists() {
         return Some(target_rel);
     }
@@ -458,7 +456,11 @@ mod tests {
             playlist_folders: false,
             gui_frontend: crate::config::GuiFrontend::Gtk,
         };
-        let expected_ytdlp = if cfg!(windows) { "bundled" } else { "path" };
+        let expected_ytdlp = if quark_platform::allows_bundled_tools() {
+            "bundled"
+        } else {
+            "path"
+        };
         assert_eq!(
             build_session_args("/tmp/dl", &settings),
             [
@@ -609,7 +611,7 @@ mod tests {
         );
         let settings = form.to_settings();
         assert_eq!(settings.download_dir, "~/Videos");
-        if cfg!(windows) {
+        if quark_platform::allows_bundled_tools() {
             assert_eq!(settings.yt_dlp, ToolSource::Bundled);
             assert_eq!(settings.ffmpeg, ToolSource::Path);
         } else {

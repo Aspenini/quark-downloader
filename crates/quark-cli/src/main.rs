@@ -1,3 +1,5 @@
+mod args;
+
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -129,98 +131,41 @@ fn interactive_main() -> i32 {
     )
 }
 
-fn print_help() {
-    println!(
-        "Usage: quark-downloader [options]\n\nInteractive when run with no options.\n\n    --url URL                      Video or playlist URL to download (repeatable)\n    --batch-file FILE              File with one URL per line (# comments ignored)\n    --type TYPE                    audio or video (default: video)\n    --format FORMAT                Output format (default: original)\n    --output-dir DIR               Output directory\n    --no-pause                     Do not wait for a key press before exiting (Windows)\n    --print-default-output-dir     Print default output directory and exit\n    --emit-result-json             Print a final __RESULT__ JSON line for GUI/tools\n    -h, --help                     Show help"
-    );
-}
-
 fn main() -> ExitCode {
     #[cfg(unix)]
     {
         ctrl_c_cancel();
     }
 
-    let mut args = std::env::args().skip(1).peekable();
-    if args.peek().is_none() {
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+    if argv.is_empty() {
         return exit(interactive_main());
     }
 
-    let mut urls = Vec::new();
-    let mut media_type = "video".to_string();
-    let mut format = "original".to_string();
-    let mut output_dir = None;
-    let mut no_pause = false;
-    let mut print_default_dir = false;
-    let mut emit_result = false;
-
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "-h" | "--help" => {
-                print_help();
-                return ExitCode::SUCCESS;
-            }
-            "--url" => match args.next() {
-                Some(v) => urls.push(v),
-                None => return abort("missing value for --url"),
-            },
-            "--batch-file" => match args.next() {
-                Some(v) => {
-                    if let Err(msg) = load_batch(&v, &mut urls) {
-                        return abort(&msg);
-                    }
-                }
-                None => return abort("missing value for --batch-file"),
-            },
-            "--type" => match args.next() {
-                Some(v) => media_type = v,
-                None => return abort("missing value for --type"),
-            },
-            "--format" => match args.next() {
-                Some(v) => format = v,
-                None => return abort("missing value for --format"),
-            },
-            "--output-dir" => match args.next() {
-                Some(v) => output_dir = Some(PathBuf::from(v)),
-                None => return abort("missing value for --output-dir"),
-            },
-            "--no-pause" => no_pause = true,
-            "--print-default-output-dir" => print_default_dir = true,
-            "--emit-result-json" => emit_result = true,
-            other => return abort(&format!("unknown option: {other}")),
-        }
+    let cli = match args::parse(argv) {
+        Ok(c) => c,
+        Err(msg) => return abort(&msg),
+    };
+    if cli.help {
+        println!("{}", args::HELP);
+        return ExitCode::SUCCESS;
     }
-
-    if print_default_dir {
+    if cli.print_default_dir {
         println!("{}", download::default_output_dir().display());
         return ExitCode::SUCCESS;
     }
-
-    if urls.is_empty() {
+    if cli.urls.is_empty() {
         exit(interactive_main())
     } else {
         exit(download::run_all(
-            &urls,
-            &media_type,
-            &format,
-            output_dir.as_deref(),
-            no_pause,
-            emit_result,
+            &cli.urls,
+            &cli.media_type,
+            &cli.format,
+            cli.output_dir.as_deref(),
+            cli.no_pause,
+            cli.emit_result,
         ))
     }
-}
-
-fn load_batch(path: &str, urls: &mut Vec<String>) -> Result<(), String> {
-    let text =
-        std::fs::read_to_string(path).map_err(|_| format!("Batch file not found: {path}"))?;
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        urls.push(line.to_string());
-    }
-    Ok(())
 }
 
 fn abort(message: &str) -> ExitCode {

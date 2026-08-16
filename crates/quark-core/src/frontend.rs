@@ -52,7 +52,7 @@ pub fn helper_binary_name(id: &str) -> String {
 }
 
 pub fn discover_helper(settings: &Settings) -> Result<(String, PathBuf), FrontendError> {
-    if cfg!(windows) {
+    if quark_platform::uses_inprocess_gui() {
         return Err(FrontendError(
             "Windows uses the in-process Win32 frontend".into(),
         ));
@@ -75,7 +75,7 @@ pub fn discover_helper(settings: &Settings) -> Result<(String, PathBuf), Fronten
             .map(|p| (id.to_string(), p))
             .ok_or_else(|| missing_helper_error(Some(id)));
     }
-    if cfg!(target_os = "macos") {
+    if quark_platform::prefers_appkit() {
         for name in MACOS_HELPER_NAMES {
             if let Some(path) = lookup_named(name) {
                 return Ok(("appkit".into(), path));
@@ -120,7 +120,7 @@ fn is_executable(path: &Path) -> bool {
 }
 
 fn missing_helper_error(id: Option<&str>) -> FrontendError {
-    let hint = if cfg!(target_os = "macos") {
+    let hint = if quark_platform::prefers_appkit() {
         "Install the AppKit helper (quark-downloader-gui-appkit) next to this program.".to_string()
     } else {
         match id {
@@ -288,10 +288,6 @@ mod tests {
         unsafe {
             std::env::remove_var("QUARK_GUI_FRONTEND");
         }
-        if cfg!(windows) {
-            assert!(err.is_err());
-        } else {
-            assert!(err.is_err());
-        }
+        assert!(err.is_err());
     }
 }

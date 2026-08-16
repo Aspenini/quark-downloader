@@ -32,7 +32,7 @@ pub fn path_executable() -> Option<PathBuf> {
 }
 
 pub fn ensure(settings: &Settings) -> Result<PathBuf, Error> {
-    if cfg!(windows) {
+    if quark_platform::allows_bundled_tools() {
         match settings.yt_dlp_source() {
             ToolSource::Path => ensure_path_only(),
             ToolSource::Bundled => ensure_bundled(),
@@ -100,9 +100,9 @@ fn ensure_bundled() -> Result<PathBuf, Error> {
 }
 
 fn not_found_message() -> String {
-    if cfg!(target_os = "macos") {
+    if quark_platform::is_macos() {
         "yt-dlp not found on PATH.\nInstall with Homebrew: brew install yt-dlp".into()
-    } else if cfg!(target_os = "linux") {
+    } else if quark_platform::is_linux() {
         "yt-dlp not found on PATH.\nDistro packages (apt install yt-dlp) are often too old for YouTube.\nPrefer a current build: pipx install yt-dlp   or   pip install -U yt-dlp".into()
     } else {
         "yt-dlp not found on PATH.\nInstall yt-dlp, add it to PATH, or set yt_dlp = auto in quark-downloader.conf.".into()
@@ -150,10 +150,10 @@ pub fn extra_args(url: &str) -> Vec<String> {
 }
 
 pub fn youtube_failure_hints() -> String {
-    let mut hints = if cfg!(target_os = "macos") {
+    let mut hints = if quark_platform::is_macos() {
         "YouTube download failed. Common fixes:\n  - brew upgrade yt-dlp\n  - Install a JS runtime: brew install node   (or deno)\n"
             .to_string()
-    } else if cfg!(target_os = "linux") {
+    } else if quark_platform::is_linux() {
         "YouTube download failed. Common fixes:\n  - Update yt-dlp: pipx install -U yt-dlp   (or your package manager)\n  - Distro packages are often too old for YouTube\n"
             .to_string()
     } else {
@@ -161,7 +161,7 @@ pub fn youtube_failure_hints() -> String {
             .to_string()
     };
     if js_runtime().is_none() {
-        if cfg!(target_os = "macos") {
+        if quark_platform::is_macos() {
             hints.push_str(
                 "\n  - Install a JS runtime: brew install node\n    https://github.com/yt-dlp/yt-dlp/wiki/EJS\n",
             );
@@ -213,12 +213,8 @@ fn warn_youtube_js_runtime() {
     );
 }
 
-fn asset_name() -> &'static str {
-    if cfg!(windows) {
-        "yt-dlp.exe"
-    } else {
-        "yt-dlp"
-    }
+fn asset_name() -> String {
+    quark_platform::exe("yt-dlp")
 }
 
 fn bundled_path() -> PathBuf {
@@ -304,7 +300,8 @@ fn download_release(release: &json::Value) -> Result<(), Error> {
     let url = asset
         .get_str("browser_download_url")
         .ok_or_else(|| Error("missing download url".into()))?;
-    let name = asset.get_str("name").unwrap_or(asset_name());
+    let fallback = asset_name();
+    let name = asset.get_str("name").unwrap_or(fallback.as_str());
     let tmp = tools_dir().join(format!("{name}.download"));
     logs::log_line(&format!("Fetching {name} ({tag})..."));
     http::download_file(url, &tmp).map_err(|e| Error(e.to_string()))?;
@@ -327,7 +324,7 @@ fn find_asset(release: &json::Value) -> Result<&json::Value, Error> {
         .and_then(json::Value::as_array)
         .into_iter()
         .flatten()
-        .find(|asset| asset.get_str("name") == Some(target))
+        .find(|asset| asset.get_str("name") == Some(target.as_str()))
         .ok_or_else(|| {
             Error(format!(
                 "Release {} has no asset named {target}",

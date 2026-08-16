@@ -22,20 +22,12 @@ impl std::error::Error for Error {}
 
 static DETECTED: AtomicBool = AtomicBool::new(false);
 
-pub fn executable_name() -> &'static str {
-    if cfg!(windows) {
-        "ffmpeg.exe"
-    } else {
-        "ffmpeg"
-    }
+pub fn executable_name() -> String {
+    quark_platform::exe("ffmpeg")
 }
 
-pub fn ffprobe_name() -> &'static str {
-    if cfg!(windows) {
-        "ffprobe.exe"
-    } else {
-        "ffprobe"
-    }
+pub fn ffprobe_name() -> String {
+    quark_platform::exe("ffprobe")
 }
 
 pub fn tools_dir() -> PathBuf {
@@ -51,7 +43,7 @@ fn skip_download() -> bool {
 }
 
 pub fn bundled() -> bool {
-    cfg!(windows) && bundled_path().exists()
+    quark_platform::allows_bundled_tools() && bundled_path().exists()
 }
 
 pub fn path_executable() -> Option<PathBuf> {
@@ -59,7 +51,7 @@ pub fn path_executable() -> Option<PathBuf> {
 }
 
 pub fn locate(settings: &Settings) -> Option<(bool, PathBuf)> {
-    let source = if cfg!(windows) {
+    let source = if quark_platform::allows_bundled_tools() {
         settings.ffmpeg_source()
     } else {
         ToolSource::Auto
@@ -69,7 +61,10 @@ pub fn locate(settings: &Settings) -> Option<(bool, PathBuf)> {
     {
         return Some((true, exe));
     }
-    if cfg!(windows) && matches!(source, ToolSource::Bundled | ToolSource::Auto) && bundled() {
+    if quark_platform::allows_bundled_tools()
+        && matches!(source, ToolSource::Bundled | ToolSource::Auto)
+        && bundled()
+    {
         return Some((false, bundled_path()));
     }
     None
@@ -89,7 +84,7 @@ pub fn detect(settings: &Settings) {
 }
 
 pub fn ensure(settings: &Settings) -> Result<PathBuf, Error> {
-    if cfg!(windows) {
+    if quark_platform::allows_bundled_tools() {
         match settings.ffmpeg_source() {
             ToolSource::Path => ensure_path_only(),
             ToolSource::Bundled => ensure_bundled(),
@@ -156,9 +151,9 @@ fn ensure_bundled() -> Result<PathBuf, Error> {
 fn warn_not_found() {
     logs::log_line("");
     logs::log_line("Warning: ffmpeg not found on PATH.");
-    if cfg!(target_os = "macos") {
+    if quark_platform::is_macos() {
         logs::log_line("  Install with Homebrew: brew install ffmpeg");
-    } else if cfg!(target_os = "linux") {
+    } else if quark_platform::is_linux() {
         logs::log_line("  Install with your package manager, e.g. apt install ffmpeg");
     } else {
         logs::log_line(
@@ -176,9 +171,9 @@ pub fn append_to_cmd(cmd: &mut Vec<String>, settings: &Settings) -> Result<(), E
 }
 
 fn not_found_message() -> String {
-    if cfg!(target_os = "macos") {
+    if quark_platform::is_macos() {
         "ffmpeg not found on PATH.\nInstall with Homebrew: brew install ffmpeg".into()
-    } else if cfg!(target_os = "linux") {
+    } else if quark_platform::is_linux() {
         "ffmpeg not found on PATH.\nInstall with your package manager, e.g. apt install ffmpeg"
             .into()
     } else {
@@ -187,7 +182,7 @@ fn not_found_message() -> String {
 }
 
 fn download_latest() -> Result<(), Error> {
-    if !cfg!(windows) {
+    if !quark_platform::allows_bundled_tools() {
         return Err(Error("ffmpeg auto-download is Windows-only".into()));
     }
     let release = fetch_btbn_release()?;
@@ -237,14 +232,14 @@ fn extract_and_install(archive: &Path, version_label: &str) -> Result<(), Error>
     if !extract_archive(archive, &extract_dir) {
         return Err(Error(format!("Failed to extract {}", archive.display())));
     }
-    let ffmpeg_src = find_in_tree(&extract_dir, executable_name()).ok_or_else(|| {
+    let ffmpeg_src = find_in_tree(&extract_dir, &executable_name()).ok_or_else(|| {
         Error(format!(
             "Extracted archive did not contain {}",
             executable_name()
         ))
     })?;
     install_binary(&ffmpeg_src, &bundled_path())?;
-    if let Some(probe_src) = find_in_tree(&extract_dir, ffprobe_name()) {
+    if let Some(probe_src) = find_in_tree(&extract_dir, &ffprobe_name()) {
         install_binary(&probe_src, &tools_dir().join(ffprobe_name()))?;
     }
     let _ = fs::remove_dir_all(&extract_dir);

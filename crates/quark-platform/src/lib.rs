@@ -72,6 +72,72 @@ fn existing_exe(path: &Path) -> Option<PathBuf> {
     path.is_file().then(|| path.to_path_buf())
 }
 
+/// Windows can ship bundled yt-dlp/ffmpeg; other hosts always use PATH.
+pub fn allows_bundled_tools() -> bool {
+    cfg!(windows)
+}
+
+/// Linux/macOS persist `gui_frontend`; Windows uses in-process Win32.
+pub fn persist_gui_frontend() -> bool {
+    !cfg!(windows)
+}
+
+pub fn uses_inprocess_gui() -> bool {
+    cfg!(windows)
+}
+
+pub fn prefers_appkit() -> bool {
+    cfg!(target_os = "macos")
+}
+
+pub fn is_macos() -> bool {
+    cfg!(target_os = "macos")
+}
+
+pub fn is_linux() -> bool {
+    cfg!(target_os = "linux")
+}
+
+pub fn pause_before_exit() -> bool {
+    cfg!(windows)
+}
+
+pub fn hide_console() -> bool {
+    cfg!(windows) && std::env::var_os("QUARK_GUI").as_deref() == Some(std::ffi::OsStr::new("1"))
+}
+
+pub fn cli_name() -> &'static str {
+    if cfg!(windows) {
+        "quark-downloader.exe"
+    } else {
+        "quark-downloader"
+    }
+}
+
+pub fn exe(name: &str) -> String {
+    if cfg!(windows) && !name.ends_with(".exe") {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    }
+}
+
+pub fn config_dir(app: &str) -> PathBuf {
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        return PathBuf::from(appdata).join(app);
+    }
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::var_os("HOME")
+                .or_else(|| std::env::var_os("USERPROFILE"))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".config")
+        });
+    base.join(app)
+}
+
 pub fn enable_virtual_terminal() {
     #[cfg(windows)]
     {
@@ -131,4 +197,26 @@ fn sha256_hex_command(path: &Path) -> io::Result<String> {
         .next()
         .map(|s| s.to_ascii_lowercase())
         .ok_or_else(|| io::Error::other("could not hash file"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_name_matches_host() {
+        if allows_bundled_tools() {
+            assert!(cli_name().ends_with(".exe"));
+            assert_eq!(exe("ffmpeg"), "ffmpeg.exe");
+        } else {
+            assert_eq!(cli_name(), "quark-downloader");
+            assert_eq!(exe("ffmpeg"), "ffmpeg");
+        }
+    }
+
+    #[test]
+    fn config_dir_is_under_app_name() {
+        let dir = config_dir("quark-downloader");
+        assert!(dir.ends_with("quark-downloader"));
+    }
 }

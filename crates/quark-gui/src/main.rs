@@ -25,12 +25,15 @@ fn main() {
         std::env::set_var("QUARK_VERSION", version::VERSION);
     }
 
-    if std::env::args().nth(1).as_deref() == Some("--check-updates") {
-        run_update_check();
-        return;
+    match std::env::args().nth(1).as_deref() {
+        Some("-h") | Some("--help") => {
+            println!(
+                "Usage: quark-downloader-gui [--help] [--check-updates]\n\nThin dispatcher that opens a native frontend and runs quark-downloader."
+            );
+        }
+        Some("--check-updates") => run_update_check(),
+        _ => run_controller(),
     }
-
-    run_controller();
 }
 
 fn run_controller() {

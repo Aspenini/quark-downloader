@@ -41,14 +41,12 @@ struct SingleRunOutcome {
 }
 
 pub fn default_downloads_dir() -> PathBuf {
-    #[cfg(not(windows))]
     if let Some(xdg) = xdg_download_dir() {
         return xdg;
     }
     config::user_home().join("Downloads")
 }
 
-#[cfg(not(windows))]
 fn xdg_download_dir() -> Option<PathBuf> {
     let home = config::user_home();
     let file = home.join(".config").join("user-dirs.dirs");
@@ -470,7 +468,6 @@ fn report_saved_files(paths: &[String], target_dir: &Path) {
 }
 
 fn warn_if_root() {
-    #[cfg(unix)]
     if quark_platform::is_root() {
         logs::log_line(&color::yellow("Warning: running as root/sudo."));
         logs::log_line(&color::yellow(&format!(
@@ -484,29 +481,26 @@ fn warn_if_root() {
 }
 
 fn warn_if_unwritable_config() {
-    #[cfg(unix)]
-    {
-        if quark_platform::is_root() {
-            return;
-        }
-        let path = config::config_dir();
-        if !path.is_dir() {
-            return;
-        }
-        let probe = path.join(format!(".quark-write-test-{}", std::process::id()));
-        if fs::write(&probe, "ok").is_err() {
-            logs::log_line(&color::yellow("Warning: config directory is not writable:"));
-            logs::log_line(&color::yellow(&format!("  {}", path.display())));
-            logs::log_line(&color::yellow(
-                "  If you previously ran with sudo, fix ownership (do not keep using sudo):",
-            ));
-            logs::log_line(&color::yellow(&format!(
-                "  sudo chown -R \"$USER\" {}",
-                path.display()
-            )));
-        } else {
-            let _ = fs::remove_file(probe);
-        }
+    if quark_platform::is_root() {
+        return;
+    }
+    let path = config::config_dir();
+    if !path.is_dir() {
+        return;
+    }
+    let probe = path.join(format!(".quark-write-test-{}", std::process::id()));
+    if fs::write(&probe, "ok").is_err() {
+        logs::log_line(&color::yellow("Warning: config directory is not writable:"));
+        logs::log_line(&color::yellow(&format!("  {}", path.display())));
+        logs::log_line(&color::yellow(
+            "  If you previously ran with sudo, fix ownership (do not use sudo):",
+        ));
+        logs::log_line(&color::yellow(&format!(
+            "  sudo chown -R \"$USER\" {}",
+            path.display()
+        )));
+    } else {
+        let _ = fs::remove_file(probe);
     }
 }
 
@@ -774,8 +768,7 @@ fn run_command(
     active: Option<Duration>,
     grace: Option<Duration>,
 ) -> i32 {
-    #[cfg(windows)]
-    if std::env::var_os("QUARK_GUI").as_deref() == Some(std::ffi::OsStr::new("1")) {
+    if quark_platform::hide_console() {
         return run_command_hidden(cmd, tracker, monitor, active, grace);
     }
 
@@ -906,20 +899,24 @@ fn fail_result(
 }
 
 pub fn press_any_key(no_pause: bool, message: &str) {
-    if no_pause {
+    if no_pause || !quark_platform::pause_before_exit() {
         return;
     }
-    #[cfg(windows)]
-    {
-        logs::log_line("");
-        logs::log_line(message);
-        let mut buf = [0u8; 1];
-        let _ = io::stdin().read_exact(&mut buf);
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = message;
-    }
+    logs::log_line("");
+    logs::log_line(message);
+    let mut buf = [0u8; 1];
+    let _ = io::stdin().read_exact(&mut buf);
+}
+
+#[cfg(not(windows))]
+fn run_command_hidden(
+    _cmd: &[String],
+    _tracker: Option<&DestinationTracker>,
+    _monitor: Option<&StallMonitor>,
+    _active: Option<Duration>,
+    _grace: Option<Duration>,
+) -> i32 {
+    127
 }
 
 #[cfg(windows)]

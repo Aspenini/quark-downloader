@@ -147,7 +147,7 @@ impl Default for Settings {
 
 impl Settings {
     pub fn yt_dlp_source(&self) -> ToolSource {
-        if cfg!(windows) {
+        if quark_platform::allows_bundled_tools() {
             self.yt_dlp
         } else {
             ToolSource::Path
@@ -155,7 +155,7 @@ impl Settings {
     }
 
     pub fn ffmpeg_source(&self) -> ToolSource {
-        if cfg!(windows) {
+        if quark_platform::allows_bundled_tools() {
             self.ffmpeg
         } else {
             ToolSource::Path
@@ -191,7 +191,7 @@ pub const CONFIG_NAME: &str = "quark-downloader.conf";
 pub const APP_NAME: &str = "quark-downloader";
 
 fn public_keys() -> &'static [&'static str] {
-    if cfg!(windows) {
+    if quark_platform::allows_bundled_tools() {
         &[
             "download_dir",
             "yt_dlp",
@@ -263,17 +263,7 @@ pub fn app_dir() -> PathBuf {
 }
 
 pub fn config_dir() -> PathBuf {
-    if cfg!(windows) {
-        let base = std::env::var_os("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(user_home);
-        base.join(APP_NAME)
-    } else {
-        let base = std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| user_home().join(".config"));
-        base.join(APP_NAME)
-    }
+    quark_platform::config_dir(APP_NAME)
 }
 
 pub fn config_path() -> PathBuf {
@@ -347,12 +337,12 @@ pub fn parse_file_with_keys(
         match normalized.as_str() {
             "download_dir" => settings.download_dir = value.to_string(),
             "yt_dlp" => {
-                if cfg!(windows) {
+                if quark_platform::allows_bundled_tools() {
                     settings.yt_dlp = parse_tool_source(value, "yt_dlp", quiet);
                 }
             }
             "ffmpeg" => {
-                if cfg!(windows) {
+                if quark_platform::allows_bundled_tools() {
                     settings.ffmpeg = parse_tool_source(value, "ffmpeg", quiet);
                 }
             }
@@ -376,7 +366,7 @@ pub fn parse_file_with_keys(
                 settings.playlist_folders = parse_bool(value, "playlist_folders", true, quiet);
             }
             "gui_frontend" => {
-                if !cfg!(windows) {
+                if quark_platform::persist_gui_frontend() {
                     settings.gui_frontend = parse_gui_frontend(value, quiet);
                 }
             }
@@ -416,14 +406,14 @@ pub fn config_value(settings: &Settings, key: &str) -> String {
     match key {
         "download_dir" => settings.download_dir.clone(),
         "yt_dlp" => {
-            if cfg!(windows) {
+            if quark_platform::allows_bundled_tools() {
                 settings.yt_dlp.as_str().into()
             } else {
                 "path".into()
             }
         }
         "ffmpeg" => {
-            if cfg!(windows) {
+            if quark_platform::allows_bundled_tools() {
                 settings.ffmpeg.as_str().into()
             } else {
                 "path".into()
@@ -545,7 +535,7 @@ pub fn render(settings: &Settings) -> String {
         String::new(),
     ];
 
-    if cfg!(windows) {
+    if quark_platform::allows_bundled_tools() {
         lines.extend([
             "# How to locate yt-dlp and ffmpeg".into(),
             "#   auto    - PATH first, then bundled tools beside the app".into(),
@@ -584,7 +574,7 @@ pub fn render(settings: &Settings) -> String {
         String::new(),
     ]);
 
-    if !cfg!(windows) {
+    if quark_platform::persist_gui_frontend() {
         lines.extend([
             "# Which GUI frontend to use".into(),
             "#   auto     - first installed helper (gtk, then cosmic, then kirigami)".into(),
@@ -622,7 +612,7 @@ mod tests {
         .unwrap();
         let settings = parse_file(&path, true).unwrap();
         assert_eq!(settings.download_dir, "~/Media");
-        if cfg!(windows) {
+        if quark_platform::allows_bundled_tools() {
             assert_eq!(settings.yt_dlp, ToolSource::Path);
             assert_eq!(settings.ffmpeg, ToolSource::Bundled);
         } else {
@@ -680,7 +670,7 @@ mod tests {
         };
         let rendered = render(&settings);
         assert!(rendered.contains("download_dir = D:/Downloads"));
-        if cfg!(windows) {
+        if quark_platform::allows_bundled_tools() {
             assert!(rendered.contains("yt_dlp = bundled"));
             assert!(rendered.contains("ffmpeg = path"));
         } else {
@@ -717,7 +707,7 @@ mod tests {
         assert!(migrated.contains("sanitize_filenames = true"));
         assert!(migrated.contains("filename_spaces = keep"));
         assert!(migrated.contains("playlist_folders = true"));
-        if !cfg!(windows) {
+        if quark_platform::persist_gui_frontend() {
             assert!(migrated.contains("gui_frontend = auto"));
         }
         let _ = fs::remove_file(&path);
