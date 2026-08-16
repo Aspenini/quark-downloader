@@ -2,6 +2,7 @@
 //!
 //! Frontends bind widgets to [`reduce`]; they must not emit session JSON by hand.
 
+pub mod capture;
 pub mod catalog;
 pub mod copy;
 pub mod event;

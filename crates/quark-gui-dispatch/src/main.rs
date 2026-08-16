@@ -19,14 +19,52 @@ fn main() {
         std::env::set_var("QUARK_VERSION", version::VERSION);
     }
 
-    match std::env::args().nth(1).as_deref() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
         Some("-h") | Some("--help") => {
             println!(
-                "Usage: quark-downloader-gui [--help] [--check-updates]\n\nThin dispatcher that opens a native frontend and runs quark-downloader."
+                "Usage: quark-downloader-gui [--help] [--check-updates] [--frontend <id> ...]\n\nOpens a native frontend and runs quark-downloader."
             );
+        }
+        Some("--frontend") => {
+            let id = args.get(1).map(String::as_str).unwrap_or("");
+            let rest = if args.len() > 2 { &args[2..] } else { &[] };
+            std::process::exit(run_frontend(id, rest));
         }
         Some("--check-updates") => run_update_check(),
         _ => run_controller(),
+    }
+}
+
+fn builtin_frontends() -> Vec<&'static str> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut ids = Vec::new();
+        if quark_gui_cosmic::available() {
+            ids.push("cosmic");
+        }
+        if quark_gui_kirigami::available() {
+            ids.push("kirigami");
+        }
+        ids
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Vec::new()
+    }
+}
+
+fn run_frontend(id: &str, args: &[String]) -> i32 {
+    let _ = args;
+    match id {
+        #[cfg(target_os = "linux")]
+        "cosmic" => quark_gui_cosmic::invoke(args),
+        #[cfg(target_os = "linux")]
+        "kirigami" => quark_gui_kirigami::invoke(args),
+        other => {
+            eprintln!("frontend '{other}' is not compiled into this binary");
+            1
+        }
     }
 }
 
@@ -67,7 +105,7 @@ fn run_controller() {
             MainAction::Cancel => return,
             MainAction::Error(message) => {
                 show_error(&message);
-                continue;
+                return;
             }
         }
     }
@@ -99,7 +137,7 @@ fn collect_session(
             return Err("Win32 frontend is only available on Windows.".into());
         }
     }
-    let frontend = HelperFrontend::discover(settings).map_err(|e| e.0)?;
+    let frontend = HelperFrontend::discover(settings, &builtin_frontends()).map_err(|e| e.0)?;
     Ok(frontend.collect_session(default_output, settings))
 }
 
@@ -108,10 +146,6 @@ fn show_missing_cli() {
 }
 
 fn show_error(message: &str) {
-    if let Some(fe) = helper_if_available() {
-        fe.show_message(MessageKind::Error, version::APP_NAME, message);
-        return;
-    }
     #[cfg(windows)]
     {
         windows::message_box(message, true);
@@ -140,7 +174,7 @@ fn helper_if_available() -> Option<HelperFrontend> {
     if settings.gui_frontend.uses_inprocess_win32() {
         return None;
     }
-    HelperFrontend::discover(&settings).ok()
+    HelperFrontend::discover(&settings, &builtin_frontends()).ok()
 }
 
 fn show_completion(result: &DownloadResult) {
@@ -201,7 +235,7 @@ fn run_download_with_progress_helper(
     command: &str,
     cmd_args: &[String],
 ) -> i32 {
-    let frontend = match HelperFrontend::discover(settings) {
+    let frontend = match HelperFrontend::discover(settings, &builtin_frontends()) {
         Ok(f) => f,
         Err(e) => {
             show_error(&e.0);
@@ -328,11 +362,12 @@ fn run_download_external_cli(command: &str, cmd_args: &[String]) -> i32 {
     {
         quark_core::process::spawn_cmd_start_wait("Quark Downloader", command, cmd_args)
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     {
-        if cfg!(target_os = "macos") {
-            return run_in_macos_terminal(command, cmd_args);
-        }
+        run_in_macos_terminal(command, cmd_args)
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
         if let Some((path, prefix)) = find_terminal() {
             return run_in_terminal(&path, &prefix, command, cmd_args);
         }

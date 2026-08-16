@@ -1,28 +1,43 @@
-//! COSMIC desktop frontend. `--script` uses the shared reducer.
-//! Visual UI (Linux) is iced — same toolkit as libcosmic — and uses system
-//! Wayland/Vulkan instead of vendoring those stacks into other binaries.
+//! COSMIC desktop frontend (iced). Linked into quark-downloader-gui.
 
-fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+pub fn available() -> bool {
+    cfg!(target_os = "linux")
+}
+
+pub fn invoke(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         Some("--script") => {
             quark_gui::assert_frontend_binds(|event| {
                 let _ = event;
             });
-            std::process::exit(quark_gui::run_script_stdio());
+            quark_gui::run_script_stdio()
         }
         Some("-h") | Some("--help") => {
-            println!("Usage: quark-downloader-gui-cosmic --session|--progress|--message|--script");
+            println!("Usage: --session|--progress|--message|--script");
+            0
         }
         _ => {
             #[cfg(target_os = "linux")]
             {
-                std::process::exit(linux::run(args));
+                if std::env::var_os("DISPLAY").is_none()
+                    && std::env::var_os("WAYLAND_DISPLAY").is_none()
+                {
+                    eprintln!(
+                        "No graphical display (DISPLAY and WAYLAND_DISPLAY are unset).\nOn WSL: use WSLg, or an X server and export DISPLAY."
+                    );
+                    return 1;
+                }
+                if std::env::var_os("ICED_BACKEND").is_none() {
+                    unsafe {
+                        std::env::set_var("ICED_BACKEND", "tiny-skia");
+                    }
+                }
+                linux::run(args.to_vec())
             }
             #[cfg(not(target_os = "linux"))]
             {
-                eprintln!("quark-downloader-gui-cosmic visual UI is Linux-only");
-                std::process::exit(1);
+                eprintln!("COSMIC visual UI is Linux-only");
+                1
             }
         }
     }
@@ -34,7 +49,7 @@ mod linux {
         Space, button, checkbox, column, container, pick_list, progress_bar, radio, row,
         scrollable, text, text_input,
     };
-    use iced::{Color, Element, Length, Subscription, Task, Theme};
+    use iced::{Element, Length, Subscription, Task, Theme};
     use std::io::{BufRead, Write};
 
     pub fn run(args: Vec<String>) -> i32 {
@@ -64,7 +79,13 @@ mod linux {
             .theme(move |_| theme.clone())
             .window_size(iced::Size::new(520.0, 540.0))
             .run_with(move || (state, Task::none()));
-        i32::from(result.is_err())
+        match result {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("COSMIC UI failed: {e}");
+                1
+            }
+        }
     }
 
     #[derive(Debug, Clone)]
@@ -96,15 +117,24 @@ mod linux {
 
     struct App {
         mode: Mode,
+        #[allow(dead_code)]
         default_dir: String,
+        #[allow(dead_code)]
         download_dir: String,
+        #[allow(dead_code)]
         gui_mode: String,
+        #[allow(dead_code)]
         logs: bool,
         theme: String,
+        #[allow(dead_code)]
         strip_ids: bool,
+        #[allow(dead_code)]
         sanitize: bool,
+        #[allow(dead_code)]
         spaces: String,
+        #[allow(dead_code)]
         playlist_folders: bool,
+        #[allow(dead_code)]
         frontend: String,
         settings_saved: bool,
         show_settings: bool,
@@ -132,12 +162,12 @@ mod linux {
 
     impl App {
         fn from_args(mode: Mode, args: Vec<String>) -> Self {
-            let a = |i: usize, fb: &str| args.get(i + 1).cloned().unwrap_or_else(|| fb.into());
-            let b = |i: usize, fb: bool| match args.get(i + 1).map(|s| s.to_ascii_lowercase()) {
+            let a = |i: usize, fb: &str| args.get(i).cloned().unwrap_or_else(|| fb.into());
+            let b = |i: usize, fb: bool| match args.get(i).map(|s| s.to_ascii_lowercase()) {
                 Some(s) => matches!(s.as_str(), "1" | "true" | "yes" | "on"),
                 None => fb,
             };
-            // --session default_dir is args[1] after the flag at [0]
+            // args[0] is --session; args[1] is default_dir.
             let default_dir = a(1, "~/Downloads");
             Self {
                 mode,
@@ -217,7 +247,7 @@ mod linux {
             }
             out.push_str(extra);
             out.push('}');
-            println!("{out}");
+            quark_gui::capture::emit_line(&out);
             let _ = std::io::stdout().flush();
         }
 

@@ -6,7 +6,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
     let spacesValues = ["keep", "underscore", "dash", "remove"]
     let modeValues = ["progress", "external_cli"]
     let themeValues = ["light", "dark"]
-    let frontendValues = ["auto", "appkit", "gtk", "cosmic", "kirigami"]
+    let frontendValues = ["auto", "appkit"]
 
     // Session state; mirrors the variables the Tcl UI keeps.
     // yt-dlp / ffmpeg are always PATH via Homebrew — no source picker.

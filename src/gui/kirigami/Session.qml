@@ -32,7 +32,7 @@ Kirigami.ApplicationWindow {
 
     readonly property var audioFormats: ["original", "mp3", "m4a", "flac", "wav", "opus", "vorbis"]
     readonly property var videoFormats: ["original", "mp4", "mkv", "webm"]
-    readonly property var frontendChoices: ["auto", "gtk", "cosmic", "kirigami", "win32", "appkit"]
+    readonly property var frontendChoices: ["auto", "cosmic", "kirigami"]
 
     onClosing: {
         emitCancel()

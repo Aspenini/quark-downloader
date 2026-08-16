@@ -4,17 +4,16 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Quark Downloader COSMIC frontend (iced, the toolkit under libcosmic; system Wayland/Vulkan)"
+description = "Quark Downloader COSMIC frontend (iced; compiled into quark-downloader-gui)"
 publish = false
 
-[[bin]]
-name = "quark-downloader-gui-cosmic"
-path = "src/main.rs"
+[lib]
+name = "quark_gui_cosmic"
+path = "src/lib.rs"
 
 [dependencies]
 quark-gui = { path = "../quark-gui" }
 
 # Linux only: iced dynamically links system Wayland/Vulkan via wgpu.
-# Not pulled into the dispatcher or GTK/Win32 binaries.
 [target.'cfg(target_os = "linux")'.dependencies]
 iced = { version = "0.13", default-features = false, features = ["tiny-skia", "wgpu"] }

@@ -17,3 +17,7 @@ quark-gui = { path = "../quark-gui" }
 
 [target.'cfg(windows)'.dependencies]
 quark-gui-win32 = { path = "../quark-gui-win32" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+quark-gui-cosmic = { path = "../quark-gui-cosmic" }
+quark-gui-kirigami = { path = "../quark-gui-kirigami" }

@@ -4,12 +4,15 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Quark Downloader Kirigami frontend (system Qt 6 / Kirigami QML)"
+description = "Quark Downloader Kirigami frontend (compiled into quark-downloader-gui)"
 publish = false
 
-[[bin]]
-name = "quark-downloader-gui-kirigami"
-path = "src/main.rs"
+[lib]
+name = "quark_gui_kirigami"
+path = "src/lib.rs"
 
 [dependencies]
 quark-gui = { path = "../quark-gui" }
+
+[build-dependencies]
+cc = "1"

@@ -43,8 +43,25 @@ pub trait Frontend {
     fn open_progress(&self, theme: GuiTheme) -> Result<Box<dyn ProgressSink>, FrontendError>;
 }
 
-pub const LINUX_AUTO_ORDER: &[&str] = &["gtk", "cosmic", "kirigami"];
-pub const MACOS_AUTO_ORDER: &[&str] = &["appkit", "gtk", "cosmic", "kirigami"];
+pub const LINUX_AUTO_ORDER: &[&str] = &["cosmic", "kirigami"];
+pub const MACOS_AUTO_ORDER: &[&str] = &["appkit"];
+
+/// Prefer the desktop's native toolkit so auto does not pick a broken one first.
+pub fn linux_auto_order() -> &'static [&'static str] {
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP")
+        .unwrap_or_default()
+        .to_ascii_uppercase();
+    if desktop.split(':').any(|p| p == "KDE" || p == "PLASMA") {
+        &["kirigami", "cosmic"]
+    } else {
+        LINUX_AUTO_ORDER
+    }
+}
+
+/// COSMIC and Kirigami are compiled into quark-downloader-gui.
+pub fn is_builtin_linux_frontend(id: &str) -> bool {
+    matches!(id, "cosmic" | "kirigami")
+}
 pub const MACOS_HELPER_NAMES: &[&str] =
     &["quark-downloader-gui-appkit", "quark-downloader-gui-helper"];
 
@@ -52,7 +69,10 @@ pub fn helper_binary_name(id: &str) -> String {
     format!("quark-downloader-gui-{id}")
 }
 
-pub fn discover_helper(settings: &Settings) -> Result<(String, PathBuf), FrontendError> {
+pub fn discover_helper(
+    settings: &Settings,
+    builtins: &[&str],
+) -> Result<(String, PathBuf), FrontendError> {
     if settings.gui_frontend.uses_inprocess_win32() {
         return Err(FrontendError(
             "Win32 in-process frontend does not use a helper binary".into(),
@@ -64,7 +84,7 @@ pub fn discover_helper(settings: &Settings) -> Result<(String, PathBuf), Fronten
         if path.exists() {
             return Ok((value.into_owned(), path));
         }
-        if let Some(found) = lookup_id(value.as_ref()) {
+        if let Some(found) = lookup_id(value.as_ref(), builtins) {
             return Ok((value.into_owned(), found));
         }
         return Err(FrontendError(format!(
@@ -72,7 +92,7 @@ pub fn discover_helper(settings: &Settings) -> Result<(String, PathBuf), Fronten
         )));
     }
     if let Some(id) = settings.gui_frontend.id() {
-        return lookup_id(id)
+        return lookup_id(id, builtins)
             .map(|p| (id.to_string(), p))
             .ok_or_else(|| missing_helper_error(Some(id)));
     }
@@ -82,26 +102,20 @@ pub fn discover_helper(settings: &Settings) -> Result<(String, PathBuf), Fronten
                 return Ok(("appkit".into(), path));
             }
         }
-        for id in MACOS_AUTO_ORDER
-            .iter()
-            .copied()
-            .filter(|id| *id != "appkit")
-        {
-            if let Some(path) = lookup_id(id) {
-                return Ok((id.to_string(), path));
-            }
-        }
         return Err(missing_helper_error(Some("appkit")));
     }
-    for id in LINUX_AUTO_ORDER {
-        if let Some(path) = lookup_id(id) {
+    for id in linux_auto_order() {
+        if let Some(path) = lookup_id(id, builtins) {
             return Ok(((*id).to_string(), path));
         }
     }
     Err(missing_helper_error(None))
 }
 
-fn lookup_id(id: &str) -> Option<PathBuf> {
+fn lookup_id(id: &str, builtins: &[&str]) -> Option<PathBuf> {
+    if builtins.iter().any(|b| *b == id) {
+        return std::env::current_exe().ok();
+    }
     lookup_named(&helper_binary_name(id))
 }
 
@@ -134,13 +148,12 @@ fn missing_helper_error(id: Option<&str>) -> FrontendError {
         "Install the AppKit helper (quark-downloader-gui-appkit) next to this program.".to_string()
     } else {
         match id {
-            Some(id) => format!(
-                "GUI frontend '{id}' was not found.\nInstall quark-downloader-gui-{id} next to this program or on PATH."
-            ),
-            None => {
-                "No GUI frontend was found.\nInstall quark-downloader-gui-gtk next to this program or on PATH."
+            Some("kirigami") => {
+                "Kirigami frontend is not available.\nInstall Qt 6 + Kirigami and rebuild quark-downloader-gui."
                     .into()
             }
+            Some(id) => format!("GUI frontend '{id}' is not available in this build."),
+            None => "No GUI frontend is available in this build.".into(),
         }
     };
     FrontendError(hint)
@@ -152,16 +165,31 @@ pub struct HelperFrontend {
 }
 
 impl HelperFrontend {
-    pub fn discover(settings: &Settings) -> Result<Self, FrontendError> {
-        let (id, path) = discover_helper(settings)?;
+    pub fn discover(settings: &Settings, builtins: &[&str]) -> Result<Self, FrontendError> {
+        let (id, path) = discover_helper(settings, builtins)?;
         Ok(Self { id, path })
     }
 
+    fn uses_frontend_flag(&self) -> bool {
+        is_builtin_linux_frontend(&self.id)
+            || std::env::current_exe().is_ok_and(|exe| exe == self.path)
+    }
+
     fn run(&self, args: &[String]) -> Result<(i32, String), FrontendError> {
-        let output = Command::new(&self.path)
+        eprintln!("Opening {} ({})", self.id, self.path.display());
+        // COSMIC / Kirigami live in this binary. Re-exec with --frontend so
+        // each toolkit gets its own process and can write session JSON.
+        let mut cmd = if self.uses_frontend_flag() {
+            let mut c = Command::new(std::env::current_exe().unwrap_or_else(|_| self.path.clone()));
+            c.arg("--frontend").arg(&self.id);
+            c
+        } else {
+            Command::new(&self.path)
+        };
+        let output = cmd
             .args(args)
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::inherit())
             .output()
             .map_err(|e| FrontendError(e.to_string()))?;
         let code = crate::process::exit_code(Some(output.status), 1);
@@ -215,7 +243,14 @@ impl Frontend for HelperFrontend {
     }
 
     fn open_progress(&self, theme: GuiTheme) -> Result<Box<dyn ProgressSink>, FrontendError> {
-        let mut child = Command::new(&self.path)
+        let mut cmd = if self.uses_frontend_flag() {
+            let mut c = Command::new(std::env::current_exe().unwrap_or_else(|_| self.path.clone()));
+            c.arg("--frontend").arg(&self.id);
+            c
+        } else {
+            Command::new(&self.path)
+        };
+        let mut child = cmd
             .args(["--progress", "", theme.as_str()])
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
@@ -293,8 +328,10 @@ mod tests {
 
     #[test]
     fn helper_names() {
-        assert_eq!(helper_binary_name("gtk"), "quark-downloader-gui-gtk");
-        assert_eq!(LINUX_AUTO_ORDER, &["gtk", "cosmic", "kirigami"]);
+        assert_eq!(helper_binary_name("appkit"), "quark-downloader-gui-appkit");
+        assert_eq!(LINUX_AUTO_ORDER, &["cosmic", "kirigami"]);
+        assert!(is_builtin_linux_frontend("cosmic"));
+        assert!(!is_builtin_linux_frontend("appkit"));
     }
 
     #[test]
@@ -304,10 +341,21 @@ mod tests {
             std::env::set_var("QUARK_GUI_FRONTEND", "/no/such/quark-frontend-binary");
         }
         let settings = Settings::default();
-        let err = discover_helper(&settings);
+        let err = discover_helper(&settings, &[]);
         unsafe {
             std::env::remove_var("QUARK_GUI_FRONTEND");
         }
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn builtin_id_resolves_to_current_exe() {
+        let settings = Settings {
+            gui_frontend: crate::config::GuiFrontend::Cosmic,
+            ..Settings::default()
+        };
+        let (id, path) = discover_helper(&settings, &["cosmic"]).unwrap();
+        assert_eq!(id, "cosmic");
+        assert_eq!(path, std::env::current_exe().unwrap());
     }
 }

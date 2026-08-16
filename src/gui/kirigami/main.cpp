@@ -6,6 +6,7 @@
 #include <QSocketNotifier>
 #include <QFile>
 #include <QDir>
+#include <QByteArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -14,14 +15,20 @@
 
 static QString qmlDir()
 {
+    const QString fromEnv = qEnvironmentVariable("QUARK_KIRIGAMI_QML");
+    if (!fromEnv.isEmpty() && QDir(fromEnv).exists())
+        return fromEnv;
     const QString sibling = QCoreApplication::applicationDirPath() + "/qml";
     if (QDir(sibling).exists())
         return sibling;
 #ifdef QUARK_KIRIGAMI_QML
-    return QString::fromUtf8(QUARK_KIRIGAMI_QML);
-#else
-    return QCoreApplication::applicationDirPath();
+    {
+        const QString baked = QString::fromUtf8(QUARK_KIRIGAMI_QML);
+        if (QDir(baked).exists())
+            return baked;
+    }
 #endif
+    return QCoreApplication::applicationDirPath();
 }
 
 static void writeJson(const QJsonObject &o)
@@ -51,13 +58,15 @@ static QJsonObject settingsFromCtx(QQmlContext *ctx)
     };
 }
 
-int main(int argc, char **argv)
+extern "C" int kirigami_ui_run(int argc, char **argv)
 {
     if (argc < 2) {
         fprintf(stderr, "usage: --session|--progress|--message\n");
         return 2;
     }
-    const char *mode = argv[1];
+    // Copy before QGuiApplication, which may mutate argv.
+    const QByteArray modeBytes = QByteArray(argv[1]);
+    const char *mode = modeBytes.constData();
 
     qputenv("QT_QUICK_CONTROLS_STYLE", "org.kde.desktop");
     QGuiApplication app(argc, argv);
@@ -143,3 +152,10 @@ int main(int argc, char **argv)
 
     return app.exec();
 }
+
+#ifndef KIRIGAMI_AS_LIBRARY
+int main(int argc, char **argv)
+{
+    return kirigami_ui_run(argc, argv);
+}
+#endif

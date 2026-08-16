@@ -473,7 +473,7 @@ mod tests {
             sanitize_filenames: true,
             filename_spaces: FilenameSpaces::Underscore,
             playlist_folders: false,
-            gui_frontend: crate::config::GuiFrontend::Gtk,
+            gui_frontend: crate::config::GuiFrontend::Cosmic,
         };
         let expected_ytdlp = if quark_platform::allows_bundled_tools() {
             "bundled"
@@ -495,7 +495,7 @@ mod tests {
                 "true",
                 "underscore",
                 "false",
-                "gtk",
+                "cosmic",
             ]
         );
     }
@@ -655,5 +655,6 @@ mod tests {
         assert_eq!(parse_gui_frontend("kirigami", true), GuiFrontend::Kirigami);
         assert_eq!(parse_gui_frontend("win32", true), GuiFrontend::Win32);
         assert_eq!(parse_gui_frontend("appkit", true), GuiFrontend::Appkit);
+        assert_eq!(parse_gui_frontend("gtk", true), GuiFrontend::Auto);
     }
 }

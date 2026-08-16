@@ -169,6 +169,6 @@ fn ctrl_c_cancel() {
         quark_core::process::request_interrupt();
     }
     unsafe {
-        signal(SIGINT, handler as usize);
+        signal(SIGINT, handler as *const () as usize);
     }
 }

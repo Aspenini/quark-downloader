@@ -11,23 +11,20 @@ echo ""
 
 mkdir -p "$build_dir"
 
-echo "  Compiling CLI + GUI dispatcher..."
+echo "  Compiling CLI + GUI..."
 (cd "$root" && cargo build --release -p quark-cli -p quark-gui-dispatch)
 cp "$root/target/release/quark-downloader" "$binary"
 cp "$root/target/release/quark-downloader-gui" "$gui_binary"
 
 if [[ "$(uname -s)" == "Linux" ]]; then
-  echo "  Compiling GTK / COSMIC / Kirigami frontends..."
-  (cd "$root" && cargo build --release -p quark-gui-gtk -p quark-gui-cosmic -p quark-gui-kirigami)
-  cp "$root/target/release/quark-downloader-gui-gtk" "$build_dir/quark-downloader-gui-gtk"
-  cp "$root/target/release/quark-downloader-gui-cosmic" "$build_dir/quark-downloader-gui-cosmic"
-  cp "$root/target/release/quark-downloader-gui-kirigami" "$build_dir/quark-downloader-gui-kirigami"
-  if [[ -x "$root/target/release/quark-downloader-gui-kirigami-ui" ]]; then
-    cp "$root/target/release/quark-downloader-gui-kirigami-ui" "$build_dir/quark-downloader-gui-kirigami-ui"
-    mkdir -p "$build_dir/qml"
-    cp "$root"/src/gui/kirigami/*.qml "$build_dir/qml/"
-  else
-    echo "  (Kirigami Qt UI skipped — install qt6-declarative-dev and qml6-module-org-kde-kirigami)"
+  have_pkg() { command -v pkg-config >/dev/null && pkg-config --exists "$1"; }
+  mkdir -p "$build_dir/qml"
+  cp "$root"/src/gui/kirigami/*.qml "$build_dir/qml/"
+  echo "  qml/"
+  if ! have_pkg Qt6Quick || ! have_pkg Qt6Qml; then
+    echo "  (Kirigami UI not linked — no Qt6Quick.pc; COSMIC is still in the GUI)"
+    echo "    Arch:  sudo pacman -S --needed qt6-declarative kirigami pkgconf"
+    echo "    Debian/Ubuntu: sudo apt install qt6-declarative-dev qml6-module-org-kde-kirigami"
   fi
 fi
 
@@ -57,8 +54,8 @@ echo ""
 echo "Done:"
 echo "  $binary"
 echo "  $gui_binary"
-if [[ -x "$build_dir/quark-downloader-gui-gtk" ]]; then
-  echo "  $build_dir/quark-downloader-gui-gtk"
+if [[ -d "$build_dir/qml" ]]; then
+  echo "  $build_dir/qml"
 fi
 if [[ -x "$build_dir/quark-downloader-gui-appkit" ]]; then
   echo "  $build_dir/quark-downloader-gui-appkit"

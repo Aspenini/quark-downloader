@@ -69,7 +69,7 @@ var controllerHolder: AnyObject?
 switch arguments.first {
 case "--script":
     // Shared reducer lives in quark-gui. Prefer the sibling Rust script
-    // helper so AppKit cannot drift from GTK/Win32.
+    // helper so AppKit cannot drift from Win32.
     let helperNames = [
         "quark-downloader-gui-appkit-script",
         "quark-downloader-gui-win32",

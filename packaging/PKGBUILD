@@ -6,11 +6,13 @@ pkgdesc='Interactive CLI and GUI wrapper for yt-dlp'
 arch=('x86_64')
 url='https://github.com/Aspenini/quark-downloader'
 license=('MIT')
-depends=('ffmpeg' 'gtk4' 'hicolor-icon-theme' 'yt-dlp')
+depends=('ffmpeg' 'hicolor-icon-theme' 'yt-dlp')
 makedepends=('cargo' 'rust')
 optdepends=(
   'deno: JavaScript runtime support for YouTube downloads'
   'nodejs: JavaScript runtime support for YouTube downloads'
+  'qt6-declarative: Kirigami GUI at build time'
+  'kirigami: Kirigami GUI at build time'
 )
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
 sha256sums=('SKIP')
@@ -18,7 +20,7 @@ sha256sums=('SKIP')
 build() {
   cd "${pkgname}-${pkgver}"
   export CARGO_TARGET_DIR="${srcdir}/target"
-  cargo build --release --locked -p quark-cli -p quark-gui -p quark-gui-gtk
+  cargo build --release --locked -p quark-cli -p quark-gui-dispatch
 }
 
 package() {
@@ -26,12 +28,13 @@ package() {
 
   install -Dm755 "${srcdir}/target/release/quark-downloader" "${pkgdir}/usr/lib/${pkgname}/quark-downloader"
   install -Dm755 "${srcdir}/target/release/quark-downloader-gui" "${pkgdir}/usr/lib/${pkgname}/quark-downloader-gui"
-  install -Dm755 "${srcdir}/target/release/quark-downloader-gui-gtk" "${pkgdir}/usr/lib/${pkgname}/quark-downloader-gui-gtk"
 
   install -dm755 "${pkgdir}/usr/bin"
   ln -s "../lib/${pkgname}/quark-downloader" "${pkgdir}/usr/bin/quark-downloader"
   ln -s "../lib/${pkgname}/quark-downloader-gui" "${pkgdir}/usr/bin/quark-downloader-gui"
-  ln -s "../lib/${pkgname}/quark-downloader-gui-gtk" "${pkgdir}/usr/bin/quark-downloader-gui-gtk"
+
+  install -dm755 "${pkgdir}/usr/lib/${pkgname}/qml"
+  install -Dm644 src/gui/kirigami/*.qml "${pkgdir}/usr/lib/${pkgname}/qml/"
 
   install -Dm644 packaging/quark-downloader.desktop "${pkgdir}/usr/share/applications/quark-downloader.desktop"
   install -Dm644 packaging/quark-downloader-gui.desktop "${pkgdir}/usr/share/applications/quark-downloader-gui.desktop"
