@@ -1,9 +1,6 @@
 name := "quark-downloader"
 gui_name := "quark-downloader-gui"
 build_dir := "build"
-installer_output := "packaging/output"
-bundled_tools := "bundled-tools"
-tools_dir := build_dir + "/tools"
 exe_ext := if os() == "windows" { ".exe" } else { "" }
 binary := build_dir + "/" + name + exe_ext
 gui_binary := build_dir + "/" + gui_name + exe_ext
@@ -15,7 +12,6 @@ set quiet := true
 default:
     @just --list
 
-# Release build into build/, then UPX compress (CLI only on Windows; GUI must not be UPXed).
 [group('build')]
 [private]
 [windows]
@@ -50,24 +46,23 @@ dmg:
     @bash scripts/macos/build-dmg.sh
 
 [group('dev')]
-[unix]
 run:
-    @bash -c 'source scripts/unix/crystal-env.sh && crystal run src/quark-downloader.cr'
-
-[group('dev')]
-[windows]
-run:
-    @crystal run src/quark-downloader.cr
+    @cargo run -p quark-cli --
 
 [group('dev')]
 [unix]
 run-gui:
-    @bash -c 'source scripts/unix/crystal-env.sh && crystal run src/gui/quark-downloader-gui.cr'
+    @cargo build -p quark-cli -p quark-gui -p quark-gui-gtk
+    @QUARK_DOWNLOADER_CLI=target/debug/quark-downloader cargo run -p quark-gui --
 
 [group('dev')]
 [windows]
 run-gui:
     @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/run-gui.ps1
+
+[group('test')]
+test:
+    @cargo test --workspace
 
 [group('clean')]
 [unix]

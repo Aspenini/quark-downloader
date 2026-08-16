@@ -1,0 +1,15 @@
+[package]
+name = "quark-gui-gtk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Quark Downloader GTK 4 frontend helper"
+publish = false
+
+[[bin]]
+name = "quark-downloader-gui-gtk"
+path = "src/main.rs"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk4 = { version = "0.10", default-features = false, features = ["v4_10"] }

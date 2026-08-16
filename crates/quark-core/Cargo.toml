@@ -1,0 +1,14 @@
+[package]
+name = "quark-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Download engine, config, and frontend protocol for Quark Downloader"
+publish = false
+
+[lib]
+name = "quark_core"
+path = "src/lib.rs"
+
+[dependencies]

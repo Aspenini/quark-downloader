@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/quark-core",
+    "crates/quark-cli",
+    "crates/quark-gui",
+    "crates/quark-gui-gtk",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+version = "0.7.0"
+license = "MIT"
+repository = "https://github.com/Aspenini/quark-downloader"
+homepage = "https://github.com/Aspenini/quark-downloader"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

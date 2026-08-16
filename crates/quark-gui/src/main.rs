@@ -1,0 +1,431 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
+#[cfg(not(windows))]
+use std::io::BufRead;
+#[cfg(not(windows))]
+use std::process::{Command, Stdio};
+
+#[cfg(windows)]
+mod win32;
+
+use quark_core::config::{self, GuiDownloadMode, Settings};
+#[cfg(not(windows))]
+use quark_core::frontend::{self, Frontend, HelperFrontend, MessageKind};
+#[cfg(not(windows))]
+use quark_core::progress::{ProgressCmd, ProgressRelay};
+use quark_core::release;
+#[cfg(not(windows))]
+use quark_core::result::DownloadResult;
+use quark_core::session::{self, DownloadParams, MainAction, SettingsForm};
+use quark_core::version;
+
+fn main() {
+    // Safety: process startup, single-threaded, before any other env reads.
+    unsafe {
+        std::env::set_var("QUARK_VERSION", version::VERSION);
+    }
+
+    if std::env::args().nth(1).as_deref() == Some("--check-updates") {
+        run_update_check();
+        return;
+    }
+
+    run_controller();
+}
+
+fn run_controller() {
+    let Some(cli) = session::resolve_cli() else {
+        show_missing_cli();
+        return;
+    };
+
+    loop {
+        let settings = match config::load(true) {
+            Ok(s) => s,
+            Err(e) => {
+                show_error(&e.0);
+                return;
+            }
+        };
+        let default_output = session::default_output_dir();
+        let session = match collect_session(&settings, &default_output.to_string_lossy()) {
+            Ok(s) => s,
+            Err(e) => {
+                show_error(&e);
+                return;
+            }
+        };
+
+        if let Some(form) = session.settings_form {
+            if !save_settings(form) {
+                continue;
+            }
+        }
+
+        match session.action {
+            MainAction::Download(params) => {
+                run_download(&cli.to_string_lossy(), &params);
+                return;
+            }
+            MainAction::Cancel => return,
+        }
+    }
+}
+
+fn save_settings(form: SettingsForm) -> bool {
+    if form.download_dir.trim().is_empty() {
+        show_error("Please choose a default download folder.");
+        return false;
+    }
+    if let Err(e) = config::save(&form.to_settings()) {
+        show_error(&e.0);
+        return false;
+    }
+    true
+}
+
+fn collect_session(
+    settings: &Settings,
+    default_output: &str,
+) -> Result<session::MainSessionResult, String> {
+    #[cfg(windows)]
+    {
+        let _ = settings;
+        let _ = default_output;
+        windows::collect_main_session(default_output, settings)
+    }
+    #[cfg(not(windows))]
+    {
+        let frontend = HelperFrontend::discover(settings).map_err(|e| e.0)?;
+        Ok(frontend.collect_session(default_output, settings))
+    }
+}
+
+fn show_missing_cli() {
+    show_error("quark-downloader was not found.\nInstall it next to this program or on PATH.");
+}
+
+fn show_error(message: &str) {
+    #[cfg(windows)]
+    {
+        windows::message_box(message, true);
+    }
+    #[cfg(not(windows))]
+    match config::load(true)
+        .ok()
+        .and_then(|s| HelperFrontend::discover(&s).ok())
+    {
+        Some(fe) => fe.show_message(MessageKind::Error, version::APP_NAME, message),
+        None => frontend::last_resort_error(message),
+    }
+}
+
+fn show_info(message: &str) {
+    #[cfg(windows)]
+    {
+        windows::message_box(message, false);
+    }
+    #[cfg(not(windows))]
+    match config::load(true)
+        .ok()
+        .and_then(|s| HelperFrontend::discover(&s).ok())
+    {
+        Some(fe) => fe.show_message(MessageKind::Ok, version::APP_NAME, message),
+        None => println!("{message}"),
+    }
+}
+
+#[cfg(not(windows))]
+fn show_completion(result: &DownloadResult) {
+    #[cfg(windows)]
+    {
+        let _ = result;
+        return;
+    }
+    #[cfg(not(windows))]
+    if let Ok(settings) = config::load(true)
+        && let Ok(fe) = HelperFrontend::discover(&settings)
+    {
+        fe.show_completion(result);
+    }
+}
+
+fn run_download(cli: &str, params: &DownloadParams) -> i32 {
+    let settings = config::load(true).unwrap_or_default();
+    let args = session::build_cli_args(cli, params);
+    let command = &args[0];
+    let cmd_args = &args[1..];
+    match settings.gui_download_mode {
+        GuiDownloadMode::ExternalCli => run_download_external_cli(command, cmd_args),
+        GuiDownloadMode::Progress => run_download_with_progress(&settings, command, cmd_args),
+    }
+}
+
+fn run_download_with_progress(settings: &Settings, command: &str, cmd_args: &[String]) -> i32 {
+    #[cfg(windows)]
+    {
+        let _ = settings;
+        windows::run_progress(command, cmd_args)
+    }
+    #[cfg(not(windows))]
+    run_download_with_progress_unix(settings, command, cmd_args)
+}
+
+#[cfg(not(windows))]
+fn run_download_with_progress_unix(settings: &Settings, command: &str, cmd_args: &[String]) -> i32 {
+    let frontend = match HelperFrontend::discover(settings) {
+        Ok(f) => f,
+        Err(e) => {
+            show_error(&e.0);
+            return 1;
+        }
+    };
+    let mut progress = match frontend.open_progress(settings.gui_theme) {
+        Ok(p) => p,
+        Err(e) => {
+            show_error(&e.0);
+            return 1;
+        }
+    };
+    let relay = ProgressRelay::new();
+    let mut child = match Command::new(command)
+        .args(cmd_args)
+        .env("QUARK_GUI", "1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            show_error(&e.to_string());
+            return 1;
+        }
+    };
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    let spawn_relay = |pipe: Option<std::process::ChildStdout>,
+                       tx: std::sync::mpsc::Sender<String>| {
+        if let Some(pipe) = pipe {
+            std::thread::spawn(move || {
+                for line in std::io::BufReader::new(pipe).lines().flatten() {
+                    let _ = tx.send(line);
+                }
+            });
+        }
+    };
+    // stdout and stderr have different types; handle separately.
+    if let Some(pipe) = stdout {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            for line in std::io::BufReader::new(pipe).lines().flatten() {
+                let _ = tx.send(line);
+            }
+        });
+    }
+    if let Some(pipe) = stderr {
+        std::thread::spawn(move || {
+            for line in std::io::BufReader::new(pipe).lines().flatten() {
+                let _ = tx.send(line);
+            }
+        });
+    }
+    drop(tx);
+    let _ = spawn_relay;
+    let mut result_holder: Option<DownloadResult> = None;
+    let mut user_closed = false;
+    while let Ok(line) = rx.recv() {
+        if progress.wait_closed() {
+            user_closed = true;
+            let _ = child.kill();
+            break;
+        }
+        if let Some(parsed) = DownloadResult::parse_emit_line(&line) {
+            result_holder = Some(parsed);
+            continue;
+        }
+        let mut buf = Vec::new();
+        let _ = relay.relay(&line, &mut buf);
+        for encoded in String::from_utf8_lossy(&buf).lines() {
+            let cmd = decode_progress_line(encoded);
+            if let Some(cmd) = cmd
+                && progress.send(&cmd).is_err()
+            {
+                user_closed = true;
+                let _ = child.kill();
+                break;
+            }
+        }
+    }
+    let status = child.wait().ok();
+    let exit_code = quark_core::process::exit_code(status, 1);
+    if user_closed {
+        return 1;
+    }
+    let _ = progress.send(&ProgressCmd::Done(exit_code));
+    while !progress.wait_closed() {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let mut result = result_holder.unwrap_or(DownloadResult {
+        exit_code,
+        ..DownloadResult::default()
+    });
+    if result.exit_code == 0 && exit_code != 0 {
+        result.exit_code = exit_code;
+    }
+    show_completion(&result);
+    exit_code
+}
+
+#[cfg(not(windows))]
+fn decode_progress_line(line: &str) -> Option<ProgressCmd> {
+    let (kind, rest) = line.split_once('\t').unwrap_or((line, ""));
+    match kind {
+        "PROGRESS" => rest.parse().ok().map(ProgressCmd::Progress),
+        "STATUS" => Some(ProgressCmd::Status(rest.to_string())),
+        "ETA" => Some(ProgressCmd::Eta(rest.to_string())),
+        "QUEUE" => Some(ProgressCmd::Queue(rest.to_string())),
+        "DONE" => rest.parse().ok().map(ProgressCmd::Done),
+        _ => None,
+    }
+}
+
+fn run_download_external_cli(command: &str, cmd_args: &[String]) -> i32 {
+    #[cfg(windows)]
+    {
+        quark_core::process::spawn_cmd_start_wait("Quark Downloader", command, cmd_args)
+    }
+    #[cfg(not(windows))]
+    {
+        if let Some((path, prefix)) = find_terminal() {
+            return run_in_terminal(&path, &prefix, command, cmd_args);
+        }
+        let status = Command::new(command).args(cmd_args).status().ok();
+        quark_core::process::exit_code(status, 1)
+    }
+}
+
+#[cfg(not(windows))]
+fn find_terminal() -> Option<(String, Vec<String>)> {
+    const CANDIDATES: &[(&str, &[&str])] = &[
+        ("x-terminal-emulator", &["-e"]),
+        ("gnome-terminal", &["--wait", "--"]),
+        ("konsole", &["-e"]),
+        ("xfce4-terminal", &["-e"]),
+        ("tilix", &["-e"]),
+        ("terminator", &["-x"]),
+        ("kitty", &["-e"]),
+        ("wezterm", &["start", "--"]),
+        ("ghostty", &["-e"]),
+        ("alacritty", &["-e"]),
+        ("foot", &["-e"]),
+    ];
+    for (name, prefix) in CANDIDATES {
+        if let Some(path) = quark_core::process::which(name) {
+            return Some((
+                path.to_string_lossy().into_owned(),
+                prefix.iter().map(|s| (*s).to_string()).collect(),
+            ));
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn run_in_terminal(path: &str, prefix: &[String], command: &str, args: &[String]) -> i32 {
+    let mut inner = std::iter::once(command)
+        .chain(args.iter().map(String::as_str))
+        .map(shell_escape)
+        .collect::<Vec<_>>()
+        .join(" ");
+    inner.push_str("; echo; read -r -p 'Press Enter to close...' _");
+    let mut cmd_args = prefix.to_vec();
+    cmd_args.extend(["sh".into(), "-c".into(), inner]);
+    let status = Command::new(path).args(cmd_args).status().ok();
+    quark_core::process::exit_code(status, 1)
+}
+
+#[cfg(not(windows))]
+fn shell_escape(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+fn run_update_check() {
+    let (status, latest, behind, error) = release::check_with_error();
+    match status {
+        release::Status::UpToDate => {
+            show_info(&format!("You are up to date ({}).", version::VERSION));
+        }
+        release::Status::Ahead => {
+            show_info(&format!(
+                "You are running {} (newer than the latest release {}).",
+                version::VERSION,
+                latest.unwrap_or_default()
+            ));
+        }
+        release::Status::Behind => {
+            if let Some(info) = behind {
+                present_behind(&info);
+            }
+        }
+        release::Status::Failed => {
+            show_error(&format!(
+                "Could not check for updates:\n{}",
+                error.unwrap_or_else(|| "unknown error".into())
+            ));
+        }
+    }
+}
+
+fn present_behind(info: &release::BehindInfo) {
+    #[cfg(windows)]
+    {
+        let message = format!(
+            "A newer version ({}) is available. You have {}.\n\nDownload the latest installer?",
+            info.latest_version,
+            version::VERSION
+        );
+        windows::confirm_open_url(&message, &info.download_url);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        show_info(&format!(
+            "A newer version ({}) is available. You have {}.\n\nDownload the latest release from github.com/Aspenini/quark-downloader/releases (or update with your package manager).",
+            info.latest_version,
+            version::VERSION
+        ));
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        show_info(&format!(
+            "A newer version ({}) is available. You have {}.\n\nUpdate with your package manager (e.g. yay -Syu or the AUR).",
+            info.latest_version,
+            version::VERSION
+        ));
+    }
+}
+
+#[cfg(windows)]
+mod windows {
+    use super::*;
+    use quark_core::session::MainSessionResult;
+
+    pub fn collect_main_session(
+        default_output: &str,
+        settings: &Settings,
+    ) -> Result<MainSessionResult, String> {
+        crate::win32::collect_main_session(default_output, settings)
+    }
+
+    pub fn message_box(message: &str, error: bool) {
+        crate::win32::message_box(message, error);
+    }
+
+    pub fn confirm_open_url(message: &str, url: &str) {
+        crate::win32::confirm_open_url(message, url);
+    }
+
+    pub fn run_progress(command: &str, cmd_args: &[String]) -> i32 {
+        crate::win32::run_progress(command, cmd_args)
+    }
+}

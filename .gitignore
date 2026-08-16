@@ -12,7 +12,11 @@
 /tools/
 quark-downloader.conf
 
-# Crystal
+# Rust
+/target/
+*.pdb
+
+# Crystal (legacy)
 *.dwarf
 /.crystal/
 /.shards/
