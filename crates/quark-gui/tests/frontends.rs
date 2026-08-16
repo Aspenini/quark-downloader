@@ -70,6 +70,8 @@ fn frontend_bins() -> Vec<(&'static str, String)> {
         ("win32", "quark-downloader-gui-win32"),
         ("gtk", "quark-downloader-gui-gtk"),
         ("appkit-script", "quark-downloader-gui-appkit-script"),
+        ("kirigami", "quark-downloader-gui-kirigami"),
+        ("cosmic", "quark-downloader-gui-cosmic"),
     ] {
         if bins.iter().any(|(n, _)| *n == name) {
             continue;

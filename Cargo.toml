@@ -9,6 +9,8 @@ members = [
     "crates/quark-gui-win32",
     "crates/quark-gui-gtk",
     "crates/quark-gui-appkit",
+    "crates/quark-gui-kirigami",
+    "crates/quark-gui-cosmic",
 ]
 
 [workspace.package]

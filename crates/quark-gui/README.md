@@ -7,7 +7,9 @@ reducer in this crate. They must not invent format lists or session JSON.
 quark-gui              library: catalog, reduce, --script, C ABI
 quark-gui-dispatch     binary: quark-downloader-gui
 quark-gui-win32        Windows frontend (in-process + --script)
-quark-gui-gtk          Linux helper: --session / --progress / --message / --script
+quark-gui-gtk          GTK 4 helper (system libgtk-4)
+quark-gui-cosmic       COSMIC / iced helper (Linux UI; system Wayland/Vulkan)
+quark-gui-kirigami     Kirigami helper (system Qt 6 + distro Kirigami QML)
 quark-gui-appkit       --script runner; visual UI is still Swift AppKit
 ```
 
@@ -41,9 +43,10 @@ Does not open a window or need a display.
 `quark-downloader-gui` discovers a helper and speaks:
 
 1. `QUARK_GUI_FRONTEND` — id or full path
-2. Config `gui_frontend` (`auto` or `gtk` on Linux)
+2. Config `gui_frontend` (`auto`, `gtk`, `cosmic`, `kirigami`, `win32`, `appkit`)
 3. Sibling of the dispatcher, then `PATH`
 
-Windows uses in-process Win32. macOS visual UI is `quark-downloader-gui-appkit`
-(Swift). `--session` still uses positional argv; helpers print JSON `v:1`.
-Legacy `__SESSION__` lines are still parsed.
+Windows `auto`/`win32` is in-process Win32. Other picks launch a helper.
+macOS `auto` prefers AppKit. Linux `auto` tries gtk, then cosmic, then kirigami.
+GTK and Kirigami dynamically link system `libgtk-4` / Qt 6. COSMIC is a
+separate iced helper so it is not linked into the dispatcher.

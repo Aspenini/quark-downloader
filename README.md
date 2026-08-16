@@ -23,7 +23,7 @@
 | ------------------ | --------------------------------- | ----------------- | ----------------------------------------------------- |
 | **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH (package manager / `pipx`)                       |
 | **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH (package manager)                                |
-| **GUI (optional)** | Win32                             | AppKit UI         | GTK 4 (`quark-downloader-gui-gtk`) |
+| **GUI (optional)** | Win32 (or GTK/COSMIC/Kirigami helper) | AppKit (or GTK/COSMIC/Kirigami helper) | GTK 4, COSMIC, or Kirigami — pick in Settings |
 
 **Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
@@ -56,7 +56,7 @@ On first run, Quark creates `quark-downloader.conf` under the user config direct
 | `gui_download_mode` | `progress` for the GUI progress dialog, or `external_cli` to open the CLI window after Download |
 | `download_logs` | `true` or `false`; applies to both CLI and GUI downloads |
 | `gui_theme` | `light` or `dark`; applies to the macOS/Linux GUI (Windows uses its native light UI) |
-| `gui_frontend` | Linux: `auto` (default) or `gtk`. Windows ignores this. |
+| `gui_frontend` | `auto` plus the frontends for this OS (`win32`, `appkit`, `gtk`, `cosmic`, `kirigami`). Pick in Settings. |
 | `strip_video_ids` | `true` (default) drops the trailing ` [VIDEOID]` from filenames |
 | `sanitize_filenames` | `true` (default) makes filenames mostly ASCII-safe on all platforms (`｜` -> `-`, accents transliterated, Windows-invalid characters removed) |
 | `filename_spaces` | `keep` (default), `underscore`, `dash`, or `remove` |

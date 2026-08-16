@@ -6,6 +6,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
     let spacesValues = ["keep", "underscore", "dash", "remove"]
     let modeValues = ["progress", "external_cli"]
     let themeValues = ["light", "dark"]
+    let frontendValues = ["auto", "appkit", "gtk", "cosmic", "kirigami"]
 
     // Session state; mirrors the variables the Tcl UI keeps.
     // yt-dlp / ffmpeg are always PATH via Homebrew — no source picker.
@@ -18,6 +19,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
     var sanitize: Bool
     var spaces: String
     var playlistFolders: Bool
+    var frontend: String
     var settingsSaved = false
     var queue: [String] = []
     var updateCheckRunning = false
@@ -42,6 +44,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
     let spacesPopup = NSPopUpButton()
     var playlistCheck: NSButton!
     let modePopup = NSPopUpButton()
+    let frontendPopup = NSPopUpButton()
     var logsCheck: NSButton!
     var updatesButton: NSButton!
 
@@ -64,6 +67,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         sanitize = boolArg(8, true)
         spaces = arg(9, "keep")
         playlistFolders = boolArg(10, true)
+        frontend = arg(11, "auto")
         super.init()
     }
 
@@ -197,7 +201,9 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         modePopup.addItems(withTitles: modeValues)
         let modeRow = hStack([NSTextField(labelWithString: "Download window:"), modePopup])
         logsCheck = NSButton(checkboxWithTitle: "Create download logs", target: nil, action: nil)
-        let downloadsBox = box("Downloads", rows: [modeRow, logsCheck], fullWidth: [])
+        frontendPopup.addItems(withTitles: frontendValues)
+        let frontendRow = hStack([NSTextField(labelWithString: "GUI frontend:"), frontendPopup])
+        let downloadsBox = box("Downloads", rows: [modeRow, logsCheck, frontendRow], fullWidth: [])
 
         updatesButton = NSButton(title: "Check for updates…", target: self, action: #selector(checkUpdates))
         let saveButton = NSButton(title: "Save", target: self, action: #selector(saveSettings))
@@ -224,6 +230,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         playlistCheck.state = playlistFolders ? .on : .off
         select(modePopup, guiMode, from: modeValues)
         logsCheck.state = logs ? .on : .off
+        select(frontendPopup, frontend, from: frontendValues)
     }
 
     // MARK: - Layout helpers
@@ -432,6 +439,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         playlistFolders = playlistCheck.state == .on
         guiMode = modePopup.titleOfSelectedItem ?? "progress"
         logs = logsCheck.state == .on
+        frontend = frontendPopup.titleOfSelectedItem ?? "auto"
         defaultDir = normalizedDir
         settingsSaved = true
         applyTheme(theme)
@@ -522,6 +530,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
             "sanitize_filenames": sanitize,
             "filename_spaces": spaces,
             "playlist_folders": playlistFolders,
+            "gui_frontend": frontend,
         ]
     }
 

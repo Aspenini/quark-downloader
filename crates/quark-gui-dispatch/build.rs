@@ -13,7 +13,10 @@ mod windows {
         let root = manifest.join("../..");
         let rc = root.join("win32").join(rc_name);
         if !rc.exists() {
-            println!("cargo:warning=missing {} — Win32 dialogs will fail to open", rc.display());
+            println!(
+                "cargo:warning=missing {} — Win32 dialogs will fail to open",
+                rc.display()
+            );
             return;
         }
         println!("cargo:rerun-if-changed={}", rc.display());

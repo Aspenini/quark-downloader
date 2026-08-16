@@ -14,5 +14,6 @@ path = "src/main.rs"
 [dependencies]
 quark-gui = { path = "../quark-gui" }
 
+# System libgtk-4 via pkg-config. Do not vendor or statically link GTK.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk4 = { version = "0.10", default-features = false, features = ["v4_10"] }

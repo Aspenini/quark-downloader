@@ -87,6 +87,8 @@ impl FilenameSpaces {
 pub enum GuiFrontend {
     #[default]
     Auto,
+    Win32,
+    Appkit,
     Gtk,
     Cosmic,
     Kirigami,
@@ -96,6 +98,8 @@ impl GuiFrontend {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Auto => "auto",
+            Self::Win32 => "win32",
+            Self::Appkit => "appkit",
             Self::Gtk => "gtk",
             Self::Cosmic => "cosmic",
             Self::Kirigami => "kirigami",
@@ -105,10 +109,20 @@ impl GuiFrontend {
     pub fn id(self) -> Option<&'static str> {
         match self {
             Self::Auto => None,
+            Self::Win32 => Some("win32"),
+            Self::Appkit => Some("appkit"),
             Self::Gtk => Some("gtk"),
             Self::Cosmic => Some("cosmic"),
             Self::Kirigami => Some("kirigami"),
         }
+    }
+
+    /// Windows in-process dialogs when Auto or an explicit Win32 pick.
+    pub fn uses_inprocess_win32(self) -> bool {
+        if !quark_platform::uses_inprocess_gui() {
+            return false;
+        }
+        matches!(self, Self::Auto | Self::Win32)
     }
 }
 
@@ -203,6 +217,7 @@ fn public_keys() -> &'static [&'static str] {
             "sanitize_filenames",
             "filename_spaces",
             "playlist_folders",
+            "gui_frontend",
         ]
     } else {
         &[
@@ -485,8 +500,12 @@ pub fn parse_gui_theme(value: &str, quiet: bool) -> GuiTheme {
 
 pub fn parse_gui_frontend(value: &str, quiet: bool) -> GuiFrontend {
     match value.to_ascii_lowercase().as_str() {
+        "win32" => GuiFrontend::Win32,
+        "appkit" => GuiFrontend::Appkit,
         "gtk" => GuiFrontend::Gtk,
-        "cosmic" | "kirigami" | "auto" => GuiFrontend::Auto,
+        "cosmic" => GuiFrontend::Cosmic,
+        "kirigami" => GuiFrontend::Kirigami,
+        "auto" => GuiFrontend::Auto,
         _ => {
             if !quiet {
                 println!("Warning: invalid gui_frontend value {value:?}, using auto");
@@ -572,8 +591,12 @@ pub fn render(settings: &Settings) -> String {
     if quark_platform::persist_gui_frontend() {
         lines.extend([
             "# Which GUI frontend to use".into(),
-            "#   auto - first installed helper (gtk)".into(),
-            "#   gtk  - GTK 4 helper".into(),
+            "#   auto     - first installed helper for this OS".into(),
+            "#   gtk      - GTK 4 helper (system libgtk-4)".into(),
+            "#   cosmic   - COSMIC / iced helper".into(),
+            "#   kirigami - Kirigami helper (system Qt 6)".into(),
+            "#   win32    - in-process Win32 (Windows)".into(),
+            "#   appkit   - AppKit helper (macOS)".into(),
             format!("gui_frontend = {}", settings.gui_frontend.as_str()),
             String::new(),
         ]);
@@ -670,8 +693,8 @@ mod tests {
             assert!(!rendered.contains("yt_dlp ="));
             assert!(!rendered.contains("ffmpeg ="));
             assert!(rendered.contains("always resolved from PATH"));
-            assert!(rendered.contains("gui_frontend = gtk"));
         }
+        assert!(rendered.contains("gui_frontend = gtk"));
         assert!(rendered.contains("gui_download_mode = external_cli"));
         assert!(rendered.contains("download_logs = false"));
         assert!(rendered.contains("gui_theme = dark"));

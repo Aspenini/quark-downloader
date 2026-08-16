@@ -43,7 +43,8 @@ pub trait Frontend {
     fn open_progress(&self, theme: GuiTheme) -> Result<Box<dyn ProgressSink>, FrontendError>;
 }
 
-pub const LINUX_AUTO_ORDER: &[&str] = &["gtk"];
+pub const LINUX_AUTO_ORDER: &[&str] = &["gtk", "cosmic", "kirigami"];
+pub const MACOS_AUTO_ORDER: &[&str] = &["appkit", "gtk", "cosmic", "kirigami"];
 pub const MACOS_HELPER_NAMES: &[&str] =
     &["quark-downloader-gui-appkit", "quark-downloader-gui-helper"];
 
@@ -52,9 +53,9 @@ pub fn helper_binary_name(id: &str) -> String {
 }
 
 pub fn discover_helper(settings: &Settings) -> Result<(String, PathBuf), FrontendError> {
-    if quark_platform::uses_inprocess_gui() {
+    if settings.gui_frontend.uses_inprocess_win32() {
         return Err(FrontendError(
-            "Windows uses the in-process Win32 frontend".into(),
+            "Win32 in-process frontend does not use a helper binary".into(),
         ));
     }
     if let Some(env) = std::env::var_os("QUARK_GUI_FRONTEND") {
@@ -79,6 +80,15 @@ pub fn discover_helper(settings: &Settings) -> Result<(String, PathBuf), Fronten
         for name in MACOS_HELPER_NAMES {
             if let Some(path) = lookup_named(name) {
                 return Ok(("appkit".into(), path));
+            }
+        }
+        for id in MACOS_AUTO_ORDER
+            .iter()
+            .copied()
+            .filter(|id| *id != "appkit")
+        {
+            if let Some(path) = lookup_id(id) {
+                return Ok((id.to_string(), path));
             }
         }
         return Err(missing_helper_error(Some("appkit")));
@@ -284,7 +294,7 @@ mod tests {
     #[test]
     fn helper_names() {
         assert_eq!(helper_binary_name("gtk"), "quark-downloader-gui-gtk");
-        assert_eq!(LINUX_AUTO_ORDER, &["gtk"]);
+        assert_eq!(LINUX_AUTO_ORDER, &["gtk", "cosmic", "kirigami"]);
     }
 
     #[test]

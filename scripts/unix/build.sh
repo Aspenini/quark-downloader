@@ -17,9 +17,18 @@ cp "$root/target/release/quark-downloader" "$binary"
 cp "$root/target/release/quark-downloader-gui" "$gui_binary"
 
 if [[ "$(uname -s)" == "Linux" ]]; then
-  echo "  Compiling GTK frontend..."
-  (cd "$root" && cargo build --release -p quark-gui-gtk)
+  echo "  Compiling GTK / COSMIC / Kirigami frontends..."
+  (cd "$root" && cargo build --release -p quark-gui-gtk -p quark-gui-cosmic -p quark-gui-kirigami)
   cp "$root/target/release/quark-downloader-gui-gtk" "$build_dir/quark-downloader-gui-gtk"
+  cp "$root/target/release/quark-downloader-gui-cosmic" "$build_dir/quark-downloader-gui-cosmic"
+  cp "$root/target/release/quark-downloader-gui-kirigami" "$build_dir/quark-downloader-gui-kirigami"
+  if [[ -x "$root/target/release/quark-downloader-gui-kirigami-ui" ]]; then
+    cp "$root/target/release/quark-downloader-gui-kirigami-ui" "$build_dir/quark-downloader-gui-kirigami-ui"
+    mkdir -p "$build_dir/qml"
+    cp "$root"/src/gui/kirigami/*.qml "$build_dir/qml/"
+  else
+    echo "  (Kirigami Qt UI skipped — install qt6-declarative-dev and qml6-module-org-kde-kirigami)"
+  fi
 fi
 
 if [[ "$(uname -s)" == "Darwin" ]]; then

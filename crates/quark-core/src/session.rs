@@ -647,4 +647,13 @@ mod tests {
         assert!(!settings.download_logs);
         assert_eq!(settings.gui_theme, GuiTheme::Dark);
     }
+
+    #[test]
+    fn parses_named_frontends() {
+        use crate::config::{GuiFrontend, parse_gui_frontend};
+        assert_eq!(parse_gui_frontend("cosmic", true), GuiFrontend::Cosmic);
+        assert_eq!(parse_gui_frontend("kirigami", true), GuiFrontend::Kirigami);
+        assert_eq!(parse_gui_frontend("win32", true), GuiFrontend::Win32);
+        assert_eq!(parse_gui_frontend("appkit", true), GuiFrontend::Appkit);
+    }
 }

@@ -1,17 +1,14 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-#[cfg(not(windows))]
 use std::io::BufRead;
-#[cfg(not(windows))]
 use std::process::{Command, Stdio};
 
 use quark_core::config::{self, GuiDownloadMode, Settings};
 #[cfg(not(windows))]
-use quark_core::frontend::{self, Frontend, HelperFrontend, MessageKind};
-#[cfg(not(windows))]
+use quark_core::frontend;
+use quark_core::frontend::{Frontend, HelperFrontend, MessageKind};
 use quark_core::progress::{ProgressCmd, ProgressRelay};
 use quark_core::release;
-#[cfg(not(windows))]
 use quark_core::result::DownloadResult;
 use quark_core::session::{self, DownloadParams, MainAction, SettingsForm};
 use quark_core::version;
@@ -92,17 +89,18 @@ fn collect_session(
     settings: &Settings,
     default_output: &str,
 ) -> Result<session::MainSessionResult, String> {
-    #[cfg(windows)]
-    {
-        let _ = settings;
-        let _ = default_output;
-        windows::collect_main_session(default_output, settings)
+    if settings.gui_frontend.uses_inprocess_win32() {
+        #[cfg(windows)]
+        {
+            return windows::collect_main_session(default_output, settings);
+        }
+        #[cfg(not(windows))]
+        {
+            return Err("Win32 frontend is only available on Windows.".into());
+        }
     }
-    #[cfg(not(windows))]
-    {
-        let frontend = HelperFrontend::discover(settings).map_err(|e| e.0)?;
-        Ok(frontend.collect_session(default_output, settings))
-    }
+    let frontend = HelperFrontend::discover(settings).map_err(|e| e.0)?;
+    Ok(frontend.collect_session(default_output, settings))
 }
 
 fn show_missing_cli() {
@@ -110,54 +108,55 @@ fn show_missing_cli() {
 }
 
 fn show_error(message: &str) {
+    if let Some(fe) = helper_if_available() {
+        fe.show_message(MessageKind::Error, version::APP_NAME, message);
+        return;
+    }
     #[cfg(windows)]
     {
         windows::message_box(message, true);
-    }
-    #[cfg(not(windows))]
-    match config::load(true)
-        .ok()
-        .and_then(|s| HelperFrontend::discover(&s).ok())
-    {
-        Some(fe) => fe.show_message(MessageKind::Error, version::APP_NAME, message),
-        None => frontend::last_resort_error(message),
-    }
-}
-
-fn show_info(message: &str) {
-    #[cfg(windows)]
-    {
-        windows::message_box(message, false);
-    }
-    #[cfg(not(windows))]
-    match config::load(true)
-        .ok()
-        .and_then(|s| HelperFrontend::discover(&s).ok())
-    {
-        Some(fe) => fe.show_message(MessageKind::Ok, version::APP_NAME, message),
-        None => println!("{message}"),
-    }
-}
-
-#[cfg(not(windows))]
-fn show_completion(result: &DownloadResult) {
-    #[cfg(windows)]
-    {
-        let _ = result;
         return;
     }
     #[cfg(not(windows))]
+    frontend::last_resort_error(message);
+}
+
+fn show_info(message: &str) {
+    if let Some(fe) = helper_if_available() {
+        fe.show_message(MessageKind::Ok, version::APP_NAME, message);
+        return;
+    }
+    #[cfg(windows)]
+    {
+        windows::message_box(message, false);
+        return;
+    }
+    #[cfg(not(windows))]
+    println!("{message}");
+}
+
+fn helper_if_available() -> Option<HelperFrontend> {
+    let settings = config::load(true).ok()?;
+    if settings.gui_frontend.uses_inprocess_win32() {
+        return None;
+    }
+    HelperFrontend::discover(&settings).ok()
+}
+
+fn show_completion(result: &DownloadResult) {
     if result.success() {
         open_folder(&result.output_dir);
     }
-    if let Ok(settings) = config::load(true)
-        && let Ok(fe) = HelperFrontend::discover(&settings)
-    {
+    if let Some(fe) = helper_if_available() {
         fe.show_completion(result);
+        return;
+    }
+    #[cfg(windows)]
+    {
+        let _ = result;
     }
 }
 
-#[cfg(not(windows))]
 fn open_folder(path: &str) {
     if path.trim().is_empty() {
         return;
@@ -188,17 +187,20 @@ fn run_download(cli: &str, params: &DownloadParams) -> i32 {
 }
 
 fn run_download_with_progress(settings: &Settings, command: &str, cmd_args: &[String]) -> i32 {
-    #[cfg(windows)]
-    {
-        let _ = settings;
-        windows::run_progress(command, cmd_args)
+    if settings.gui_frontend.uses_inprocess_win32() {
+        #[cfg(windows)]
+        {
+            return windows::run_progress(command, cmd_args);
+        }
     }
-    #[cfg(not(windows))]
-    run_download_with_progress_unix(settings, command, cmd_args)
+    run_download_with_progress_helper(settings, command, cmd_args)
 }
 
-#[cfg(not(windows))]
-fn run_download_with_progress_unix(settings: &Settings, command: &str, cmd_args: &[String]) -> i32 {
+fn run_download_with_progress_helper(
+    settings: &Settings,
+    command: &str,
+    cmd_args: &[String],
+) -> i32 {
     let frontend = match HelperFrontend::discover(settings) {
         Ok(f) => f,
         Err(e) => {
@@ -250,6 +252,7 @@ fn run_download_with_progress_unix(settings: &Settings, command: &str, cmd_args:
         });
     }
     if let Some(pipe) = stderr {
+        let tx = tx.clone();
         std::thread::spawn(move || {
             for line in std::io::BufReader::new(pipe).lines().flatten() {
                 let _ = tx.send(line);
@@ -308,7 +311,6 @@ fn run_download_with_progress_unix(settings: &Settings, command: &str, cmd_args:
     exit_code
 }
 
-#[cfg(not(windows))]
 fn decode_progress_line(line: &str) -> Option<ProgressCmd> {
     let (kind, rest) = line.split_once('\t').unwrap_or((line, ""));
     match kind {

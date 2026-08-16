@@ -64,6 +64,7 @@ const IDC_PROGRESS_ETA: i32 = 1026;
 const IDC_PROGRESS_QUEUE: i32 = 1027;
 const IDC_URL_ADD: i32 = 1028;
 const IDC_URL_PASTE: i32 = 1042;
+const IDC_SET_FRONTEND: i32 = 1043;
 const IDC_QUEUE_LIST: i32 = 1029;
 const IDC_QUEUE_REMOVE: i32 = 1030;
 const IDC_SET_STRIP_IDS: i32 = 1032;
@@ -106,6 +107,8 @@ const SETTINGS_VIEW_IDS: &[i32] = &[
     1022,
     IDC_SET_GUI_MODE,
     IDC_SET_LOGS,
+    1044,
+    IDC_SET_FRONTEND,
     1040,
     1020,
     IDC_SET_YTDLP,
@@ -425,6 +428,12 @@ fn populate_settings_fields(dlg: Handle, settings: &Settings) {
         SPACES_VALUES,
         settings.filename_spaces.as_str(),
     );
+    populate_combo(
+        dlg,
+        IDC_SET_FRONTEND,
+        quark_gui::supported_frontends(),
+        settings.gui_frontend.as_str(),
+    );
 }
 
 fn read_settings_form(dlg: Handle, gui_theme: &str) -> Option<SettingsForm> {
@@ -445,7 +454,7 @@ fn read_settings_form(dlg: Handle, gui_theme: &str) -> Option<SettingsForm> {
             sanitize_filenames: IsDlgButtonChecked(dlg, IDC_SET_SANITIZE) != 0,
             filename_spaces: combo_text(dlg, IDC_SET_SPACES),
             playlist_folders: IsDlgButtonChecked(dlg, IDC_SET_PLAYLIST_FOLDERS) != 0,
-            gui_frontend: "auto".into(),
+            gui_frontend: combo_text(dlg, IDC_SET_FRONTEND),
         })
     }
 }

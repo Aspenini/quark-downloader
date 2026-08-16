@@ -77,9 +77,9 @@ pub fn allows_bundled_tools() -> bool {
     cfg!(windows)
 }
 
-/// Linux/macOS persist `gui_frontend`; Windows uses in-process Win32.
+/// All platforms persist `gui_frontend` so settings can pick a helper.
 pub fn persist_gui_frontend() -> bool {
-    !cfg!(windows)
+    true
 }
 
 pub fn uses_inprocess_gui() -> bool {

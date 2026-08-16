@@ -34,7 +34,6 @@ mod linux {
     const VIDEO_FORMATS: &[&str] = quark_gui::VIDEO_FORMATS;
     const SPACES: &[&str] = quark_gui::SPACES;
     const MODES: &[&str] = quark_gui::MODES;
-    const FRONTENDS: &[&str] = quark_gui::LINUX_FRONTENDS;
     const THEMES: &[&str] = quark_gui::THEMES;
 
     pub fn main() {
@@ -622,7 +621,7 @@ mod linux {
         let logs = CheckButton::with_label("Download logs");
         logs.set_active(s.logs);
         let theme = dropdown(THEMES, &s.theme);
-        let frontend = dropdown(FRONTENDS, &s.frontend);
+        let frontend = dropdown(quark_gui::supported_frontends(), &s.frontend);
         let updates = Button::with_label("Check for updates...");
         let save = Button::with_label("Save");
         let cancel = Button::with_label("Cancel");
