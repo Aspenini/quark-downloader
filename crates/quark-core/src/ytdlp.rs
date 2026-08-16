@@ -379,27 +379,7 @@ fn verify_checksum(release: &json::Value, binary_name: &str, path: &Path) -> Res
 }
 
 fn sha256_file(path: &Path) -> Result<String, Error> {
-    #[cfg(windows)]
-    {
-        crate::sys::windows::sha256_hex(path).map_err(|e| Error(e.to_string()))
-    }
-    #[cfg(not(windows))]
-    {
-        let output = Command::new("sha256sum")
-            .arg(path)
-            .output()
-            .or_else(|_| {
-                Command::new("shasum")
-                    .args(["-a", "256", &path.to_string_lossy()])
-                    .output()
-            })
-            .map_err(|e| Error(e.to_string()))?;
-        let text = String::from_utf8_lossy(&output.stdout);
-        text.split_whitespace()
-            .next()
-            .map(|s| s.to_ascii_lowercase())
-            .ok_or_else(|| Error("could not hash file".into()))
-    }
+    quark_platform::sha256_hex(path).map_err(|e| Error(e.to_string()))
 }
 
 fn install_binary(tmp: &Path, dest: &Path) -> Result<(), Error> {

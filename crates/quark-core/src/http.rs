@@ -8,27 +8,11 @@ pub fn user_agent() -> String {
 }
 
 pub fn fetch_body(url: &str) -> io::Result<String> {
-    let ua = user_agent();
-    #[cfg(windows)]
-    {
-        crate::sys::windows::fetch_body(url, &ua)
-    }
-    #[cfg(not(windows))]
-    {
-        crate::sys::unix::fetch_body(url, &ua)
-    }
+    quark_platform::fetch_body(url, &user_agent())
 }
 
 pub fn download_file(url: &str, dest: &Path) -> io::Result<()> {
-    let ua = user_agent();
-    #[cfg(windows)]
-    {
-        crate::sys::windows::download_file(url, dest, &ua)
-    }
-    #[cfg(not(windows))]
-    {
-        crate::sys::unix::download_file(url, dest, &ua)
-    }
+    quark_platform::download_file(url, dest, &user_agent())
 }
 
 #[derive(Debug)]

@@ -471,7 +471,7 @@ fn report_saved_files(paths: &[String], target_dir: &Path) {
 
 fn warn_if_root() {
     #[cfg(unix)]
-    if crate::sys::unix::is_root() {
+    if quark_platform::is_root() {
         logs::log_line(&color::yellow("Warning: running as root/sudo."));
         logs::log_line(&color::yellow(&format!(
             "  Config and downloads use root's home ({}), not your user account.",
@@ -486,7 +486,7 @@ fn warn_if_root() {
 fn warn_if_unwritable_config() {
     #[cfg(unix)]
     {
-        if crate::sys::unix::is_root() {
+        if quark_platform::is_root() {
             return;
         }
         let path = config::config_dir();
@@ -933,7 +933,7 @@ fn run_command_hidden(
     let Some((prog, args)) = cmd.split_first() else {
         return 127;
     };
-    let runner = match crate::sys::windows::HiddenProcess::spawn(prog, args) {
+    let runner = match quark_platform::HiddenProcess::spawn(prog, args) {
         Ok(r) => r,
         Err(_) => {
             logs::log_line(&format!("Error: {prog} was not found."));
@@ -944,7 +944,7 @@ fn run_command_hidden(
     let stderr = runner.stderr_handle() as usize;
     thread::scope(|s| {
         s.spawn(|| {
-            crate::sys::windows::read_handle_lines(stdout as *mut core::ffi::c_void, |line| {
+            quark_platform::read_handle_lines(stdout as *mut core::ffi::c_void, |line| {
                 let out_line = monitor
                     .map(|m| m.observe(line))
                     .unwrap_or_else(|| line.to_string());
@@ -955,7 +955,7 @@ fn run_command_hidden(
             });
         });
         s.spawn(|| {
-            crate::sys::windows::read_handle_lines(stderr as *mut core::ffi::c_void, |line| {
+            quark_platform::read_handle_lines(stderr as *mut core::ffi::c_void, |line| {
                 let out_line = monitor
                     .map(|m| m.observe(line))
                     .unwrap_or_else(|| line.to_string());

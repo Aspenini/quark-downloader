@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/quark-core",
+    "crates/quark-platform",
     "crates/quark-cli",
     "crates/quark-gui",
     "crates/quark-gui-gtk",

@@ -481,7 +481,7 @@ dependencies = [
 name = "quark-core"
 version = "0.7.0"
 dependencies = [
- "windows-sys 0.59.0",
+ "quark-platform",
 ]
 
 [[package]]
@@ -497,6 +497,13 @@ name = "quark-gui-gtk"
 version = "0.7.0"
 dependencies = [
  "gtk4",
+]
+
+[[package]]
+name = "quark-platform"
+version = "0.7.0"
+dependencies = [
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

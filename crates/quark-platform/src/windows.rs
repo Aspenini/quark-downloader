@@ -383,6 +383,7 @@ pub struct HiddenProcess {
 }
 
 unsafe impl Send for HiddenProcess {}
+unsafe impl Sync for HiddenProcess {}
 
 impl HiddenProcess {
     pub fn spawn(command: &str, args: &[String]) -> io::Result<Self> {
@@ -488,6 +489,10 @@ impl HiddenProcess {
         self.wait_ms(INFINITE).unwrap_or(1)
     }
 
+    pub fn try_wait(&self) -> Option<u32> {
+        self.wait_ms(0)
+    }
+
     pub fn terminate(&self) {
         unsafe {
             if !self.job.is_null() {
@@ -516,6 +521,7 @@ impl Drop for HiddenProcess {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn read_handle_lines(handle: Handle, mut on_line: impl FnMut(&str)) {
     let mut leftover = Vec::new();
     let mut buf = [0u8; 4096];
@@ -626,5 +632,25 @@ pub fn spawn_cmd_start_wait(title: &str, command: &str, args: &[String]) -> i32 
         CloseHandle(pi.hThread);
         let _ = cmdline;
         code as i32
+    }
+}
+
+pub fn local_offset_secs() -> i64 {
+    use windows_sys::Win32::Foundation::SYSTEMTIME;
+    use windows_sys::Win32::System::SystemInformation::{GetLocalTime, GetSystemTime};
+    unsafe {
+        let mut local = std::mem::zeroed::<SYSTEMTIME>();
+        let mut utc = std::mem::zeroed::<SYSTEMTIME>();
+        GetLocalTime(&mut local);
+        GetSystemTime(&mut utc);
+        let local_secs = i64::from(local.wHour) * 3600 + i64::from(local.wMinute) * 60;
+        let utc_secs = i64::from(utc.wHour) * 3600 + i64::from(utc.wMinute) * 60;
+        let mut delta = local_secs - utc_secs;
+        if delta > 12 * 3600 {
+            delta -= 24 * 3600;
+        } else if delta < -12 * 3600 {
+            delta += 24 * 3600;
+        }
+        delta
     }
 }

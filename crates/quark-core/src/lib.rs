@@ -21,8 +21,6 @@ pub mod version;
 pub mod version_cmp;
 pub mod ytdlp;
 
-mod sys;
-
 pub use config::{ConfigError, Settings};
 pub use result::DownloadResult;
 pub use version::{APP_NAME, VERSION};

@@ -6,7 +6,6 @@ const ON: u8 = 1;
 const OFF: u8 = 2;
 
 static ENABLED: AtomicU8 = AtomicU8::new(UNSET);
-static WINDOWS_VT_TRIED: AtomicU8 = AtomicU8::new(0);
 
 pub fn enabled() -> bool {
     match ENABLED.load(Ordering::Relaxed) {
@@ -44,10 +43,7 @@ fn detect_enabled() -> bool {
     if !std::io::stdout().is_terminal() {
         return false;
     }
-    #[cfg(windows)]
-    crate::sys::windows::enable_virtual_terminal(&WINDOWS_VT_TRIED);
-    #[cfg(not(windows))]
-    let _ = &WINDOWS_VT_TRIED;
+    quark_platform::enable_virtual_terminal();
     true
 }
 
