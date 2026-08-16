@@ -12,6 +12,10 @@ Kirigami.ApplicationWindow {
 
     signal submit(string json)
     signal closed()
+    property string pendingSubmit: ""
+    property bool pendingClose: false
+    onSubmit: pendingSubmit = json
+    onClosed: pendingClose = true
 
     property string statusText: "Starting download..."
     property string etaText: ""

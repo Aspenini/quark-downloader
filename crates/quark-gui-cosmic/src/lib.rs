@@ -291,11 +291,11 @@ mod linux {
             }
         }
 
-        fn pick<'a>(
-            items: &'a [&'a str],
+        fn pick(
+            items: &'static [&'static str],
             current: &str,
-            on_select: impl Fn(usize) -> Message + 'static,
-        ) -> Element<'a, Message> {
+            on_select: impl Fn(usize) -> Message + Send + Sync + 'static,
+        ) -> Element<'static, Message> {
             let selected = items.iter().position(|s| *s == current);
             widget::dropdown(items, selected, on_select).into()
         }
@@ -361,23 +361,26 @@ mod linux {
         fn subscription(&self) -> Subscription<Self::Message> {
             if matches!(self.mode, Mode::Progress) {
                 Subscription::run(|| {
-                    cosmic::iced::stream::channel(32, |mut sender| async move {
-                        let (tx, mut rx) = futures::channel::mpsc::unbounded();
-                        std::thread::spawn(move || {
-                            let stdin = std::io::stdin();
-                            for line in stdin.lock().lines().flatten() {
-                                if tx.unbounded_send(line).is_err() {
+                    cosmic::iced::stream::channel(
+                        32,
+                        |mut sender: futures::channel::mpsc::Sender<Message>| async move {
+                            let (tx, mut rx) = futures::channel::mpsc::unbounded::<String>();
+                            std::thread::spawn(move || {
+                                let stdin = std::io::stdin();
+                                for line in stdin.lock().lines().flatten() {
+                                    if tx.unbounded_send(line).is_err() {
+                                        break;
+                                    }
+                                }
+                            });
+                            use futures::{SinkExt, StreamExt};
+                            while let Some(line) = rx.next().await {
+                                if sender.send(Message::ProgressLine(line)).await.is_err() {
                                     break;
                                 }
                             }
-                        });
-                        use futures::StreamExt;
-                        while let Some(line) = rx.next().await {
-                            if sender.try_send(Message::ProgressLine(line)).is_err() {
-                                break;
-                            }
-                        }
-                    })
+                        },
+                    )
                 })
             } else {
                 Subscription::none()
@@ -518,7 +521,7 @@ mod linux {
             Some(
                 widget::row::with_capacity(2)
                     .push(widget::button::standard("Cancel").on_press(Message::Cancel))
-                    .push(widget::Space::with_width(Length::Fill))
+                    .push(widget::Space::new().width(Length::Fill))
                     .push(widget::button::suggested("Download").on_press(Message::Download))
                     .spacing(cosmic::theme::spacing().space_s)
                     .align_y(Alignment::Center)
@@ -641,7 +644,7 @@ mod linux {
                     ))
                     .into(),
                 widget::row::with_capacity(2)
-                    .push(widget::Space::with_width(Length::Fill))
+                    .push(widget::Space::new().width(Length::Fill))
                     .push(widget::button::standard("Cancel").on_press(Message::CloseSettings))
                     .push(widget::button::suggested("Save").on_press(Message::SaveSettings))
                     .spacing(cosmic::theme::spacing().space_s)

@@ -11,6 +11,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QTimer>
 #include <cstdio>
 #include <cstring>
 
@@ -143,17 +144,25 @@ extern "C" int kirigami_ui_run(int argc, char **argv)
         return 1;
     QObject *root = engine.rootObjects().constFirst();
 
-    QObject::connect(root, SIGNAL(submit(QString)), &app, [&](const QString &json) {
-        fwrite(json.toUtf8().constData(), 1, size_t(json.toUtf8().size()), stdout);
-        fputc('\n', stdout);
-        fflush(stdout);
-        QCoreApplication::exit(0);
+    // Qt 6 cannot mix SIGNAL() with a lambda. QML writes pendingSubmit /
+    // pendingClose; a typed QTimer slot reads them.
+    auto *timer = new QTimer(&app);
+    timer->setInterval(20);
+    QObject::connect(timer, &QTimer::timeout, &app, [root]() {
+        const QString json = root->property("pendingSubmit").toString();
+        if (!json.isEmpty()) {
+            root->setProperty("pendingSubmit", QString());
+            const QByteArray bytes = json.toUtf8();
+            fwrite(bytes.constData(), 1, size_t(bytes.size()), stdout);
+            fputc('\n', stdout);
+            fflush(stdout);
+            QCoreApplication::exit(0);
+            return;
+        }
+        if (root->property("pendingClose").toBool())
+            QCoreApplication::quit();
     });
-    QObject::connect(root, SIGNAL(requestSettings()), &app, [ctx, root]() {
-        const QJsonDocument doc(settingsFromCtx(ctx));
-        QMetaObject::invokeMethod(root, "takeSettingsJson", Q_ARG(QVariant, QString::fromUtf8(doc.toJson(QJsonDocument::Compact))));
-    });
-    QObject::connect(root, SIGNAL(closed()), &app, &QCoreApplication::quit);
+    timer->start();
 
     if (strcmp(mode, "--progress") == 0) {
         auto *n = new QSocketNotifier(fileno(stdin), QSocketNotifier::Read, &app);
