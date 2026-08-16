@@ -1,5 +1,16 @@
 use std::path::PathBuf;
 use std::process::ExitStatus;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+
+pub fn request_interrupt() {
+    INTERRUPTED.store(true, Ordering::SeqCst);
+}
+
+pub fn interrupted() -> bool {
+    INTERRUPTED.load(Ordering::SeqCst)
+}
 
 pub fn exit_code(status: Option<ExitStatus>, fallback: i32) -> i32 {
     match status {

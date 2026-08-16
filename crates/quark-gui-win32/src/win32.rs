@@ -63,6 +63,7 @@ const IDC_CHECK_UPDATES: i32 = 1025;
 const IDC_PROGRESS_ETA: i32 = 1026;
 const IDC_PROGRESS_QUEUE: i32 = 1027;
 const IDC_URL_ADD: i32 = 1028;
+const IDC_URL_PASTE: i32 = 1042;
 const IDC_QUEUE_LIST: i32 = 1029;
 const IDC_QUEUE_REMOVE: i32 = 1030;
 const IDC_SET_STRIP_IDS: i32 = 1032;
@@ -75,6 +76,7 @@ const MAIN_VIEW_IDS: &[i32] = &[
     1016,
     IDC_URL,
     IDC_URL_ADD,
+    IDC_URL_PASTE,
     1031,
     IDC_QUEUE_LIST,
     IDC_QUEUE_REMOVE,
@@ -473,6 +475,47 @@ fn show_settings_view(dlg: Handle) {
     set_view_visible(dlg, SETTINGS_VIEW_IDS, true);
 }
 
+fn paste_urls_to_queue(dlg: Handle) {
+    let Some(text) = clipboard_text() else {
+        return;
+    };
+    for piece in text.split_whitespace() {
+        set_dlg_text(dlg, IDC_URL, piece);
+        add_url_to_queue(dlg);
+    }
+}
+
+fn clipboard_text() -> Option<String> {
+    use windows_sys::Win32::System::DataExchange::{
+        CloseClipboard, GetClipboardData, OpenClipboard,
+    };
+    const CF_UNICODETEXT: u32 = 13;
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+    unsafe {
+        if OpenClipboard(ptr::null_mut()) == 0 {
+            return None;
+        }
+        let handle = GetClipboardData(CF_UNICODETEXT);
+        if handle.is_null() {
+            CloseClipboard();
+            return None;
+        }
+        let locked = GlobalLock(handle) as *const u16;
+        if locked.is_null() {
+            CloseClipboard();
+            return None;
+        }
+        let mut len = 0usize;
+        while *locked.add(len) != 0 {
+            len += 1;
+        }
+        let text = from_wide(std::slice::from_raw_parts(locked, len + 1));
+        GlobalUnlock(handle);
+        CloseClipboard();
+        Some(text)
+    }
+}
+
 fn add_url_to_queue(dlg: Handle) {
     let url = get_dlg_text(dlg, IDC_URL);
     let url = url.trim();
@@ -592,6 +635,10 @@ unsafe extern "system" fn main_dialog_proc(
                 }
                 IDC_URL_ADD if notify == BN_CLICKED => {
                     add_url_to_queue(dlg);
+                    return 1;
+                }
+                IDC_URL_PASTE if notify == BN_CLICKED => {
+                    paste_urls_to_queue(dlg);
                     return 1;
                 }
                 IDC_QUEUE_REMOVE if notify == BN_CLICKED => {

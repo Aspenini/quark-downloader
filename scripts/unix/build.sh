@@ -12,7 +12,7 @@ echo ""
 mkdir -p "$build_dir"
 
 echo "  Compiling CLI + GUI dispatcher..."
-(cd "$root" && cargo build --release -p quark-cli -p quark-gui)
+(cd "$root" && cargo build --release -p quark-cli -p quark-gui-dispatch)
 cp "$root/target/release/quark-downloader" "$binary"
 cp "$root/target/release/quark-downloader-gui" "$gui_binary"
 

@@ -10,6 +10,7 @@ pub mod frontend;
 pub mod http;
 pub mod json;
 pub mod logs;
+pub mod media;
 pub mod playlist;
 pub mod process;
 pub mod progress;
@@ -22,5 +23,6 @@ pub mod version_cmp;
 pub mod ytdlp;
 
 pub use config::{ConfigError, Settings};
+pub use media::{Format, MediaType};
 pub use result::DownloadResult;
 pub use version::{APP_NAME, VERSION};

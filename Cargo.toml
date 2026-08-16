@@ -5,7 +5,10 @@ members = [
     "crates/quark-platform",
     "crates/quark-cli",
     "crates/quark-gui",
+    "crates/quark-gui-dispatch",
+    "crates/quark-gui-win32",
     "crates/quark-gui-gtk",
+    "crates/quark-gui-appkit",
 ]
 
 [workspace.package]

@@ -6,9 +6,6 @@
     <td align="right">
       <h1>Quark Downloader</h1>
       <p>
-        <a href="https://github.com/Aspenini/quark-downloader/actions/workflows/rust.yml">
-          <img alt="Rust CI" src="https://img.shields.io/github/actions/workflow/status/Aspenini/quark-downloader/rust.yml?branch=main&amp;label=Rust%20CI&amp;color=orange" />
-        </a>
         <a href="https://github.com/Aspenini/quark-downloader/releases">
           <img alt="GitHub release" src="https://img.shields.io/github/v/release/Aspenini/quark-downloader?label=release" />
         </a>
@@ -26,7 +23,7 @@
 | ------------------ | --------------------------------- | ----------------- | ----------------------------------------------------- |
 | **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH (package manager / `pipx`)                       |
 | **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH (package manager)                                |
-| **GUI (optional)** | Win32                             | AppKit UI         | GTK 4 (`quark-downloader-gui-gtk`); COSMIC/Kirigami helpers later |
+| **GUI (optional)** | Win32                             | AppKit UI         | GTK 4 (`quark-downloader-gui-gtk`) |
 
 **Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
@@ -43,7 +40,7 @@
 
 The GUI queues multiple URLs (Add/Remove list) and downloads them sequentially with combined progress ("URL 2 of 5"). Playlist URLs download every item into a folder named after the playlist (see `playlist_folders`), with per-item progress and a failure summary.
 
-Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, `quark-downloader-gui-gtk` (Linux), [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop), and depends on **GTK 4**. On macOS the GUI uses `quark-downloader-gui-appkit` beside the binary. Extra Linux frontends (`quark-downloader-gui-cosmic`, `quark-downloader-gui-kirigami`) can be installed later; `gui_frontend = auto` picks the first one found.
+Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, `quark-downloader-gui-gtk` (Linux), [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop), and depends on **GTK 4**. On macOS the GUI uses `quark-downloader-gui-appkit` beside the binary. Frontends share `quark-gui` (catalog + session reducer + `--script` contract); see [`crates/quark-gui/README.md`](crates/quark-gui/README.md).
 
 Windows shortcuts from the installer open the GUI; the CLI remains in the install folder as **Quark Downloader (CLI)**. Use **Check for updates** in settings to compare against the latest [GitHub release](https://github.com/Aspenini/quark-downloader/releases) and open the installer download when a newer version is published.
 
@@ -59,7 +56,7 @@ On first run, Quark creates `quark-downloader.conf` under the user config direct
 | `gui_download_mode` | `progress` for the GUI progress dialog, or `external_cli` to open the CLI window after Download |
 | `download_logs` | `true` or `false`; applies to both CLI and GUI downloads |
 | `gui_theme` | `light` or `dark`; applies to the macOS/Linux GUI (Windows uses its native light UI) |
-| `gui_frontend` | Linux/macOS: `auto` (default), `gtk`, `cosmic`, or `kirigami`. Windows ignores this. |
+| `gui_frontend` | Linux: `auto` (default) or `gtk`. Windows ignores this. |
 | `strip_video_ids` | `true` (default) drops the trailing ` [VIDEOID]` from filenames |
 | `sanitize_filenames` | `true` (default) makes filenames mostly ASCII-safe on all platforms (`｜` -> `-`, accents transliterated, Windows-invalid characters removed) |
 | `filename_spaces` | `keep` (default), `underscore`, `dash`, or `remove` |

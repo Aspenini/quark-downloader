@@ -11,7 +11,7 @@ Write-Host ""
 Write-Host "  Compiling CLI + GUI..."
 Push-Location $root
 try {
-  Invoke-Checked { cargo build --release -p quark-cli -p quark-gui }
+  Invoke-Checked { cargo build --release -p quark-cli -p quark-gui-dispatch }
 } finally {
   Pop-Location
 }

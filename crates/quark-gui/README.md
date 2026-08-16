@@ -1,42 +1,49 @@
-# GUI dispatcher and frontend protocol
+# quark-gui
 
-`quark-downloader-gui` never links a toolkit. It discovers a named helper and
-speaks this protocol. New Linux frontends (COSMIC, Kirigami, …) only need to
-implement the three modes below and install as `quark-downloader-gui-<id>`.
-
-## Discovery
-
-1. `QUARK_GUI_FRONTEND` — id or full path
-2. Config `gui_frontend` (`auto`, `gtk`, `cosmic`, `kirigami`)
-3. Sibling of the dispatcher, then `PATH`
-
-`auto` on Linux tries `gtk`, then `cosmic`, then `kirigami`.
-macOS prefers `quark-downloader-gui-appkit` (legacy `quark-downloader-gui-helper` is still accepted).
-Windows uses in-process Win32.
-
-## `--session`
-
-Positional argv after `--session`:
+Shared GUI library for Quark Downloader. Frontends bind widgets to the
+reducer in this crate. They must not invent format lists or session JSON.
 
 ```
-<default_dir> <download_dir> <yt_dlp> <ffmpeg> <gui_download_mode>
-<download_logs> <gui_theme> <strip_video_ids> <sanitize_filenames>
-<filename_spaces> <playlist_folders> [gui_frontend]
+quark-gui              library: catalog, reduce, --script, C ABI
+quark-gui-dispatch     binary: quark-downloader-gui
+quark-gui-win32        Windows frontend (in-process + --script)
+quark-gui-gtk          Linux helper: --session / --progress / --message / --script
+quark-gui-appkit       --script runner; visual UI is still Swift AppKit
 ```
 
-Print one JSON object on stdout:
+## Contract
+
+`cargo test -p quark-gui --test contract` is the spec. Every frontend
+`--script` binary is checked against the same fixtures by
+`--test frontends` when that binary exists on the host.
+
+Settings are included in session JSON only after Save. Empty queue and
+empty output use the strings in `copy.rs`. Download flushes the URL field
+first. Switching audio/video resets format to `original`.
+
+## `--script`
+
+Read one JSON document on stdin, print one session JSON object on stdout.
+Does not open a window or need a display.
 
 ```json
-{"v":1,"action":"download","settings":{...},"urls":["..."],"media_type":"video","format":"original","output_dir":"..."}
+{
+  "args": { "default_dir": "/tmp/dl" },
+  "events": [
+    { "add_url": "https://example.com/a" },
+    { "download": true }
+  ]
+}
 ```
 
-`action` is `download` or `cancel`. Legacy `__SESSION__` lines are still parsed.
+## Dispatcher protocol
 
-## `--progress <unused> <theme>`
+`quark-downloader-gui` discovers a helper and speaks:
 
-Read stdin commands: `PROGRESS\t`, `STATUS\t`, `ETA\t`, `QUEUE\t`, `DONE\t<code>`.
-Closing the window cancels the download.
+1. `QUARK_GUI_FRONTEND` — id or full path
+2. Config `gui_frontend` (`auto` or `gtk` on Linux)
+3. Sibling of the dispatcher, then `PATH`
 
-## `--message <ok|error> <title> <body>`
-
-Show an alert and exit.
+Windows uses in-process Win32. macOS visual UI is `quark-downloader-gui-appkit`
+(Swift). `--session` still uses positional argv; helpers print JSON `v:1`.
+Legacy `__SESSION__` lines are still parsed.

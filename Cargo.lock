@@ -489,7 +489,22 @@ name = "quark-gui"
 version = "0.7.0"
 dependencies = [
  "quark-core",
- "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "quark-gui-appkit"
+version = "0.7.0"
+dependencies = [
+ "quark-gui",
+]
+
+[[package]]
+name = "quark-gui-dispatch"
+version = "0.7.0"
+dependencies = [
+ "quark-core",
+ "quark-gui",
+ "quark-gui-win32",
 ]
 
 [[package]]
@@ -497,6 +512,16 @@ name = "quark-gui-gtk"
 version = "0.7.0"
 dependencies = [
  "gtk4",
+ "quark-gui",
+]
+
+[[package]]
+name = "quark-gui-win32"
+version = "0.7.0"
+dependencies = [
+ "quark-core",
+ "quark-gui",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

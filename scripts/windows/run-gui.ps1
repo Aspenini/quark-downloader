@@ -10,7 +10,7 @@ try {
     Invoke-Checked { cargo build -p quark-cli }
   }
   $env:QUARK_DOWNLOADER_CLI = (Resolve-Path $cli).Path
-  cargo run -p quark-gui --
+  cargo run -p quark-gui-dispatch --
   exit $LASTEXITCODE
 } finally {
   Pop-Location

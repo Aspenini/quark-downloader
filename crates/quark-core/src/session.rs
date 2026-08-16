@@ -104,6 +104,7 @@ impl SettingsForm {
 pub enum MainAction {
     Download(DownloadParams),
     Cancel,
+    Error(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -116,6 +117,13 @@ impl MainSessionResult {
     pub fn cancel() -> Self {
         Self {
             action: MainAction::Cancel,
+            settings_form: None,
+        }
+    }
+
+    pub fn error(message: impl Into<String>) -> Self {
+        Self {
+            action: MainAction::Error(message.into()),
             settings_form: None,
         }
     }
@@ -162,8 +170,17 @@ pub fn parse(text: &str) -> MainSessionResult {
 
 fn parse_json(text: &str) -> MainSessionResult {
     let Ok(data) = json::parse(text) else {
-        return MainSessionResult::cancel();
+        return MainSessionResult::error("invalid session JSON");
     };
+    match data.get_i32("v") {
+        Some(v) if v == PROTOCOL_VERSION as i32 => {}
+        Some(v) => {
+            return MainSessionResult::error(format!(
+                "unsupported session protocol version {v} (expected {PROTOCOL_VERSION})"
+            ));
+        }
+        None => return MainSessionResult::error("session JSON missing protocol version"),
+    }
     let settings_form = parse_settings_json(data.get("settings"));
     let action = match data.get_str("action") {
         Some("download") => {
@@ -179,7 +196,7 @@ fn parse_json(text: &str) -> MainSessionResult {
             let format = data.get_str("format").unwrap_or("original").to_string();
             let output = data.get_str("output_dir").unwrap_or("").to_string();
             if urls.is_empty() || output.is_empty() {
-                MainAction::Cancel
+                MainAction::Error("download action missing urls or output_dir".into())
             } else {
                 MainAction::Download(DownloadParams {
                     urls,
@@ -189,6 +206,11 @@ fn parse_json(text: &str) -> MainSessionResult {
                 })
             }
         }
+        Some("error") => MainAction::Error(
+            data.get_str("message")
+                .unwrap_or("frontend error")
+                .to_string(),
+        ),
         _ => MainAction::Cancel,
     };
     MainSessionResult {
@@ -405,12 +427,9 @@ pub fn resolve_cli() -> Option<std::path::PathBuf> {
     if let Ok(gui_exe) = std::env::current_exe()
         && let Some(parent) = gui_exe.parent()
     {
-        let s = parent.to_string_lossy().replace('\\', "/");
-        if !s.contains("/crystal/cache") {
-            let sibling = parent.join(cli_name());
-            if sibling.exists() {
-                return Some(sibling);
-            }
+        let sibling = parent.join(cli_name());
+        if sibling.exists() {
+            return Some(sibling);
         }
     }
     let dev = PathBuf::from("build").join(cli_name());
@@ -421,7 +440,7 @@ pub fn resolve_cli() -> Option<std::path::PathBuf> {
     if target_rel.exists() {
         return Some(target_rel);
     }
-    crate::process::which("quark-downloader")
+    crate::process::which(cli_name())
 }
 
 pub fn default_output_dir() -> std::path::PathBuf {
@@ -506,7 +525,7 @@ mod tests {
                 assert_eq!(p.format, "mp4");
                 assert_eq!(p.output_dir, "/tmp/downloads");
             }
-            MainAction::Cancel => panic!("expected download"),
+            MainAction::Cancel | MainAction::Error(_) => panic!("expected download"),
         }
     }
 
@@ -520,7 +539,7 @@ mod tests {
                 assert_eq!(p.urls, ["https://example.com/video"]);
                 assert_eq!(p.url(), "https://example.com/video");
             }
-            MainAction::Cancel => panic!("expected download"),
+            MainAction::Cancel | MainAction::Error(_) => panic!("expected download"),
         }
     }
 
@@ -584,7 +603,7 @@ mod tests {
                 assert_eq!(p.format, "mp4");
                 assert_eq!(p.output_dir, "/tmp/downloads");
             }
-            MainAction::Cancel => panic!("expected download"),
+            MainAction::Cancel | MainAction::Error(_) => panic!("expected download"),
         }
     }
 
@@ -592,6 +611,12 @@ mod tests {
     fn parses_json_v1_cancel() {
         let result = parse(r#"{"v":1,"action":"cancel"}"#);
         assert!(matches!(result.action, MainAction::Cancel));
+    }
+
+    #[test]
+    fn rejects_unknown_protocol_version() {
+        let result = parse(r#"{"v":2,"action":"cancel"}"#);
+        assert!(matches!(result.action, MainAction::Error(_)));
     }
 
     #[test]

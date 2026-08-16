@@ -35,14 +35,16 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Cli, String> {
                 load_batch(&path, &mut cli.urls)?;
             }
             "--type" => {
-                cli.media_type = args
+                let value = args
                     .next()
                     .ok_or_else(|| "missing value for --type".to_string())?;
+                cli.media_type = quark_core::MediaType::parse(&value)?.as_str().into();
             }
             "--format" => {
-                cli.format = args
+                let value = args
                     .next()
                     .ok_or_else(|| "missing value for --format".to_string())?;
+                cli.format = quark_core::Format::parse(&value)?.as_str().into();
             }
             "--output-dir" => {
                 cli.output_dir =
@@ -126,6 +128,8 @@ mod tests {
         assert!(parse_slice(&["--nope"]).is_err());
         assert!(parse_slice(&["--url"]).is_err());
         assert!(parse_slice(&["--batch-file", "no-such-file.txt"]).is_err());
+        assert!(parse_slice(&["--type", "image"]).is_err());
+        assert!(parse_slice(&["--format", "avi"]).is_err());
     }
 
     #[test]

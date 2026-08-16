@@ -53,7 +53,7 @@ function Get-VsLibExe {
     Sort-Object FullName -Descending |
     Select-Object -First 1
   if (-not $libExe) {
-    throw "Visual Studio lib.exe not found (needed to link rc.exe .res with Crystal)."
+    throw "Visual Studio lib.exe not found (needed to link rc.exe .res)."
   }
   return $libExe.FullName
 }

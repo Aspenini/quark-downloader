@@ -1,0 +1,19 @@
+[package]
+name = "quark-gui-dispatch"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Quark Downloader GUI dispatcher"
+publish = false
+
+[[bin]]
+name = "quark-downloader-gui"
+path = "src/main.rs"
+
+[dependencies]
+quark-core = { path = "../quark-core" }
+quark-gui = { path = "../quark-gui" }
+
+[target.'cfg(windows)'.dependencies]
+quark-gui-win32 = { path = "../quark-gui-win32" }

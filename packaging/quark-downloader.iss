@@ -46,19 +46,6 @@
 
 
 
-#define GcDll           BuildDir + "\gc.dll"
-
-#define IconvDll        BuildDir + "\iconv-2.dll"
-
-#define CryptoDll       BuildDir + "\libcrypto-3-x64.dll"
-
-#define SslDll          BuildDir + "\libssl-3-x64.dll"
-
-#define PcreDll         BuildDir + "\pcre2-8.dll"
-
-#define ZlibDll         BuildDir + "\zlib1.dll"
-
-
 
 #ifexist BuildSource
 
@@ -98,65 +85,6 @@
 
 #endif
 
-
-
-#ifexist GcDll
-
-#else
-
-  #pragma error "Missing required runtime DLL: gc.dll"
-
-#endif
-
-
-
-#ifexist IconvDll
-
-#else
-
-  #pragma error "Missing required runtime DLL: iconv-2.dll"
-
-#endif
-
-
-
-#ifexist CryptoDll
-
-#else
-
-  #pragma error "Missing required runtime DLL: libcrypto-3-x64.dll"
-
-#endif
-
-
-
-#ifexist SslDll
-
-#else
-
-  #pragma error "Missing required runtime DLL: libssl-3-x64.dll"
-
-#endif
-
-
-
-#ifexist PcreDll
-
-#else
-
-  #pragma error "Missing required runtime DLL: pcre2-8.dll"
-
-#endif
-
-
-
-#ifexist ZlibDll
-
-#else
-
-  #pragma error "Missing required runtime DLL: zlib1.dll"
-
-#endif
 
 
 
@@ -298,19 +226,7 @@ Source: "{#CliAppIcon}"; DestDir: "{app}"; DestName: "{#CliIconName}"; Flags: ig
 
 
 
-; Required runtime DLLs
-
-Source: "{#GcDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
-
-Source: "{#IconvDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
-
-Source: "{#CryptoDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
-
-Source: "{#SslDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
-
-Source: "{#PcreDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
-
-Source: "{#ZlibDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
+; Native Win32 build — no extra runtime DLLs.
 
 
 

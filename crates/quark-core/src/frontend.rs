@@ -43,7 +43,7 @@ pub trait Frontend {
     fn open_progress(&self, theme: GuiTheme) -> Result<Box<dyn ProgressSink>, FrontendError>;
 }
 
-pub const LINUX_AUTO_ORDER: &[&str] = &["gtk", "cosmic", "kirigami"];
+pub const LINUX_AUTO_ORDER: &[&str] = &["gtk"];
 pub const MACOS_HELPER_NAMES: &[&str] =
     &["quark-downloader-gui-appkit", "quark-downloader-gui-helper"];
 
@@ -128,7 +128,7 @@ fn missing_helper_error(id: Option<&str>) -> FrontendError {
                 "GUI frontend '{id}' was not found.\nInstall quark-downloader-gui-{id} next to this program or on PATH."
             ),
             None => {
-                "No GUI frontend was found.\nInstall quark-downloader-gtk (or another frontend) next to this program or on PATH."
+                "No GUI frontend was found.\nInstall quark-downloader-gui-gtk next to this program or on PATH."
                     .into()
             }
         }
@@ -165,7 +165,17 @@ impl Frontend for HelperFrontend {
         let args = session::build_session_args(default_dir, settings);
         match self.run(&args) {
             Ok((0, text)) => session::parse(&text),
-            _ => MainSessionResult::cancel(),
+            Ok((code, text)) => {
+                let parsed = session::parse(&text);
+                if matches!(parsed.action, crate::session::MainAction::Error(_)) {
+                    parsed
+                } else {
+                    crate::session::MainSessionResult::error(format!(
+                        "GUI helper exited with status {code}"
+                    ))
+                }
+            }
+            Err(e) => crate::session::MainSessionResult::error(e.0),
         }
     }
 
@@ -274,7 +284,7 @@ mod tests {
     #[test]
     fn helper_names() {
         assert_eq!(helper_binary_name("gtk"), "quark-downloader-gui-gtk");
-        assert_eq!(LINUX_AUTO_ORDER, &["gtk", "cosmic", "kirigami"]);
+        assert_eq!(LINUX_AUTO_ORDER, &["gtk"]);
     }
 
     #[test]

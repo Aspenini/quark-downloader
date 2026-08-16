@@ -52,8 +52,8 @@ run:
 [group('dev')]
 [unix]
 run-gui:
-    @cargo build -p quark-cli -p quark-gui -p quark-gui-gtk
-    @QUARK_DOWNLOADER_CLI=target/debug/quark-downloader cargo run -p quark-gui --
+    @cargo build -p quark-cli -p quark-gui-dispatch -p quark-gui-gtk
+    @QUARK_DOWNLOADER_CLI=target/debug/quark-downloader cargo run -p quark-gui-dispatch --
 
 [group('dev')]
 [windows]

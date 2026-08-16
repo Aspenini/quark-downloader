@@ -67,6 +67,36 @@ installMainMenu()
 var controllerHolder: AnyObject?
 
 switch arguments.first {
+case "--script":
+    // Shared reducer lives in quark-gui. Prefer the sibling Rust script
+    // helper so AppKit cannot drift from GTK/Win32.
+    let helperNames = [
+        "quark-downloader-gui-appkit-script",
+        "quark-downloader-gui-win32",
+    ]
+    let dir = URL(fileURLWithPath: CommandLine.arguments[0])
+        .deletingLastPathComponent()
+    for name in helperNames {
+        let helper = dir.appendingPathComponent(name)
+        if FileManager.default.isExecutableFile(atPath: helper.path) {
+            let process = Process()
+            process.executableURL = helper
+            process.arguments = ["--script"]
+            process.standardInput = FileHandle.standardInput
+            process.standardOutput = FileHandle.standardOutput
+            process.standardError = FileHandle.standardError
+            do {
+                try process.run()
+                process.waitUntilExit()
+                exit(Int32(process.terminationStatus))
+            } catch {
+                fputs("failed to run script helper: \(error)\n", stderr)
+                exit(2)
+            }
+        }
+    }
+    fputs("quark-downloader-gui-appkit-script was not found next to this helper\n", stderr)
+    exit(2)
 case "--message":
     guard arguments.count >= 4 else {
         FileHandle.standardError.write(

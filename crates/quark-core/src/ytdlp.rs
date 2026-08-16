@@ -110,8 +110,14 @@ fn not_found_message() -> String {
 }
 
 pub fn youtube_url(url: &str) -> bool {
-    let u = url.to_ascii_lowercase();
-    u.contains("youtube.com") || u.contains("youtu.be")
+    let Some(parts) = crate::url::split(url) else {
+        return false;
+    };
+    let host = parts.host.to_ascii_lowercase();
+    host == "youtube.com"
+        || host == "youtu.be"
+        || host.ends_with(".youtube.com")
+        || host.ends_with(".youtu.be")
 }
 
 pub fn js_runtime() -> Option<&'static str> {
@@ -403,4 +409,20 @@ fn installed_version() -> Option<String> {
         return read_version(&bundled);
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn youtube_url_is_host_based() {
+        assert!(youtube_url("https://www.youtube.com/watch?v=abc"));
+        assert!(youtube_url("https://youtu.be/abc"));
+        assert!(youtube_url("https://music.youtube.com/watch?v=abc"));
+        assert!(!youtube_url("https://notyoutube.com/watch"));
+        assert!(!youtube_url("https://evil.example/youtube.com"));
+        assert!(!youtube_url("https://youtu.be.attacker.test/x"));
+        assert!(!youtube_url("not a url"));
+    }
 }

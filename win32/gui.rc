@@ -44,6 +44,7 @@
 #define IDC_GRP_DOWNLOADS 1039
 #define IDC_GRP_TOOLS 1040
 #define IDC_PROGRESS_PLAYLIST_ETA 1041
+#define IDC_URL_PASTE 1042
 
 IDI_APP_ICON ICON "../icons/icon.ico"
 
@@ -53,8 +54,9 @@ CAPTION "Quark Downloader"
 FONT 9, "Segoe UI"
 BEGIN
     LTEXT           "Video or playlist URL:", IDC_MAIN_URL_LABEL, 10, 10, 100, 8
-    EDITTEXT        IDC_URL, 10, 22, 296, 14, ES_AUTOHSCROLL
-    PUSHBUTTON      "Add", IDC_URL_ADD, 312, 21, 38, 14
+    EDITTEXT        IDC_URL, 10, 22, 250, 14, ES_AUTOHSCROLL
+    PUSHBUTTON      "Add", IDC_URL_ADD, 266, 21, 38, 14
+    PUSHBUTTON      "Paste", IDC_URL_PASTE, 308, 21, 42, 14
 
     LTEXT           "Queue:", IDC_MAIN_QUEUE_LABEL, 10, 44, 50, 8
     PUSHBUTTON      "Remove", IDC_QUEUE_REMOVE, 296, 42, 54, 14

@@ -1,0 +1,15 @@
+[package]
+name = "quark-gui-appkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Quark Downloader AppKit frontend helper (script runner; visual UI stays Swift)"
+publish = false
+
+[[bin]]
+name = "quark-downloader-gui-appkit-script"
+path = "src/main.rs"
+
+[dependencies]
+quark-gui = { path = "../quark-gui" }

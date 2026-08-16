@@ -5,9 +5,6 @@ use std::io::BufRead;
 #[cfg(not(windows))]
 use std::process::{Command, Stdio};
 
-#[cfg(windows)]
-mod win32;
-
 use quark_core::config::{self, GuiDownloadMode, Settings};
 #[cfg(not(windows))]
 use quark_core::frontend::{self, Frontend, HelperFrontend, MessageKind};
@@ -68,9 +65,13 @@ fn run_controller() {
         match session.action {
             MainAction::Download(params) => {
                 run_download(&cli.to_string_lossy(), &params);
-                return;
+                continue;
             }
             MainAction::Cancel => return,
+            MainAction::Error(message) => {
+                show_error(&message);
+                continue;
+            }
         }
     }
 }
@@ -146,10 +147,32 @@ fn show_completion(result: &DownloadResult) {
         return;
     }
     #[cfg(not(windows))]
+    if result.success() {
+        open_folder(&result.output_dir);
+    }
     if let Ok(settings) = config::load(true)
         && let Ok(fe) = HelperFrontend::discover(&settings)
     {
         fe.show_completion(result);
+    }
+}
+
+#[cfg(not(windows))]
+fn open_folder(path: &str) {
+    if path.trim().is_empty() {
+        return;
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("explorer").arg(path).status();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(path).status();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(path).status();
     }
 }
 
@@ -237,12 +260,17 @@ fn run_download_with_progress_unix(settings: &Settings, command: &str, cmd_args:
     let _ = spawn_relay;
     let mut result_holder: Option<DownloadResult> = None;
     let mut user_closed = false;
-    while let Ok(line) = rx.recv() {
+    loop {
         if progress.wait_closed() {
             user_closed = true;
             let _ = child.kill();
             break;
         }
+        let line = match rx.recv_timeout(std::time::Duration::from_millis(200)) {
+            Ok(line) => line,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        };
         if let Some(parsed) = DownloadResult::parse_emit_line(&line) {
             result_holder = Some(parsed);
             continue;
@@ -300,12 +328,40 @@ fn run_download_external_cli(command: &str, cmd_args: &[String]) -> i32 {
     }
     #[cfg(not(windows))]
     {
+        if cfg!(target_os = "macos") {
+            return run_in_macos_terminal(command, cmd_args);
+        }
         if let Some((path, prefix)) = find_terminal() {
             return run_in_terminal(&path, &prefix, command, cmd_args);
         }
         let status = Command::new(command).args(cmd_args).status().ok();
         quark_core::process::exit_code(status, 1)
     }
+}
+
+#[cfg(target_os = "macos")]
+fn run_in_macos_terminal(command: &str, args: &[String]) -> i32 {
+    let mut inner = std::iter::once(command)
+        .chain(args.iter().map(String::as_str))
+        .map(shell_escape)
+        .collect::<Vec<_>>()
+        .join(" ");
+    inner.push_str("; echo; read -r -p 'Press Enter to close...' _");
+    let status = Command::new("open")
+        .args(["-a", "Terminal", command])
+        .status()
+        .ok();
+    // `open -a Terminal file` does not pass argv. Use osascript for a real command line.
+    let script = format!(
+        "tell application \"Terminal\" to do script {}",
+        shell_escape(&inner)
+    );
+    let _ = status;
+    let status = Command::new("osascript")
+        .args(["-e", &script])
+        .status()
+        .ok();
+    quark_core::process::exit_code(status, 1)
 }
 
 #[cfg(not(windows))]
@@ -322,6 +378,8 @@ fn find_terminal() -> Option<(String, Vec<String>)> {
         ("ghostty", &["-e"]),
         ("alacritty", &["-e"]),
         ("foot", &["-e"]),
+        ("ptyxis", &["--", "sh", "-c"]),
+        ("kgx", &["-e"]),
     ];
     for (name, prefix) in CANDIDATES {
         if let Some(path) = quark_core::process::which(name) {
@@ -417,18 +475,18 @@ mod windows {
         default_output: &str,
         settings: &Settings,
     ) -> Result<MainSessionResult, String> {
-        crate::win32::collect_main_session(default_output, settings)
+        quark_gui_win32::collect_main_session(default_output, settings)
     }
 
     pub fn message_box(message: &str, error: bool) {
-        crate::win32::message_box(message, error);
+        quark_gui_win32::message_box(message, error);
     }
 
     pub fn confirm_open_url(message: &str, url: &str) {
-        crate::win32::confirm_open_url(message, url);
+        quark_gui_win32::confirm_open_url(message, url);
     }
 
     pub fn run_progress(command: &str, cmd_args: &[String]) -> i32 {
-        crate::win32::run_progress(command, cmd_args)
+        quark_gui_win32::run_progress(command, cmd_args)
     }
 }

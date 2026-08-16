@@ -15,7 +15,7 @@ pub struct DownloadResult {
 
 impl DownloadResult {
     pub fn success(&self) -> bool {
-        self.exit_code == 0 && self.failed_urls.is_empty()
+        self.exit_code == 0 && self.failed_urls.is_empty() && self.playlist_error_count == 0
     }
 
     pub fn to_json(&self) -> String {
@@ -87,7 +87,7 @@ impl DownloadResult {
             .collect();
         let log_path = value.get_str("log_path").map(str::to_string);
         Self {
-            exit_code: value.get_i32("exit_code").unwrap_or(0),
+            exit_code: value.get_i32("exit_code").unwrap_or(1),
             output_dir: value.get_str("output_dir").unwrap_or("").to_string(),
             files,
             errors,
@@ -193,5 +193,22 @@ mod tests {
     #[test]
     fn ignores_non_result_lines() {
         assert!(DownloadResult::parse_emit_line("PROGRESS\t50").is_none());
+    }
+
+    #[test]
+    fn missing_exit_code_is_failure() {
+        let parsed = DownloadResult::from_json(&json::parse(r#"{"output_dir":"/tmp"}"#).unwrap());
+        assert_eq!(parsed.exit_code, 1);
+        assert!(!parsed.success());
+    }
+
+    #[test]
+    fn playlist_errors_are_not_success() {
+        let result = DownloadResult {
+            exit_code: 0,
+            playlist_error_count: 2,
+            ..DownloadResult::default()
+        };
+        assert!(!result.success());
     }
 }

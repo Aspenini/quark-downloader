@@ -1,6 +1,13 @@
 //! GTK 4 helper: `--session`, `--progress`, `--message`. No download logic.
 
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("--script") {
+        quark_gui::assert_frontend_binds(|event| {
+            let _ = event;
+        });
+        std::process::exit(quark_gui::run_script_stdio());
+    }
     #[cfg(target_os = "linux")]
     linux::main();
     #[cfg(not(target_os = "linux"))]
@@ -23,12 +30,12 @@ mod linux {
     use std::rc::Rc;
 
     const APP_ID: &str = "com.aspenini.quark-downloader";
-    const AUDIO_FORMATS: &[&str] = &["original", "mp3", "m4a", "flac", "wav", "opus", "vorbis"];
-    const VIDEO_FORMATS: &[&str] = &["original", "mp4", "mkv", "webm"];
-    const SPACES: &[&str] = &["keep", "underscore", "dash", "remove"];
-    const MODES: &[&str] = &["progress", "external_cli"];
-    const FRONTENDS: &[&str] = &["auto", "gtk", "cosmic", "kirigami"];
-    const THEMES: &[&str] = &["light", "dark"];
+    const AUDIO_FORMATS: &[&str] = quark_gui::AUDIO_FORMATS;
+    const VIDEO_FORMATS: &[&str] = quark_gui::VIDEO_FORMATS;
+    const SPACES: &[&str] = quark_gui::SPACES;
+    const MODES: &[&str] = quark_gui::MODES;
+    const FRONTENDS: &[&str] = quark_gui::LINUX_FRONTENDS;
+    const THEMES: &[&str] = quark_gui::THEMES;
 
     pub fn main() {
         let args: Vec<String> = std::env::args().skip(1).collect();
@@ -90,7 +97,7 @@ mod linux {
         output: &str,
     ) {
         let mut out = format!("{{\"v\":1,\"action\":{}}", json_escape(action));
-        if let Some(s) = settings {
+        if let Some(s) = settings.filter(|s| s.saved) {
             out.push_str(&format!(
                 ",\"settings\":{{\"download_dir\":{},\"yt_dlp\":{},\"ffmpeg\":{},\"gui_download_mode\":{},\"download_logs\":{},\"gui_theme\":{},\"strip_video_ids\":{},\"sanitize_filenames\":{},\"filename_spaces\":{},\"playlist_folders\":{},\"gui_frontend\":{}}}",
                 json_escape(&s.download_dir),
@@ -137,6 +144,7 @@ mod linux {
         spaces: String,
         playlist_folders: bool,
         frontend: String,
+        saved: bool,
     }
 
     fn run_message(kind: &str, title: &str, body: &str) {
@@ -153,8 +161,14 @@ mod linux {
             if kind == "error" {
                 // AlertDialog has no explicit error icon API in all versions; message is enough.
             }
-            dialog.show(None::<&gtk4::Window>);
-            app.quit();
+            let app = app.clone();
+            dialog.choose(
+                None::<&gtk4::Window>,
+                None::<gtk4::gio::Cancellable>,
+                move |_| {
+                    app.quit();
+                },
+            );
         });
         app.run_with_args::<&str>(&[]);
     }
@@ -284,6 +298,7 @@ mod linux {
             spaces: args.get(9).cloned().unwrap_or_else(|| "keep".into()),
             playlist_folders: args.get(10).map(|s| s != "false").unwrap_or(true),
             frontend: args.get(11).cloned().unwrap_or_else(|| "auto".into()),
+            saved: false,
         };
 
         let app = Application::builder().application_id(APP_ID).build();
@@ -327,11 +342,13 @@ mod linux {
         let url = Entry::new();
         url.set_placeholder_text(Some("https://..."));
         let add = Button::with_label("Add");
+        let paste = Button::with_label("Paste");
         let remove = Button::with_label("Remove");
         let url_row = GtkBox::new(Orientation::Horizontal, 8);
         url_row.append(&url);
         url.set_hexpand(true);
         url_row.append(&add);
+        url_row.append(&paste);
         url_row.append(&remove);
 
         let list = ListBox::new();
@@ -405,6 +422,34 @@ mod linux {
         {
             let list = list.clone();
             let list_urls = Rc::clone(&list_urls);
+            paste.connect_clicked({
+                let list = list.clone();
+                let list_urls = Rc::clone(&list_urls);
+                let url = url.clone();
+                move |_| {
+                    let display = gtk4::gdk::Display::default();
+                    let Some(clipboard) = display.map(|d| d.clipboard()) else {
+                        return;
+                    };
+                    let list = list.clone();
+                    let list_urls = Rc::clone(&list_urls);
+                    let url = url.clone();
+                    clipboard.read_text_async(None::<gtk4::gio::Cancellable>, move |res| {
+                        let Ok(Some(text)) = res else { return };
+                        for piece in text.split_whitespace() {
+                            let text = piece.trim();
+                            if text.is_empty() || list_urls.borrow().iter().any(|u| u == text) {
+                                continue;
+                            }
+                            list_urls.borrow_mut().push(text.to_string());
+                            let row = ListBoxRow::new();
+                            row.set_child(Some(&Label::new(Some(text))));
+                            list.append(&row);
+                        }
+                        url.set_text("");
+                    });
+                }
+            });
             remove.connect_clicked(move |_| {
                 if let Some(row) = list.selected_row() {
                     let idx = row.index();
@@ -479,10 +524,36 @@ mod linux {
             let list_urls = Rc::clone(&list_urls);
             let output = output.clone();
             let format = format.clone();
+            let window = window.clone();
+            let url = url.clone();
+            let list = list.clone();
             download.connect_clicked(move |_| {
+                let text = url.text().trim().to_string();
+                if !text.is_empty() && !list_urls.borrow().iter().any(|u| u == &text) {
+                    list_urls.borrow_mut().push(text.clone());
+                    let row = ListBoxRow::new();
+                    row.set_child(Some(&Label::new(Some(&text))));
+                    list.append(&row);
+                    url.set_text("");
+                } else if !text.is_empty() {
+                    url.set_text("");
+                }
                 let urls = list_urls.borrow().clone();
                 let out = output.text().to_string();
-                if urls.is_empty() || out.trim().is_empty() {
+                if urls.is_empty() {
+                    let dialog = gtk4::AlertDialog::builder()
+                        .modal(true)
+                        .message(quark_gui::ERR_EMPTY_QUEUE)
+                        .build();
+                    dialog.show(Some(&window));
+                    return;
+                }
+                if out.trim().is_empty() {
+                    let dialog = gtk4::AlertDialog::builder()
+                        .modal(true)
+                        .message(quark_gui::ERR_EMPTY_OUTPUT)
+                        .build();
+                    dialog.show(Some(&window));
                     return;
                 }
                 let media = if audio.is_active() { "audio" } else { "video" };
@@ -620,6 +691,7 @@ mod linux {
                 s.logs = logs.is_active();
                 s.theme = dropdown_text(&theme);
                 s.frontend = dropdown_text(&frontend);
+                s.saved = true;
                 apply_theme(&s.theme);
                 win.close();
             });

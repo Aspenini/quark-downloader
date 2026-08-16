@@ -251,10 +251,7 @@ pub fn app_dir() -> PathBuf {
         && let Some(parent) = exe.parent()
     {
         let s = parent.to_string_lossy().replace('\\', "/");
-        if s.contains("/target/debug")
-            || s.contains("/target/release")
-            || s.contains("/crystal/cache")
-        {
+        if s.contains("/target/debug") || s.contains("/target/release") {
             return std::env::current_dir().unwrap_or_else(|_| parent.to_path_buf());
         }
         return parent.to_path_buf();
@@ -489,9 +486,7 @@ pub fn parse_gui_theme(value: &str, quiet: bool) -> GuiTheme {
 pub fn parse_gui_frontend(value: &str, quiet: bool) -> GuiFrontend {
     match value.to_ascii_lowercase().as_str() {
         "gtk" => GuiFrontend::Gtk,
-        "cosmic" => GuiFrontend::Cosmic,
-        "kirigami" => GuiFrontend::Kirigami,
-        "auto" => GuiFrontend::Auto,
+        "cosmic" | "kirigami" | "auto" => GuiFrontend::Auto,
         _ => {
             if !quiet {
                 println!("Warning: invalid gui_frontend value {value:?}, using auto");
@@ -577,10 +572,8 @@ pub fn render(settings: &Settings) -> String {
     if quark_platform::persist_gui_frontend() {
         lines.extend([
             "# Which GUI frontend to use".into(),
-            "#   auto     - first installed helper (gtk, then cosmic, then kirigami)".into(),
-            "#   gtk      - GTK 4 helper".into(),
-            "#   cosmic   - COSMIC / libcosmic helper (if installed)".into(),
-            "#   kirigami - Kirigami helper (if installed)".into(),
+            "#   auto - first installed helper (gtk)".into(),
+            "#   gtk  - GTK 4 helper".into(),
             format!("gui_frontend = {}", settings.gui_frontend.as_str()),
             String::new(),
         ]);

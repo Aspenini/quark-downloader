@@ -11,5 +11,8 @@ publish = false
 name = "quark-downloader-gui-gtk"
 path = "src/main.rs"
 
+[dependencies]
+quark-gui = { path = "../quark-gui" }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk4 = { version = "0.10", default-features = false, features = ["v4_10"] }

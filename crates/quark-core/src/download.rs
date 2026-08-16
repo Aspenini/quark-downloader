@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -12,6 +12,7 @@ use crate::destination::DestinationTracker;
 use crate::ffmpeg;
 use crate::filename;
 use crate::logs;
+use crate::media::{Format, MediaType};
 use crate::playlist;
 use crate::process;
 use crate::result::DownloadResult;
@@ -137,19 +138,14 @@ pub fn execute(
     warn_if_unwritable_config();
 
     let outcome = (|| {
-        let media_type = media_type.to_ascii_lowercase();
-        if media_type != "audio" && media_type != "video" {
-            return fail_result(
-                result,
-                &format!("Invalid media type: {media_type:?} (expected audio or video)"),
-                no_pause,
-                1,
-            );
-        }
-        let mut format = format.to_ascii_lowercase();
-        if format.is_empty() {
-            format = "original".into();
-        }
+        let media_type = match MediaType::parse(media_type) {
+            Ok(m) => m,
+            Err(msg) => return fail_result(result, &msg, no_pause, 1),
+        };
+        let format = match Format::parse_for(media_type, format) {
+            Ok(f) => f,
+            Err(msg) => return fail_result(result, &msg, no_pause, 1),
+        };
         let dir = output_dir
             .map(Path::to_path_buf)
             .unwrap_or_else(|| settings.download_dir_expanded(&default_downloads_dir()));
@@ -162,7 +158,7 @@ pub fn execute(
         };
         result.output_dir = output_path.to_string_lossy().into_owned();
 
-        let ytdlp = match preflight(&settings, urls, &media_type, &format, &output_path) {
+        let ytdlp = match preflight(&settings, urls, media_type, format, &output_path) {
             Ok(p) => p,
             Err(msg) => return fail_result(result, &msg, no_pause, 1),
         };
@@ -177,21 +173,21 @@ pub fn execute(
                     color::bold(&format!("==> URL {} of {}", index + 1, urls.len()))
                 ));
             }
-            let outcome =
-                match run_single(&settings, &ytdlp, url, &media_type, &format, &output_path) {
-                    Ok(o) => o,
-                    Err(msg) if multi => {
-                        logs::log_line(&color::red(&msg));
-                        SingleRunOutcome {
-                            exit_code: 1,
-                            files: Vec::new(),
-                            errors: vec![msg],
-                            target_dir: output_path.clone(),
-                            playlist_error_count: 0,
-                        }
+            let outcome = match run_single(&settings, &ytdlp, url, media_type, format, &output_path)
+            {
+                Ok(o) => o,
+                Err(msg) if multi => {
+                    logs::log_line(&color::red(&msg));
+                    SingleRunOutcome {
+                        exit_code: 1,
+                        files: Vec::new(),
+                        errors: vec![msg],
+                        target_dir: output_path.clone(),
+                        playlist_error_count: 0,
                     }
-                    Err(msg) => return fail_result(result, &msg, no_pause, 1),
-                };
+                }
+                Err(msg) => return fail_result(result, &msg, no_pause, 1),
+            };
             result.files.extend(outcome.files);
             result.errors.extend(outcome.errors);
             result.playlist_error_count += outcome.playlist_error_count;
@@ -253,11 +249,10 @@ pub fn execute(
 pub fn preflight(
     settings: &Settings,
     urls: &[String],
-    media_type: &str,
-    format: &str,
+    _media_type: MediaType,
+    format: Format,
     output_path: &Path,
 ) -> Result<PathBuf, String> {
-    let _ = media_type;
     fs::create_dir_all(output_path).map_err(|ex| {
         format!(
             "Cannot create output directory:\n  {}\n{ex}",
@@ -271,7 +266,7 @@ pub fn preflight(
         ));
     }
     let ytdlp = ytdlp::ensure(settings).map_err(|e| e.0)?;
-    let needs_ffmpeg = format != "original" && format != "default.original";
+    let needs_ffmpeg = format.needs_ffmpeg();
     if needs_ffmpeg {
         ffmpeg::ensure(settings).map_err(|e| e.0)?;
     } else {
@@ -313,8 +308,8 @@ fn run_single(
     settings: &Settings,
     ytdlp: &Path,
     url: &str,
-    media_type: &str,
-    format: &str,
+    media_type: MediaType,
+    format: Format,
     output_path: &Path,
 ) -> Result<SingleRunOutcome, String> {
     let is_playlist = playlist::playlist_url(url);
@@ -376,29 +371,33 @@ fn run_single(
         "3".into(),
     ]);
 
-    if media_type == "audio" {
+    if media_type == MediaType::Audio {
         cmd.extend(["-f".into(), "bestaudio/best".into()]);
-        if format != "original" && format != "default.original" {
+        if format.needs_ffmpeg() {
             ffmpeg::append_to_cmd(&mut cmd, settings).map_err(|e| e.0)?;
-            cmd.extend(["-x".into(), "--audio-format".into(), format.to_string()]);
+            cmd.extend(["-x".into(), "--audio-format".into(), format.as_str().into()]);
         }
-    } else if format != "original" && format != "default.original" {
+    } else if format.needs_ffmpeg() {
         ffmpeg::append_to_cmd(&mut cmd, settings).map_err(|e| e.0)?;
         cmd.extend([
             "-f".into(),
             "bv*+ba/b".into(),
             "--merge-output-format".into(),
-            format.to_string(),
+            format.as_str().into(),
         ]);
         match format {
-            "webm" => cmd.extend(["--recode-video".into(), "webm".into()]),
-            "mp4" => cmd.extend(["--remux-video".into(), "mp4".into()]),
+            Format::Webm => cmd.extend(["--recode-video".into(), "webm".into()]),
+            Format::Mp4 => cmd.extend(["--remux-video".into(), "mp4".into()]),
             _ => {}
         }
     }
 
+    cmd.extend(["--newline".into(), "--windows-filenames".into()]);
+    if settings.sanitize_filenames {
+        cmd.push("--restrict-filenames".into());
+    }
     if std::env::var_os("QUARK_GUI").as_deref() == Some(std::ffi::OsStr::new("1")) {
-        cmd.extend(["--newline".into(), "--no-color".into()]);
+        cmd.push("--no-color".into());
     }
     cmd.extend(ytdlp::extra_args(url));
 
@@ -551,9 +550,12 @@ fn apply_naming(
                 logs::log_line(&format!("Renamed: {name} -> {final_name}"));
                 finals.push(dest.to_string_lossy().into_owned());
             }
-            Err(ex) => logs::log_line(&color::yellow(&format!(
-                "Warning: could not rename {path}: {ex}"
-            ))),
+            Err(ex) => {
+                logs::log_line(&color::yellow(&format!(
+                    "Warning: could not rename {path}: {ex}"
+                )));
+                finals.push(expanded.to_string_lossy().into_owned());
+            }
         }
     }
     finals
@@ -780,12 +782,13 @@ fn run_command(
     let Some((prog, args)) = cmd.split_first() else {
         return 127;
     };
-    let mut child = match Command::new(prog)
+    let mut command = Command::new(prog);
+    command
         .args(args)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
+        .stderr(Stdio::piped());
+    configure_child_group(&mut command);
+    let mut child = match command.spawn() {
         Ok(c) => c,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             logs::log_line(&color::red(&format!("Error: {prog} was not found.")));
@@ -799,8 +802,7 @@ fn run_command(
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
-    let child = Arc::new(Mutex::new(child));
-    let child_watch = Arc::clone(&child);
+    let pid = child.id();
 
     thread::scope(|s| {
         if let Some(pipe) = stdout {
@@ -809,37 +811,79 @@ fn run_command(
         if let Some(pipe) = stderr {
             s.spawn(|| relay_pipe(pipe, true, tracker, monitor));
         }
-        if let (Some(monitor), Some(active), Some(grace)) = (monitor, active, grace) {
-            s.spawn(move || {
-                loop {
-                    thread::sleep(Duration::from_secs(1));
-                    if monitor.finished.lock().map(|f| *f).unwrap_or(true) {
-                        break;
-                    }
-                    if monitor.stalled(active, grace) {
-                        if monitor.kill_on_stall() {
-                            monitor.mark_killed();
-                            if let Ok(mut child) = child_watch.lock() {
-                                let _ = child.kill();
-                            }
-                            break;
-                        } else if !monitor.warned() {
-                            monitor.mark_warned();
-                            logs::log_line(&color::yellow(
-                                "\nWarning: no response for a while; still waiting…",
-                            ));
-                        }
-                    }
-                }
-            });
-        }
 
-        let status = child.lock().ok().and_then(|mut c| c.wait().ok());
+        let status = poll_child(&mut child, pid, monitor, active, grace);
         if let Some(m) = monitor {
             m.finish();
         }
-        process::exit_code(status, 127)
+        if process::interrupted() {
+            130
+        } else if monitor.is_some_and(|m| m.killed()) {
+            process::exit_code(status, 1)
+        } else {
+            process::exit_code(status, 1)
+        }
     })
+}
+
+fn configure_child_group(command: &mut Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let _ = command;
+}
+
+fn kill_tree(child: &mut std::process::Child, pid: u32) {
+    #[cfg(unix)]
+    {
+        unsafe extern "C" {
+            fn kill(pid: i32, sig: i32) -> i32;
+        }
+        const SIGKILL: i32 = 9;
+        unsafe {
+            let _ = kill(-(pid as i32), SIGKILL);
+        }
+    }
+    let _ = pid;
+    let _ = child.kill();
+}
+
+fn poll_child(
+    child: &mut std::process::Child,
+    pid: u32,
+    monitor: Option<&StallMonitor>,
+    active: Option<Duration>,
+    grace: Option<Duration>,
+) -> Option<std::process::ExitStatus> {
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some(status),
+            Ok(None) => {}
+            Err(_) => return None,
+        }
+        if process::interrupted() {
+            logs::log_line(&color::yellow("\nCancelled."));
+            kill_tree(child, pid);
+            return child.wait().ok();
+        }
+        if let (Some(monitor), Some(active), Some(grace)) = (monitor, active, grace)
+            && monitor.stalled(active, grace)
+        {
+            if monitor.kill_on_stall() {
+                monitor.mark_killed();
+                kill_tree(child, pid);
+                return child.wait().ok();
+            } else if !monitor.warned() {
+                monitor.mark_warned();
+                logs::log_line(&color::yellow(
+                    "\nWarning: no response for a while; still waiting…",
+                ));
+            }
+        }
+        thread::sleep(Duration::from_millis(200));
+    }
 }
 
 fn relay_pipe(
@@ -848,20 +892,52 @@ fn relay_pipe(
     tracker: Option<&DestinationTracker>,
     monitor: Option<&StallMonitor>,
 ) {
-    use std::io::BufRead;
-    let mut lines = io::BufReader::new(reader).lines();
-    while let Some(Ok(line)) = lines.next() {
-        let out_line = monitor
-            .map(|m| m.observe(&line))
-            .unwrap_or_else(|| line.clone());
-        if let Some(t) = tracker {
-            t.observe(&out_line);
+    let mut reader = reader;
+    let mut buf = [0u8; 4096];
+    let mut acc = Vec::new();
+    loop {
+        let n = match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(_) => break,
+        };
+        acc.extend_from_slice(&buf[..n]);
+        while let Some(pos) = acc.iter().position(|&b| b == b'\n' || b == b'\r') {
+            let line = String::from_utf8_lossy(&acc[..pos]).into_owned();
+            let sep = acc[pos];
+            acc.drain(..=pos);
+            if sep == b'\r' && acc.first() == Some(&b'\n') {
+                acc.remove(0);
+            }
+            if !line.is_empty() {
+                handle_relay_line(&line, is_err, tracker, monitor);
+            }
         }
-        if is_err {
-            logs::log_line_err(&out_line);
-        } else {
-            logs::log_line(&out_line);
+    }
+    if !acc.is_empty() {
+        let line = String::from_utf8_lossy(&acc).into_owned();
+        if !line.is_empty() {
+            handle_relay_line(&line, is_err, tracker, monitor);
         }
+    }
+}
+
+fn handle_relay_line(
+    line: &str,
+    is_err: bool,
+    tracker: Option<&DestinationTracker>,
+    monitor: Option<&StallMonitor>,
+) {
+    let out_line = monitor
+        .map(|m| m.observe(line))
+        .unwrap_or_else(|| line.to_string());
+    if let Some(t) = tracker {
+        t.observe(&out_line);
+    }
+    if is_err {
+        logs::log_line_err(&out_line);
+    } else {
+        logs::log_line(&out_line);
     }
 }
 
@@ -896,6 +972,46 @@ fn fail_result(
     result.exit_code = code;
     press_any_key(no_pause, "Press any key to exit...");
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stall_monitor_sees_progress_ticks() {
+        let monitor = StallMonitor::new(0, Some(3), true);
+        assert!(!monitor.stalled(Duration::from_secs(60), Duration::from_secs(60)));
+        let _ = monitor.observe("[download]  10.0% of 1.00MiB");
+        assert!(monitor.had_output.lock().map(|h| *h).unwrap_or(false));
+        let rewritten = monitor.observe("[download] Downloading item 2 of 3");
+        assert_eq!(rewritten, "[download] Downloading item 2 of 3");
+        assert_eq!(monitor.current_item(), Some(2));
+    }
+
+    #[test]
+    fn apply_naming_keeps_path_when_rename_is_skipped() {
+        // collision_free / sanitize no-op still reports the original file.
+        let dir = std::env::temp_dir().join(format!(
+            "quark-naming-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("clip.mp4");
+        fs::write(&path, b"ok").unwrap();
+        let tracker = DestinationTracker::new();
+        tracker.observe(&format!("[download] Destination: {}", path.display()));
+        let settings = Settings::default();
+        let files = apply_naming(&tracker, &dir, &settings);
+        assert!(
+            files.iter().any(|f| f.ends_with("clip.mp4")),
+            "files were {files:?}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
 
 pub fn press_any_key(no_pause: bool, message: &str) {
@@ -964,7 +1080,11 @@ fn run_command_hidden(
         });
         if let (Some(monitor), Some(active), Some(grace)) = (monitor, active, grace) {
             loop {
-                if runner.wait_ms(1000).is_some() {
+                if process::interrupted() {
+                    runner.terminate();
+                    break;
+                }
+                if runner.wait_ms(200).is_some() {
                     break;
                 }
                 if monitor.stalled(active, grace) {

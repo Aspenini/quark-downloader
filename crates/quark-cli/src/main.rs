@@ -96,30 +96,12 @@ fn interactive_main() -> i32 {
     let output_dir = prompt_nonempty("Output directory", Some(&default_path));
     println!();
 
-    let format = if media_type == "audio" {
-        println!("{}", color::bold("Audio formats"));
-        println!("{}", color::dim("  original  (keep source audio)"));
-        println!("{}", color::dim("  mp3, m4a, flac, wav, opus, vorbis"));
-        print!("Choose format [{}]: ", color::dim("default: original"));
-        let _ = io::stdout().flush();
-        let mut value = String::new();
-        let _ = io::stdin().read_line(&mut value);
-        value.trim().to_ascii_lowercase()
+    let format_choices = if media_type == "audio" {
+        quark_core::Format::choices(quark_core::MediaType::Audio)
     } else {
-        println!("{}", color::bold("Video formats"));
-        println!("{}", color::dim("  original  (keep source video)"));
-        println!("{}", color::dim("  mp4, mkv, webm"));
-        print!("Choose format [{}]: ", color::dim("default: original"));
-        let _ = io::stdout().flush();
-        let mut value = String::new();
-        let _ = io::stdin().read_line(&mut value);
-        value.trim().to_ascii_lowercase()
+        quark_core::Format::choices(quark_core::MediaType::Video)
     };
-    let format = if format.is_empty() {
-        "original".into()
-    } else {
-        format
-    };
+    let format = prompt_choice("Choose format", format_choices, Some("original"));
     println!();
     download::run(
         &url,
@@ -184,9 +166,7 @@ fn ctrl_c_cancel() {
     }
     const SIGINT: i32 = 2;
     extern "C" fn handler(_: i32) {
-        println!("\n{}", color::yellow("Cancelled."));
-        download::press_any_key(false, "Press any key to exit...");
-        std::process::exit(130);
+        quark_core::process::request_interrupt();
     }
     unsafe {
         signal(SIGINT, handler as usize);
