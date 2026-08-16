@@ -718,7 +718,7 @@ pub fn render(settings: &Settings) -> String {
         lines.extend([
             "# Which GUI frontend to use".into(),
             "#   auto     - Kirigami on KDE, COSMIC otherwise".into(),
-            "#   cosmic   - COSMIC / iced (compiled into the GUI)".into(),
+            "#   cosmic   - COSMIC / libcosmic (compiled into the GUI)".into(),
             "#   kirigami - Kirigami (compiled into the GUI; needs Qt 6 at build)".into(),
             "#   win32    - in-process Win32 (Windows)".into(),
             "#   appkit   - AppKit helper (macOS)".into(),

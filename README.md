@@ -27,7 +27,7 @@
 
 **Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
-**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024) | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools (`swiftc`) + `just dmg`
+**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024); Linux COSMIC GUI needs 1.93+ (libcosmic) | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools (`swiftc`) + `just dmg`
 
 ## Binaries
 
@@ -54,7 +54,7 @@ On first run, Quark creates `quark-downloader.conf` under the user config direct
 | `ffmpeg` | **Windows only:** `auto`, `path`, or `bundled`. macOS/Linux always use PATH. |
 | `gui_download_mode` | `progress` for the GUI progress dialog, or `external_cli` to open the CLI window after Download |
 | `download_logs` | `true` or `false`; applies to both CLI and GUI downloads |
-| `gui_theme` | `system` (default), `light`, or `dark`. `system` follows the desktop: Plasma theme in Kirigami, COSMIC light/dark in the COSMIC UI, macOS appearance in AppKit. Windows stays native. |
+| `gui_theme` | `system` (default), `light`, or `dark`. `system` follows the desktop: Plasma theme in Kirigami, COSMIC theme (including frosted glass) in the COSMIC UI, macOS appearance in AppKit. Windows stays native. |
 | `gui_frontend` | `auto` plus the frontends for this OS (`win32`, `appkit`, `cosmic`, `kirigami`). Pick in Settings. |
 | `strip_video_ids` | `true` (default) drops the trailing ` [VIDEOID]` from filenames |
 | `sanitize_filenames` | `true` (default) makes filenames mostly ASCII-safe on all platforms (`｜` -> `-`, accents transliterated, Windows-invalid characters removed) |
