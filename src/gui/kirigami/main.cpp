@@ -1,6 +1,7 @@
 // Quark Downloader — Kirigami helper. Dynamically links system Qt 6.
 // Kirigami itself is a QML module provided by the distro.
 #include <QGuiApplication>
+#include <QStyleHints>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QSocketNotifier>
@@ -29,6 +30,21 @@ static QString qmlDir()
     }
 #endif
     return QCoreApplication::applicationDirPath();
+}
+
+static void applyColorScheme(const QString &theme)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    const QString t = theme.toLower();
+    if (t == QLatin1String("dark"))
+        QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
+    else if (t == QLatin1String("light"))
+        QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Light);
+    else
+        QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Unknown);
+#else
+    Q_UNUSED(theme);
+#endif
 }
 
 static void writeJson(const QJsonObject &o)
@@ -91,7 +107,8 @@ extern "C" int kirigami_ui_run(int argc, char **argv)
     ctx->setContextProperty("downloadDir", arg(1, QStringLiteral("~/Downloads")));
     ctx->setContextProperty("guiMode", arg(4, QStringLiteral("progress")));
     ctx->setContextProperty("logs", barg(5, true));
-    ctx->setContextProperty("theme", arg(6, QStringLiteral("light")));
+    ctx->setContextProperty("theme", arg(6, QStringLiteral("system")));
+    applyColorScheme(ctx->contextProperty("theme").toString());
     ctx->setContextProperty("stripIds", barg(7, true));
     ctx->setContextProperty("sanitize", barg(8, true));
     ctx->setContextProperty("spaces", arg(9, QStringLiteral("keep")));

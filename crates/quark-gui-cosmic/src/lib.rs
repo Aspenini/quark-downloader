@@ -69,14 +69,9 @@ mod linux {
 
     fn run_app(mode: Mode, args: Vec<String>) -> i32 {
         let state = App::from_args(mode, args);
-        let theme = if state.theme == "dark" {
-            Theme::Dark
-        } else {
-            Theme::Light
-        };
         let result = iced::application(App::title, App::update, App::view)
             .subscription(App::subscription)
-            .theme(move |_| theme.clone())
+            .theme(App::iced_theme)
             .window_size(iced::Size::new(520.0, 540.0))
             .run_with(move || (state, Task::none()));
         match result {
@@ -175,7 +170,7 @@ mod linux {
                 download_dir: a(2, "~/Downloads"),
                 gui_mode: a(5, "progress"),
                 logs: b(6, true),
-                theme: a(7, "light"),
+                theme: a(7, "system"),
                 strip_ids: b(8, true),
                 sanitize: b(9, true),
                 spaces: a(10, "keep"),
@@ -200,13 +195,20 @@ mod linux {
                 msg_body: args.iter().skip(3).cloned().collect::<Vec<_>>().join(" "),
                 draft_dir: a(2, "~/Downloads"),
                 draft_mode: a(5, "progress"),
-                draft_theme: a(7, "light"),
+                draft_theme: a(7, "system"),
                 draft_spaces: a(10, "keep"),
                 draft_frontend: a(12, "auto"),
                 draft_logs: b(6, true),
                 draft_strip: b(8, true),
                 draft_sanitize: b(9, true),
                 draft_folders: b(11, true),
+            }
+        }
+
+        fn iced_theme(&self) -> Theme {
+            match quark_core::config::parse_gui_theme(&self.theme, true).resolve() {
+                quark_core::config::GuiTheme::Dark => Theme::Dark,
+                _ => Theme::Light,
             }
         }
 
@@ -310,6 +312,7 @@ mod linux {
                 Message::SaveSettings => {
                     if !self.draft_dir.trim().is_empty() {
                         self.settings_saved = true;
+                        self.theme = self.draft_theme.clone();
                         self.show_settings = false;
                     }
                 }
@@ -432,7 +435,7 @@ mod linux {
                 .map(|s| (*s).to_string())
                 .collect();
             let modes = vec!["progress".into(), "external_cli".into()];
-            let themes = vec!["light".into(), "dark".into()];
+            let themes: Vec<String> = quark_gui::THEMES.iter().map(|s| (*s).to_string()).collect();
             let spaces = vec![
                 "keep".into(),
                 "underscore".into(),

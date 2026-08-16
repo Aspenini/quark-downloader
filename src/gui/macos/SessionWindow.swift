@@ -5,7 +5,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
     let videoFormats = ["original", "mp4", "mkv", "webm"]
     let spacesValues = ["keep", "underscore", "dash", "remove"]
     let modeValues = ["progress", "external_cli"]
-    let themeValues = ["light", "dark"]
+    let themeValues = ["system", "light", "dark"]
     let frontendValues = ["auto", "appkit"]
 
     // Session state; mirrors the variables the Tcl UI keeps.
@@ -62,7 +62,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         // arg 2 = yt_dlp, arg 3 = ffmpeg — ignored (PATH / Homebrew only)
         guiMode = arg(4, "progress")
         logs = boolArg(5, true)
-        theme = normalizeTheme(arg(6, "light"))
+        theme = normalizeTheme(arg(6, "system"))
         stripIds = boolArg(7, true)
         sanitize = boolArg(8, true)
         spaces = arg(9, "keep")
@@ -432,7 +432,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         let currentOutput = outputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
 
         downloadDir = dir
-        theme = normalizeTheme(themePopup.titleOfSelectedItem ?? "light")
+        theme = normalizeTheme(themePopup.titleOfSelectedItem ?? "system")
         stripIds = stripCheck.state == .on
         sanitize = sanitizeCheck.state == .on
         spaces = spacesPopup.titleOfSelectedItem ?? "keep"

@@ -111,7 +111,7 @@ fn default_script_settings() -> SettingsForm {
         "path",
         "progress",
         "true",
-        "light",
+        "system",
         "true",
         "true",
         "keep",
@@ -130,7 +130,7 @@ pub fn settings_from_value(value: &Value) -> Option<SettingsForm> {
             .get("download_logs")
             .map(Value::raw_display)
             .unwrap_or_else(|| "true".into()),
-        value.get_str("gui_theme").unwrap_or("light"),
+        value.get_str("gui_theme").unwrap_or("system"),
         &value
             .get("strip_video_ids")
             .map(Value::raw_display)

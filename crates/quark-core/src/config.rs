@@ -41,6 +41,7 @@ impl GuiDownloadMode {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GuiTheme {
     #[default]
+    System,
     Light,
     Dark,
 }
@@ -48,8 +49,23 @@ pub enum GuiTheme {
 impl GuiTheme {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::System => "system",
             Self::Light => "light",
             Self::Dark => "dark",
+        }
+    }
+
+    /// Force light/dark, or the desktop preference when `system`.
+    pub fn resolve(self) -> Self {
+        match self {
+            Self::System => {
+                if system_prefers_dark() {
+                    Self::Dark
+                } else {
+                    Self::Light
+                }
+            }
+            other => other,
         }
     }
 }
@@ -146,7 +162,7 @@ impl Default for Settings {
             ffmpeg: ToolSource::Auto,
             gui_download_mode: GuiDownloadMode::Progress,
             download_logs: true,
-            gui_theme: GuiTheme::Light,
+            gui_theme: GuiTheme::System,
             strip_video_ids: true,
             sanitize_filenames: true,
             filename_spaces: FilenameSpaces::Keep,
@@ -484,15 +500,128 @@ pub fn parse_filename_spaces(value: &str, quiet: bool) -> FilenameSpaces {
 
 pub fn parse_gui_theme(value: &str, quiet: bool) -> GuiTheme {
     match value.to_ascii_lowercase().as_str() {
+        "system" | "auto" => GuiTheme::System,
         "dark" => GuiTheme::Dark,
         "light" => GuiTheme::Light,
         _ => {
             if !quiet {
-                println!("Warning: invalid gui_theme value {value:?}, using light");
+                println!("Warning: invalid gui_theme value {value:?}, using system");
             }
-            GuiTheme::Light
+            GuiTheme::System
         }
     }
+}
+
+/// Desktop color-scheme preference (COSMIC, then Plasma, then GTK).
+pub fn system_prefers_dark() -> bool {
+    cosmic_is_dark()
+        .or_else(kde_prefers_dark)
+        .or_else(gtk_prefers_dark)
+        .or_else(macos_prefers_dark)
+        .unwrap_or(false)
+}
+
+fn cosmic_is_dark() -> Option<bool> {
+    let path = xdg_config_home().join("cosmic/com.system76.CosmicTheme.Mode/v1/is_dark");
+    parse_boolish(&fs::read_to_string(path).ok()?)
+}
+
+fn kde_prefers_dark() -> Option<bool> {
+    parse_kdeglobals(&fs::read_to_string(xdg_config_home().join("kdeglobals")).ok()?)
+}
+
+fn gtk_prefers_dark() -> Option<bool> {
+    for name in ["gtk-4.0/settings.ini", "gtk-3.0/settings.ini"] {
+        if let Ok(text) = fs::read_to_string(xdg_config_home().join(name))
+            && let Some(v) = parse_gtk_settings(&text)
+        {
+            return Some(v);
+        }
+    }
+    None
+}
+
+fn macos_prefers_dark() -> Option<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        let out = std::process::Command::new("defaults")
+            .args(["read", "-g", "AppleInterfaceStyle"])
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return Some(false);
+        }
+        return Some(
+            String::from_utf8_lossy(&out.stdout)
+                .to_ascii_lowercase()
+                .contains("dark"),
+        );
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        None
+    }
+}
+
+fn xdg_config_home() -> PathBuf {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| user_home().join(".config"))
+}
+
+fn parse_boolish(text: &str) -> Option<bool> {
+    match text
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "true" | "1" | "yes" | "on" | "dark" => Some(true),
+        "false" | "0" | "no" | "off" | "light" => Some(false),
+        _ => None,
+    }
+}
+
+fn parse_kdeglobals(text: &str) -> Option<bool> {
+    let mut color_scheme = String::new();
+    let mut look_and_feel = String::new();
+    for line in text.lines() {
+        if let Some(v) = line.strip_prefix("ColorScheme=") {
+            color_scheme = v.trim().to_ascii_lowercase();
+        }
+        if let Some(v) = line.strip_prefix("LookAndFeelPackage=") {
+            look_and_feel = v.trim().to_ascii_lowercase();
+        }
+    }
+    let blob = format!("{color_scheme} {look_and_feel}");
+    if blob.contains("dark") {
+        Some(true)
+    } else if !color_scheme.is_empty() || !look_and_feel.is_empty() {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+fn parse_gtk_settings(text: &str) -> Option<bool> {
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("gtk-application-prefer-dark-theme") {
+            return parse_boolish(rest.trim().trim_start_matches('=').trim());
+        }
+        if let Some(rest) = line.strip_prefix("gtk-interface-color-scheme") {
+            let v = rest.trim().trim_start_matches('=').trim().to_ascii_lowercase();
+            if v.contains("dark") {
+                return Some(true);
+            }
+            if v.contains("light") {
+                return Some(false);
+            }
+        }
+    }
+    None
 }
 
 pub fn parse_gui_frontend(value: &str, quiet: bool) -> GuiFrontend {
@@ -578,8 +707,9 @@ pub fn render(settings: &Settings) -> String {
         format!("download_logs = {}", settings.download_logs),
         String::new(),
         "# GUI appearance".into(),
-        "#   light - light controls and window backgrounds".into(),
-        "#   dark  - dark controls and window backgrounds where supported".into(),
+        "#   system - follow the desktop (Plasma, COSMIC, or macOS appearance)".into(),
+        "#   light  - force light controls".into(),
+        "#   dark   - force dark controls".into(),
         format!("gui_theme = {}", settings.gui_theme.as_str()),
         String::new(),
     ]);
@@ -655,7 +785,7 @@ mod tests {
         assert_eq!(settings.ffmpeg, ToolSource::Auto);
         assert_eq!(settings.gui_download_mode, GuiDownloadMode::Progress);
         assert!(settings.download_logs);
-        assert_eq!(settings.gui_theme, GuiTheme::Light);
+        assert_eq!(settings.gui_theme, GuiTheme::System);
         assert!(settings.strip_video_ids);
         assert!(settings.sanitize_filenames);
         assert_eq!(settings.filename_spaces, FilenameSpaces::Keep);
@@ -713,7 +843,7 @@ mod tests {
         assert!(migrated.contains("download_dir = ~/Downloads"));
         assert!(migrated.contains("gui_download_mode = progress"));
         assert!(migrated.contains("download_logs = true"));
-        assert!(migrated.contains("gui_theme = light"));
+        assert!(migrated.contains("gui_theme = system"));
         assert!(migrated.contains("strip_video_ids = true"));
         assert!(migrated.contains("sanitize_filenames = true"));
         assert!(migrated.contains("filename_spaces = keep"));
@@ -722,5 +852,36 @@ mod tests {
             assert!(migrated.contains("gui_frontend = auto"));
         }
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn parses_system_theme() {
+        assert_eq!(parse_gui_theme("system", true), GuiTheme::System);
+        assert_eq!(parse_gui_theme("auto", true), GuiTheme::System);
+        assert_eq!(parse_gui_theme("dark", true), GuiTheme::Dark);
+        assert_eq!(GuiTheme::Light.resolve(), GuiTheme::Light);
+        assert_eq!(GuiTheme::Dark.resolve(), GuiTheme::Dark);
+    }
+
+    #[test]
+    fn detects_desktop_dark_from_config_text() {
+        assert_eq!(parse_boolish("true"), Some(true));
+        assert_eq!(parse_boolish("false\n"), Some(false));
+        assert_eq!(
+            parse_kdeglobals("[General]\nColorScheme=BreezeDark\n"),
+            Some(true)
+        );
+        assert_eq!(
+            parse_kdeglobals("[KDE]\nLookAndFeelPackage=org.kde.breeze.desktop\n"),
+            Some(false)
+        );
+        assert_eq!(
+            parse_gtk_settings("[Settings]\ngtk-application-prefer-dark-theme=1\n"),
+            Some(true)
+        );
+        assert_eq!(
+            parse_gtk_settings("[Settings]\ngtk-interface-color-scheme=prefer-light\n"),
+            Some(false)
+        );
     }
 }

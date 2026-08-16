@@ -54,7 +54,7 @@ On first run, Quark creates `quark-downloader.conf` under the user config direct
 | `ffmpeg` | **Windows only:** `auto`, `path`, or `bundled`. macOS/Linux always use PATH. |
 | `gui_download_mode` | `progress` for the GUI progress dialog, or `external_cli` to open the CLI window after Download |
 | `download_logs` | `true` or `false`; applies to both CLI and GUI downloads |
-| `gui_theme` | `light` or `dark`; applies to the macOS/Linux GUI (Windows uses its native light UI) |
+| `gui_theme` | `system` (default), `light`, or `dark`. `system` follows the desktop: Plasma theme in Kirigami, COSMIC light/dark in the COSMIC UI, macOS appearance in AppKit. Windows stays native. |
 | `gui_frontend` | `auto` plus the frontends for this OS (`win32`, `appkit`, `cosmic`, `kirigami`). Pick in Settings. |
 | `strip_video_ids` | `true` (default) drops the trailing ` [VIDEOID]` from filenames |
 | `sanitize_filenames` | `true` (default) makes filenames mostly ASCII-safe on all platforms (`｜` -> `-`, accents transliterated, Windows-invalid characters removed) |

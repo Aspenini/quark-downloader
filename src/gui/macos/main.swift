@@ -12,11 +12,22 @@ func appSettingsWindowTitle() -> String {
 }
 
 func normalizeTheme(_ value: String) -> String {
-    return value.lowercased() == "dark" ? "dark" : "light"
+    switch value.lowercased() {
+    case "dark": return "dark"
+    case "light": return "light"
+    default: return "system"
+    }
 }
 
 func applyTheme(_ theme: String) {
-    NSApp.appearance = NSAppearance(named: normalizeTheme(theme) == "dark" ? .darkAqua : .aqua)
+    switch normalizeTheme(theme) {
+    case "dark":
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+    case "light":
+        NSApp.appearance = NSAppearance(named: .aqua)
+    default:
+        NSApp.appearance = nil
+    }
 }
 
 func emitLines(_ lines: [String]) {
@@ -117,10 +128,10 @@ case "--session":
     app.activate(ignoringOtherApps: true)
     app.run()
 case "--progress":
-    var theme = "light"
+    var theme = "system"
     for argument in arguments.dropFirst() {
         let lowered = argument.lowercased()
-        if lowered == "light" || lowered == "dark" {
+        if lowered == "light" || lowered == "dark" || lowered == "system" {
             theme = lowered
         }
         // The other optional argument (logs dir) is unused, as in the Tk UI.

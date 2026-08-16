@@ -12,6 +12,7 @@ name = "quark_gui_cosmic"
 path = "src/lib.rs"
 
 [dependencies]
+quark-core = { path = "../quark-core" }
 quark-gui = { path = "../quark-gui" }
 
 # Linux only: iced dynamically links system Wayland/Vulkan via wgpu.

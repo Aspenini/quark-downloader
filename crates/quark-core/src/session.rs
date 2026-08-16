@@ -229,7 +229,7 @@ fn parse_settings_json(node: Option<&Value>) -> Option<SettingsForm> {
         &obj.get("download_logs")
             .map(Value::raw_display)
             .unwrap_or_else(|| "true".into()),
-        obj.get_str("gui_theme").unwrap_or(GuiTheme::Light.as_str()),
+        obj.get_str("gui_theme").unwrap_or(GuiTheme::System.as_str()),
         &obj.get("strip_video_ids")
             .map(Value::raw_display)
             .unwrap_or_else(|| "true".into()),
@@ -358,7 +358,7 @@ fn parse_settings(block: &[&str]) -> Option<SettingsForm> {
         block[2],
         block[3],
         block[4],
-        block.get(5).copied().unwrap_or(GuiTheme::Light.as_str()),
+        block.get(5).copied().unwrap_or(GuiTheme::System.as_str()),
         block.get(6).copied().unwrap_or("true"),
         block.get(7).copied().unwrap_or("true"),
         block
@@ -549,7 +549,7 @@ mod tests {
             parse("__SESSION__\n__SETTINGS__\n~/Legacy\nauto\nauto\nprogress\ntrue\n__CANCEL__\n");
         assert!(matches!(result.action, MainAction::Cancel));
         let form = result.settings_form.unwrap();
-        assert_eq!(form.gui_theme, "light");
+        assert_eq!(form.gui_theme, "system");
         assert!(form.strip_video_ids);
         assert!(form.sanitize_filenames);
         assert_eq!(form.filename_spaces, "keep");

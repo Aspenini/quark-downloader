@@ -2089,6 +2089,7 @@ name = "quark-gui-cosmic"
 version = "0.7.0"
 dependencies = [
  "iced",
+ "quark-core",
  "quark-gui",
 ]
 

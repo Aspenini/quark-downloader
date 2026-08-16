@@ -175,7 +175,11 @@ Kirigami.ApplicationWindow {
             QQC.ComboBox { model: ["progress", "external_cli"]; currentIndex: root.draftMode === "external_cli" ? 1 : 0; onActivated: root.draftMode = currentText }
             QQC.CheckBox { text: "Download logs"; checked: root.draftLogs; onToggled: root.draftLogs = checked }
             QQC.Label { text: "Theme" }
-            QQC.ComboBox { model: ["light", "dark"]; currentIndex: root.draftTheme === "dark" ? 1 : 0; onActivated: root.draftTheme = currentText }
+            QQC.ComboBox {
+                model: ["system", "light", "dark"]
+                Component.onCompleted: currentIndex = Math.max(0, model.indexOf(root.draftTheme))
+                onActivated: root.draftTheme = currentText
+            }
             QQC.Label { text: "GUI frontend" }
             QQC.ComboBox {
                 model: root.frontendChoices

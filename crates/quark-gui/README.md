@@ -20,7 +20,8 @@ quark-gui-appkit       --script runner; visual UI is still Swift AppKit
 
 Settings are included in session JSON only after Save. Empty queue and
 empty output use the strings in `copy.rs`. Download flushes the URL field
-first. Switching audio/video resets format to `original`.
+first. Switching audio/video resets format to `original`. Theme `system`
+follows the desktop (Plasma, COSMIC light/dark, or macOS appearance).
 
 ## `--script`
 
