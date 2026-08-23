@@ -2,5 +2,5 @@
 set -eu
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-rm -rf "$root/build" "$root/packaging/output"
-echo "Cleaned build/ and packaging/output/"
+rm -rf "$root/build" "$root/packaging/output" "$root/target"
+echo "Cleaned build/, packaging/output/, and target/"

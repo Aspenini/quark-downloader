@@ -8,14 +8,16 @@ $guiBinary = Join-Path $buildDir "quark-downloader-gui.exe"
 Write-Host "quark-downloader (Windows build)"
 Write-Host ""
 
-$iconRes = (Resolve-Path (Join-Path $buildDir "app.res")).Path
-$guiFlags = Get-GuiLinkFlags $root
+Write-Host "  Compiling CLI + GUI..."
+Push-Location $root
+try {
+  Invoke-Checked { cargo build --release -p quark-cli -p quark-gui-dispatch }
+} finally {
+  Pop-Location
+}
 
-Write-Host "  Compiling CLI..."
-Invoke-Checked { crystal build --release (Join-Path $root "src\quark-downloader.cr") -o $binary --link-flags="$iconRes" }
-
-Write-Host "  Compiling GUI..."
-Invoke-Checked { crystal build --release (Join-Path $root "src\gui\quark-downloader-gui.cr") -o $guiBinary --link-flags="$guiFlags" }
+Copy-Item (Join-Path $root "target\release\quark-downloader.exe") $binary -Force
+Copy-Item (Join-Path $root "target\release\quark-downloader-gui.exe") $guiBinary -Force
 
 Write-Host "  UPX (CLI only)..."
 if (Get-Command upx -ErrorAction SilentlyContinue) {

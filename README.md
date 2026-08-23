@@ -6,9 +6,6 @@
     <td align="right">
       <h1>Quark Downloader</h1>
       <p>
-        <a href="https://github.com/Aspenini/quark-downloader/actions/workflows/crystal.yml">
-          <img alt="Crystal CI" src="https://img.shields.io/github/actions/workflow/status/Aspenini/quark-downloader/crystal.yml?branch=main&amp;label=Crystal%20CI&amp;color=purple" />
-        </a>
         <a href="https://github.com/Aspenini/quark-downloader/releases">
           <img alt="GitHub release" src="https://img.shields.io/github/v/release/Aspenini/quark-downloader?label=release" />
         </a>
@@ -26,23 +23,22 @@
 | ------------------ | --------------------------------- | ----------------- | ----------------------------------------------------- |
 | **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH (package manager / `pipx`)                       |
 | **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH (package manager)                                |
-| **GUI (optional)** | Win32                             | AppKit UI         | [Tk](https://www.tcl.tk/) / `wish` (`apt install tk`) |
+| **GUI (optional)** | Win32 | AppKit | Qt 6; CuteCosmic integration on COSMIC |
 
 **Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
-**Build:** [Crystal](https://crystal-lang.org/) | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools (`swiftc`) + `just dmg`
+**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024); Linux GUI also needs Qt 6 Declarative development files | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools + `just dmg`
 
 ## Binaries
 
 | Program | Purpose |
 |---------|---------|
 | `quark-downloader` | Full CLI - interactive in a terminal, or scriptable with flags |
-| `quark-downloader-gui` | Thin UI that collects options and runs the CLI as a subprocess |
-| `quark-downloader-gui-helper` | macOS only: native AppKit windows for the GUI (built with `swiftc`) |
+| `quark-downloader-gui` | Qt frontend on Linux; AppKit frontend on macOS; Win32 frontend on Windows |
 
 The GUI queues multiple URLs (Add/Remove list) and downloads them sequentially with combined progress ("URL 2 of 5"). Playlist URLs download every item into a folder named after the playlist (see `playlist_folders`), with per-item progress and a failure summary.
 
-Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, `quark-downloader-gui.tcl` (same directory), [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop), and depends on **Tk** / `wish` (Linux). On macOS the GUI prefers the native `quark-downloader-gui-helper` beside the binary and falls back to Tk when it is missing.
+Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop). Linux builds link the Qt 6 frontend when Qt Declarative is present. Qt automatically uses the installed [CuteCosmic](https://github.com/IgKh/cutecosmic) platform theme in a COSMIC session. macOS builds compile the AppKit frontend into `quark-downloader-gui`. Frontends share `quark-gui` (catalog + session reducer + `--script` contract); see [`crates/quark-gui/README.md`](crates/quark-gui/README.md).
 
 Windows shortcuts from the installer open the GUI; the CLI remains in the install folder as **Quark Downloader (CLI)**. Use **Check for updates** in settings to compare against the latest [GitHub release](https://github.com/Aspenini/quark-downloader/releases) and open the installer download when a newer version is published.
 
@@ -57,7 +53,8 @@ On first run, Quark creates `quark-downloader.conf` under the user config direct
 | `ffmpeg` | **Windows only:** `auto`, `path`, or `bundled`. macOS/Linux always use PATH. |
 | `gui_download_mode` | `progress` for the GUI progress dialog, or `external_cli` to open the CLI window after Download |
 | `download_logs` | `true` or `false`; applies to both CLI and GUI downloads |
-| `gui_theme` | `light` or `dark`; applies to the macOS/Linux GUI (Windows uses its native light UI) |
+| `open_output_dir` | `true` or `false` (default `false`); GUI only, opens the output folder when a download finishes |
+| `gui_theme` | `system` (default), `light`, or `dark`. `system` follows Qt/CuteCosmic on Linux, macOS appearance in AppKit, and native Windows colors. |
 | `strip_video_ids` | `true` (default) drops the trailing ` [VIDEOID]` from filenames |
 | `sanitize_filenames` | `true` (default) makes filenames mostly ASCII-safe on all platforms (`｜` -> `-`, accents transliterated, Windows-invalid characters removed) |
 | `filename_spaces` | `keep` (default), `underscore`, `dash`, or `remove` |
@@ -68,12 +65,12 @@ The download-naming settings are grouped under **Download Naming** in the GUI se
 ## Commands
 
 ```bash
-just run          # crystal run CLI
-just run-gui      # crystal run GUI
-just build        # release -> build/ (both binaries; UPX on Windows; AppKit helper on macOS)
+just run          # cargo run CLI
+just run-gui      # cargo run GUI dispatcher
+just build        # release -> build/ (CLI + GUI; UPX CLI)
 just dmg          # macOS: build "Quark Downloader.app" + DMG into dist/
+just test         # cargo test --workspace
 just clean
-crystal spec      # run focused tests
 ```
 
 The DMG is ad-hoc signed: after downloading, right-click > Open the first time (or `xattr -dr com.apple.quarantine "Quark Downloader.app"`). On macOS and Linux, install **yt-dlp** and **ffmpeg** yourself (`brew install yt-dlp ffmpeg`, or your distro / `pipx`); Quark does not bundle or auto-download them there. **Do not run with sudo** — that writes config and downloads into root's home.

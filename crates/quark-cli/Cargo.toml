@@ -1,0 +1,15 @@
+[package]
+name = "quark-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Quark Downloader command-line interface"
+publish = false
+
+[[bin]]
+name = "quark-downloader"
+path = "src/main.rs"
+
+[dependencies]
+quark-core = { path = "../quark-core" }

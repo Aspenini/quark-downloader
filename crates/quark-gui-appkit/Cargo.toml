@@ -1,0 +1,18 @@
+[package]
+name = "quark-gui-appkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Quark Downloader AppKit frontend"
+publish = false
+
+[lib]
+name = "quark_gui_appkit"
+path = "src/lib.rs"
+
+[dependencies]
+quark-gui = { path = "../quark-gui" }
+
+[build-dependencies]
+cc = "1"

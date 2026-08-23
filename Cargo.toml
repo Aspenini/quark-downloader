@@ -1,0 +1,30 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/quark-core",
+    "crates/quark-platform",
+    "crates/quark-cli",
+    "crates/quark-gui",
+    "crates/quark-gui-dispatch",
+    "crates/quark-gui-win32",
+    "crates/quark-gui-appkit",
+    "crates/quark-gui-qt",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+version = "0.7.0"
+license = "MIT"
+repository = "https://github.com/Aspenini/quark-downloader"
+homepage = "https://github.com/Aspenini/quark-downloader"
+
+[workspace.dependencies]
+windows-sys = { version = "0.59", default-features = false }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

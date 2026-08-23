@@ -1,0 +1,18 @@
+[package]
+name = "quark-gui-qt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Quark Downloader Qt frontend for Linux"
+publish = false
+
+[lib]
+name = "quark_gui_qt"
+path = "src/lib.rs"
+
+[dependencies]
+quark-gui = { path = "../quark-gui" }
+
+[build-dependencies]
+cc = "1"

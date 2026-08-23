@@ -11,12 +11,12 @@ fi
 
 bash "$root/scripts/unix/build.sh"
 
-if [[ ! -x "$root/build/quark-downloader-gui-helper" ]]; then
-  echo "error: native macOS helper missing (swiftc required to build the app bundle)" >&2
+if [[ ! -x "$root/build/quark-downloader-gui" ]]; then
+  echo "error: quark-downloader-gui missing" >&2
   exit 1
 fi
 
-version="$(awk '/^version:/ {print $2}' "$root/shard.yml")"
+version="$(awk -F'"' '/^version = / {print $2; exit}' "$root/Cargo.toml")"
 dist="$root/dist"
 app="$dist/Quark Downloader.app"
 macos_dir="$app/Contents/MacOS"
@@ -29,7 +29,6 @@ mkdir -p "$macos_dir" "$resources_dir"
 
 cp "$root/build/quark-downloader" \
    "$root/build/quark-downloader-gui" \
-   "$root/build/quark-downloader-gui-helper" \
    "$macos_dir/"
 
 echo "  Generating icon.icns..."
