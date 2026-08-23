@@ -12,8 +12,11 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QTimer>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <fcntl.h>
+#include <unistd.h>
 
 static QString qmlDir()
 {
@@ -84,6 +87,9 @@ extern "C" int qt_ui_run(int argc, char **argv)
     // Copy before QGuiApplication, which may mutate argv.
     const QByteArray modeBytes = QByteArray(argv[1]);
     const char *mode = modeBytes.constData();
+    const bool progressMode = strcmp(mode, "--progress") == 0;
+    // HelperProgress argv: --progress <unused> <theme>
+    const QByteArray progressTheme = (progressMode && argc > 3) ? QByteArray(argv[3]) : QByteArray();
 
     QGuiApplication app(argc, argv);
 
@@ -108,7 +114,10 @@ extern "C" int qt_ui_run(int argc, char **argv)
     ctx->setContextProperty("guiMode", arg(4, QStringLiteral("progress")));
     ctx->setContextProperty("logs", barg(5, true));
     ctx->setContextProperty("theme", arg(6, QStringLiteral("system")));
-    applyColorScheme(ctx->contextProperty("theme").toString());
+    if (progressMode && !progressTheme.isEmpty())
+        applyColorScheme(QString::fromUtf8(progressTheme));
+    else
+        applyColorScheme(ctx->contextProperty("theme").toString());
     ctx->setContextProperty("stripIds", barg(7, true));
     ctx->setContextProperty("sanitize", barg(8, true));
     ctx->setContextProperty("spaces", arg(9, QStringLiteral("keep")));
@@ -116,7 +125,7 @@ extern "C" int qt_ui_run(int argc, char **argv)
     ctx->setContextProperty("openOutputDir", barg(11, false));
     ctx->setContextProperty("outputDir", defaultDir);
 
-    const QString qmlName = strcmp(mode, "--progress") == 0
+    const QString qmlName = progressMode
         ? QStringLiteral("Progress.qml")
         : strcmp(mode, "--message") == 0
             ? QStringLiteral("Message.qml")
@@ -143,10 +152,61 @@ extern "C" int qt_ui_run(int argc, char **argv)
         return 1;
     QObject *root = engine.rootObjects().constFirst();
 
+    if (progressMode) {
+        const int fd = fileno(stdin);
+        const int flags = fcntl(fd, F_GETFL, 0);
+        if (flags >= 0)
+            fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    }
+
+    auto applyProgressLine = [root](const QString &line) {
+        if (line.isEmpty())
+            return;
+        const int tab = line.indexOf(QLatin1Char('\t'));
+        const QString kind = tab < 0 ? line : line.left(tab);
+        const QString rest = tab < 0 ? QString() : line.mid(tab + 1);
+        if (kind == QLatin1String("PROGRESS"))
+            root->setProperty("fraction", rest.toDouble() / 100.0);
+        else if (kind == QLatin1String("STATUS"))
+            root->setProperty("statusText", rest);
+        else if (kind == QLatin1String("ETA"))
+            root->setProperty("etaText", rest);
+        else if (kind == QLatin1String("QUEUE"))
+            root->setProperty("queueText", rest);
+        else if (kind == QLatin1String("DONE"))
+            QCoreApplication::exit(rest.toInt());
+    };
+
+    QByteArray stdinPending;
+    auto drainStdin = [&stdinPending, progressMode, applyProgressLine]() -> bool {
+        if (!progressMode)
+            return false;
+        char buf[4096];
+        for (;;) {
+            const ssize_t n = ::read(fileno(stdin), buf, sizeof(buf));
+            if (n < 0)
+                return errno != EAGAIN && errno != EWOULDBLOCK;
+            if (n == 0)
+                return true;
+            stdinPending.append(buf, int(n));
+            int nl;
+            while ((nl = stdinPending.indexOf('\n')) >= 0) {
+                const QString line = QString::fromUtf8(stdinPending.left(nl)).trimmed();
+                stdinPending.remove(0, nl + 1);
+                applyProgressLine(line);
+            }
+        }
+    };
+
     // QML writes pendingSubmit; a typed QTimer slot forwards it to stdout.
+    // The same tick drains progress stdin so pipe data is not stuck in stdio.
     auto *timer = new QTimer(&app);
     timer->setInterval(20);
-    QObject::connect(timer, &QTimer::timeout, &app, [root]() {
+    QObject::connect(timer, &QTimer::timeout, &app, [root, drainStdin]() {
+        if (drainStdin()) {
+            QCoreApplication::exit(0);
+            return;
+        }
         const QString json = root->property("pendingSubmit").toString();
         if (!json.isEmpty()) {
             root->setProperty("pendingSubmit", QString());
@@ -160,15 +220,11 @@ extern "C" int qt_ui_run(int argc, char **argv)
     });
     timer->start();
 
-    if (strcmp(mode, "--progress") == 0) {
+    if (progressMode) {
         auto *n = new QSocketNotifier(fileno(stdin), QSocketNotifier::Read, &app);
-        QObject::connect(n, &QSocketNotifier::activated, root, [root]() {
-            char buf[4096];
-            if (!fgets(buf, sizeof(buf), stdin)) {
+        QObject::connect(n, &QSocketNotifier::activated, root, [drainStdin]() {
+            if (drainStdin())
                 QCoreApplication::exit(0);
-                return;
-            }
-            QMetaObject::invokeMethod(root, "applyLine", Q_ARG(QString, QString::fromUtf8(buf).trimmed()));
         });
     }
 

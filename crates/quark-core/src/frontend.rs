@@ -238,7 +238,7 @@ impl Frontend for HelperFrontend {
             .args(["--progress", "", theme.as_str()])
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::inherit())
             .spawn()
             .map_err(|e| FrontendError(e.to_string()))?;
         let stdin = child
