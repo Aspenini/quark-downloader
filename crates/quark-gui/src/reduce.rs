@@ -96,6 +96,10 @@ pub fn reduce(state: &mut UiState, event: UiEvent) -> Vec<UiEffect> {
             state.draft = form;
             Vec::new()
         }
+        UiEvent::ResetSettings => {
+            state.draft = SettingsForm::defaults();
+            Vec::new()
+        }
         UiEvent::SaveSettings => save_settings(state),
     }
 }

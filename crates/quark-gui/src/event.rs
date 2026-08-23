@@ -19,6 +19,7 @@ pub enum UiEvent {
     OpenSettings,
     CloseSettings,
     DraftSettings(SettingsForm),
+    ResetSettings,
     SaveSettings,
 }
 
@@ -46,5 +47,6 @@ pub const REQUIRED_ACTIONS: &[fn() -> UiEvent] = &[
     || UiEvent::Close,
     || UiEvent::OpenSettings,
     || UiEvent::CloseSettings,
+    || UiEvent::ResetSettings,
     || UiEvent::SaveSettings,
 ];

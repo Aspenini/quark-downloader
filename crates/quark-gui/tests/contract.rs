@@ -110,6 +110,28 @@ fn save_settings_then_download_includes_settings() {
 }
 
 #[test]
+fn reset_settings_restores_defaults() {
+    let out = run(&script(
+        r#"[{"open_settings":true},{"set_setting":{"download_dir":"~/Media","yt_dlp":"path","ffmpeg":"path","gui_download_mode":"external_cli","download_logs":false,"open_output_dir":true,"gui_theme":"dark","strip_video_ids":false,"sanitize_filenames":false,"filename_spaces":"dash","playlist_folders":false}},{"reset_settings":true},{"save_settings":true},{"add_url":"https://example.com/a"},{"download":true}]"#,
+    ))
+    .unwrap();
+    let form = out
+        .result
+        .settings_form
+        .expect("settings should be present");
+    assert_eq!(form, SettingsForm::defaults());
+}
+
+#[test]
+fn reset_then_cancel_does_not_save() {
+    let out = run(&script(
+        r#"[{"open_settings":true},{"reset_settings":true},{"close_settings":true},{"add_url":"https://example.com/a"},{"download":true}]"#,
+    ))
+    .unwrap();
+    assert!(out.result.settings_form.is_none());
+}
+
+#[test]
 fn discarded_settings_are_not_emitted() {
     let out = run(&script(
         r#"[{"open_settings":true},{"set_setting":{"download_dir":"~/Nope","yt_dlp":"path","ffmpeg":"path","gui_download_mode":"progress","download_logs":true,"open_output_dir":true,"gui_theme":"light","strip_video_ids":true,"sanitize_filenames":true,"filename_spaces":"keep","playlist_folders":true}},{"close_settings":true},{"add_url":"https://example.com/a"},{"download":true}]"#,

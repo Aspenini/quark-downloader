@@ -204,6 +204,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         let downloadsBox = box("Downloads", rows: [modeRow, logsCheck, openOutputCheck], fullWidth: [])
 
         updatesButton = NSButton(title: "Check for updates…", target: self, action: #selector(checkUpdates))
+        let resetButton = NSButton(title: "Reset to defaults", target: self, action: #selector(resetSettings))
         let saveButton = NSButton(title: "Save", target: self, action: #selector(saveSettings))
         saveButton.keyEquivalent = "\r"
         let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(closeSettings))
@@ -211,6 +212,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         let buttonRow = NSStackView()
         buttonRow.orientation = .horizontal
         buttonRow.addView(updatesButton, in: .leading)
+        buttonRow.addView(resetButton, in: .leading)
         buttonRow.addView(saveButton, in: .trailing)
         buttonRow.addView(cancelButton, in: .trailing)
 
@@ -416,6 +418,18 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
 
     @objc func closeSettings() {
         showMain()
+    }
+
+    @objc func resetSettings() {
+        settingsDirField.stringValue = "~/Downloads"
+        select(themePopup, "system", from: themeValues)
+        stripCheck.state = .on
+        sanitizeCheck.state = .on
+        select(spacesPopup, "keep", from: spacesValues)
+        playlistCheck.state = .on
+        select(modePopup, "progress", from: modeValues)
+        logsCheck.state = .on
+        openOutputCheck.state = .off
     }
 
     @objc func saveSettings() {

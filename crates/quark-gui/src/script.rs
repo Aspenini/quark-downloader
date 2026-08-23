@@ -107,19 +107,7 @@ pub fn run(input: &str) -> Result<ScriptOutput, String> {
 }
 
 fn default_script_settings() -> SettingsForm {
-    SettingsForm::from_strings(
-        "~/Downloads",
-        "path",
-        "path",
-        "progress",
-        "true",
-        "system",
-        "true",
-        "true",
-        "keep",
-        "true",
-        "false",
-    )
+    SettingsForm::defaults()
 }
 
 pub fn settings_from_value(value: &Value) -> Option<SettingsForm> {
@@ -195,6 +183,9 @@ fn events_from_value(value: &Value) -> Result<Vec<UiEvent>, String> {
     }
     if value.get_bool("save_settings") == Some(true) {
         return Ok(vec![UiEvent::SaveSettings]);
+    }
+    if value.get_bool("reset_settings") == Some(true) {
+        return Ok(vec![UiEvent::ResetSettings]);
     }
     if let Some(settings) = value.get("set_setting") {
         let form = settings_from_value(settings)

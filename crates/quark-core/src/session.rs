@@ -96,6 +96,35 @@ impl SettingsForm {
             playlist_folders: self.playlist_folders,
         }
     }
+
+    pub fn from_settings(settings: &Settings) -> Self {
+        let bundled = quark_platform::allows_bundled_tools();
+        Self {
+            download_dir: settings.download_dir.clone(),
+            yt_dlp: if bundled {
+                settings.yt_dlp.as_str().into()
+            } else {
+                "path".into()
+            },
+            ffmpeg: if bundled {
+                settings.ffmpeg.as_str().into()
+            } else {
+                "path".into()
+            },
+            gui_download_mode: settings.gui_download_mode.as_str().into(),
+            download_logs: settings.download_logs,
+            open_output_dir: settings.open_output_dir,
+            gui_theme: settings.gui_theme.as_str().into(),
+            strip_video_ids: settings.strip_video_ids,
+            sanitize_filenames: settings.sanitize_filenames,
+            filename_spaces: settings.filename_spaces.as_str().into(),
+            playlist_folders: settings.playlist_folders,
+        }
+    }
+
+    pub fn defaults() -> Self {
+        Self::from_settings(&Settings::default())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -628,6 +657,27 @@ mod tests {
     fn rejects_unknown_protocol_version() {
         let result = parse(r#"{"v":2,"action":"cancel"}"#);
         assert!(matches!(result.action, MainAction::Error(_)));
+    }
+
+    #[test]
+    fn settings_form_defaults_match_config() {
+        let form = SettingsForm::defaults();
+        assert_eq!(form.download_dir, "~/Downloads");
+        assert_eq!(form.gui_download_mode, "progress");
+        assert!(form.download_logs);
+        assert!(!form.open_output_dir);
+        assert_eq!(form.gui_theme, "system");
+        assert!(form.strip_video_ids);
+        assert!(form.sanitize_filenames);
+        assert_eq!(form.filename_spaces, "keep");
+        assert!(form.playlist_folders);
+        if quark_platform::allows_bundled_tools() {
+            assert_eq!(form.yt_dlp, "auto");
+            assert_eq!(form.ffmpeg, "auto");
+        } else {
+            assert_eq!(form.yt_dlp, "path");
+            assert_eq!(form.ffmpeg, "path");
+        }
     }
 
     #[test]

@@ -54,6 +54,18 @@ QQC.ApplicationWindow {
         }
     }
 
+    function resetDraft() {
+        draftDir = "~/Downloads"
+        draftMode = "progress"
+        draftLogs = true
+        draftOpenOutput = false
+        draftTheme = "system"
+        draftStrip = true
+        draftSanitize = true
+        draftSpaces = "keep"
+        draftFolders = true
+    }
+
     function emitCancel() {
         var o = { v: 1, action: "cancel" }
         if (settingsSaved)
@@ -192,10 +204,11 @@ QQC.ApplicationWindow {
             QQC.Label { text: "Theme" }
             QQC.ComboBox {
                 model: ["system", "light", "dark"]
-                Component.onCompleted: currentIndex = Math.max(0, model.indexOf(root.draftTheme))
+                currentIndex: Math.max(0, model.indexOf(root.draftTheme))
                 onActivated: root.draftTheme = currentText
             }
             RowLayout {
+                QQC.Button { text: "Reset to defaults"; onClicked: root.resetDraft() }
                 Item { Layout.fillWidth: true }
                 QQC.Button { text: "Cancel"; onClicked: root.showSettings = false }
                 QQC.Button {

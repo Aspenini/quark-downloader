@@ -71,6 +71,7 @@ const IDC_SET_SANITIZE: i32 = 1033;
 const IDC_SET_SPACES: i32 = 1034;
 const IDC_SET_PLAYLIST_FOLDERS: i32 = 1036;
 const IDC_SET_OPEN_OUTPUT: i32 = 1045;
+const IDC_SET_RESET: i32 = 1046;
 const IDC_PROGRESS_PLAYLIST_ETA: i32 = 1041;
 
 const MAIN_VIEW_IDS: &[i32] = &[
@@ -114,6 +115,7 @@ const SETTINGS_VIEW_IDS: &[i32] = &[
     1021,
     IDC_SET_FFMPEG,
     IDC_CHECK_UPDATES,
+    IDC_SET_RESET,
     IDC_SET_SAVE,
     IDC_SET_CANCEL,
 ];
@@ -313,6 +315,7 @@ struct SessionState {
     main_action: MainAction,
     dialog_view: View,
     session_settings: Settings,
+    settings_draft: Settings,
     session_settings_saved: bool,
     update_check_running: bool,
     browse_initial: String,
@@ -470,7 +473,8 @@ fn show_main_view(dlg: Handle) {
 fn show_settings_view(dlg: Handle) {
     let settings = with_session(|s| {
         s.dialog_view = View::Settings;
-        s.session_settings.clone()
+        s.settings_draft = s.session_settings.clone();
+        s.settings_draft.clone()
     })
     .unwrap_or_default();
     let title = wide(&version::settings_window_title());
@@ -480,6 +484,12 @@ fn show_settings_view(dlg: Handle) {
     populate_settings_fields(dlg, &settings);
     set_view_visible(dlg, MAIN_VIEW_IDS, false);
     set_view_visible(dlg, SETTINGS_VIEW_IDS, true);
+}
+
+fn reset_settings_fields(dlg: Handle) {
+    let defaults = Settings::default();
+    with_session(|s| s.settings_draft = defaults.clone());
+    populate_settings_fields(dlg, &defaults);
 }
 
 fn paste_urls_to_queue(dlg: Handle) {
@@ -593,8 +603,8 @@ fn try_confirm(dlg: Handle) -> isize {
 }
 
 fn try_save_settings(dlg: Handle) -> isize {
-    let theme = with_session(|s| s.session_settings.gui_theme.as_str().to_string())
-        .unwrap_or_else(|| "light".into());
+    let theme = with_session(|s| s.settings_draft.gui_theme.as_str().to_string())
+        .unwrap_or_else(|| "system".into());
     let Some(form) = read_settings_form(dlg, &theme) else {
         message_box("Please choose a default download folder.", true);
         return 0;
@@ -678,6 +688,10 @@ unsafe extern "system" fn main_dialog_proc(
                 }
                 IDC_CHECK_UPDATES if notify == BN_CLICKED => {
                     start_update_check(dlg);
+                    return 1;
+                }
+                IDC_SET_RESET if notify == BN_CLICKED => {
+                    reset_settings_fields(dlg);
                     return 1;
                 }
                 IDC_SETTINGS if notify == BN_CLICKED => {
@@ -811,6 +825,7 @@ pub fn collect_main_session(
             main_action: MainAction::Cancel,
             dialog_view: View::Main,
             session_settings: settings.clone(),
+            settings_draft: settings.clone(),
             session_settings_saved: false,
             update_check_running: false,
             browse_initial: String::new(),
@@ -841,19 +856,7 @@ pub fn collect_main_session(
         (
             s.main_action.clone(),
             if s.session_settings_saved {
-                Some(SettingsForm {
-                    download_dir: s.session_settings.download_dir.clone(),
-                    yt_dlp: s.session_settings.yt_dlp.as_str().into(),
-                    ffmpeg: s.session_settings.ffmpeg.as_str().into(),
-                    gui_download_mode: s.session_settings.gui_download_mode.as_str().into(),
-                    download_logs: s.session_settings.download_logs,
-                    gui_theme: s.session_settings.gui_theme.as_str().into(),
-                    strip_video_ids: s.session_settings.strip_video_ids,
-                    sanitize_filenames: s.session_settings.sanitize_filenames,
-                    filename_spaces: s.session_settings.filename_spaces.as_str().into(),
-                    playlist_folders: s.session_settings.playlist_folders,
-                    open_output_dir: s.session_settings.open_output_dir,
-                })
+                Some(SettingsForm::from_settings(&s.session_settings))
             } else {
                 None
             },
