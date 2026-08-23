@@ -15,18 +15,6 @@ default:
 [group('build')]
 [private]
 [windows]
-compile-cli-resources:
-    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/compile-cli-resources.ps1
-
-[group('build')]
-[private]
-[windows]
-compile-gui-resources:
-    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/compile-gui-resources.ps1
-
-[group('build')]
-[private]
-[windows]
 copy-bundled-tools:
     @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/copy-bundled-tools.ps1
 
@@ -37,7 +25,7 @@ build:
 
 [group('build')]
 [windows]
-build: copy-bundled-tools compile-cli-resources compile-gui-resources
+build: copy-bundled-tools
     @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/build.ps1
 
 [group('build')]
