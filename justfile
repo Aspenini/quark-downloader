@@ -51,13 +51,33 @@ run-gui:
 
 [group('android')]
 [windows]
-android-spike:
+android-debug:
     @& .\android\gradlew.bat :app:assembleDebug
+
+[group('android')]
+[unix]
+android-debug:
+    @android/gradlew :app:assembleDebug
 
 [group('android')]
 [windows]
 android-run:
     @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/run-android.ps1
+
+[group('android')]
+[unix]
+android-run:
+    @bash scripts/unix/run-android.sh
+
+[group('android')]
+[windows]
+android-release:
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/release-android.ps1
+
+[group('android')]
+[unix]
+android-release:
+    @bash scripts/unix/release-android.sh
 
 [group('test')]
 test:

@@ -28,6 +28,13 @@ pub fn installer_download_url(tag_name: &str) -> String {
     )
 }
 
+pub fn apk_download_url(tag_name: &str) -> String {
+    let version = tag_name.trim_start_matches('v');
+    format!(
+        "https://github.com/{GITHUB_REPO}/releases/download/{tag_name}/{INSTALLER_NAME_PREFIX}-{version}-android.apk"
+    )
+}
+
 pub fn normalize_tag(tag_name: &str) -> String {
     tag_name.trim_start_matches('v').to_string()
 }
@@ -86,6 +93,10 @@ mod tests {
         assert_eq!(
             installer_download_url("v0.4.0"),
             "https://github.com/Aspenini/quark-downloader/releases/download/v0.4.0/quark-downloader-0.4.0-setup.exe"
+        );
+        assert_eq!(
+            apk_download_url("v0.4.0"),
+            "https://github.com/Aspenini/quark-downloader/releases/download/v0.4.0/quark-downloader-0.4.0-android.apk"
         );
     }
 

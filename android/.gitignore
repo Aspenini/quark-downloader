@@ -9,4 +9,5 @@ captures/
 *.ap_
 *.aab
 app/src/main/jniLibs/
+keystore.properties
 .DS_Store

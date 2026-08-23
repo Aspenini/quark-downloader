@@ -14,8 +14,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.aspenini.quark.data.QuarkSettings
+import com.aspenini.quark.download.DownloadLog
 import com.aspenini.quark.ui.QuarkRoot
 import com.aspenini.quark.ui.QuarkTheme
 import kotlinx.coroutines.Dispatchers
@@ -86,6 +88,24 @@ class MainActivity : ComponentActivity() {
                             model.snack(msg)
                         }
                     },
+                    onCheckAppUpdate = {
+                        lifecycleScope.launch {
+                            runCatching { model.checkAppUpdate() }
+                                .onSuccess { update ->
+                                    if (update == null) {
+                                        model.snack("You're on the latest GitHub release.")
+                                    }
+                                }
+                                .onFailure { e ->
+                                    model.snack("Update check failed: ${e.message}")
+                                }
+                        }
+                    },
+                    onDismissUpdate = model::dismissAppUpdate,
+                    onOpenUpdate = { url ->
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    },
+                    onShareLogs = ::shareLatestLog,
                     onConsumeSnack = model::consumeSnackbar,
                 )
             }
@@ -96,6 +116,22 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         model.ingestIntent(intent)
+    }
+
+    private fun shareLatestLog() {
+        val log = DownloadLog.latest(this)
+        if (log == null) {
+            model.snack("No download logs yet.")
+            return
+        }
+        val uri =
+            FileProvider.getUriForFile(this, "$packageName.files", log)
+        val send =
+            Intent(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        startActivity(Intent.createChooser(send, "Share log"))
     }
 
     private fun requestAndDownload() {

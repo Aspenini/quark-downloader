@@ -64,6 +64,7 @@ class DownloadService : Service() {
             val n = index + 1
             notifyProgress(n, job.urls.size, 0, "URL $n of ${job.urls.size}")
             DownloadSession.progress(n, job.urls.size, 0f, "URL $n of ${job.urls.size}")
+            DownloadLog.append(this, job.settings.downloadLogs, "==> URL $n of ${job.urls.size}: $url")
             val workDir = File(workRoot, "item-$n").also {
                 it.deleteRecursively()
                 it.mkdirs()
@@ -98,6 +99,7 @@ class DownloadService : Service() {
                     val status = statusFromRust(line)
                     DownloadSession.progress(n, job.urls.size, percent, status)
                     notifyProgress(n, job.urls.size, percent.toInt(), status)
+                    DownloadLog.append(this, job.settings.downloadLogs, line)
                 }
                 saved +=
                     MediaPublisher.publishTree(this, workDir, publicRoot, subdir)
@@ -107,6 +109,7 @@ class DownloadService : Service() {
                     break
                 }
                 failures += url
+                DownloadLog.append(this, job.settings.downloadLogs, "ERROR $url: ${e.message}")
             } finally {
                 workDir.deleteRecursively()
             }
@@ -119,6 +122,11 @@ class DownloadService : Service() {
                 else -> "Failed ${failures.size} of ${job.urls.size}."
             }
         DownloadSession.finished(saved, error)
+        DownloadLog.append(
+            this,
+            job.settings.downloadLogs,
+            error ?: "Saved ${saved.size} file(s).",
+        )
         notifyDone(saved.size, error)
         if (error == null && job.settings.openOutputDir) {
             val open = Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)

@@ -2,7 +2,7 @@
 
 $ErrorActionPreference = "Stop"
 $root = Get-ProjectRoot
-$package = "com.aspenini.quark"
+$package = "com.Aspenini.QuarkDownloader"
 $activity = ".MainActivity"
 $preferredAvd = if ($env:ANDROID_AVD) { $env:ANDROID_AVD } else { "Quark" }
 $quarkImage = "system-images;android-35;google_apis;x86_64"
@@ -135,4 +135,4 @@ Write-Host "  Installing $apk"
 Invoke-Checked { & $adb -s $serial install -r -t $apk }
 Write-Host "  Launching $package"
 Invoke-Checked { & $adb -s $serial shell am start -n "$package/$activity" }
-Write-Host "  Quark spike is running on $serial"
+Write-Host "  Quark Downloader is running on $serial"

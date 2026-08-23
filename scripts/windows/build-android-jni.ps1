@@ -49,6 +49,7 @@ foreach ($t in $targets) {
   Set-Item -Path "env:CARGO_TARGET_${rustUpper}_LINKER" -Value $clang
   Set-Item -Path "env:CC_$($t.rust.Replace('-','_'))" -Value $clang
   Set-Item -Path "env:AR_$($t.rust.Replace('-','_'))" -Value $ar
+  Set-Item -Path "env:CARGO_TARGET_${rustUpper}_RUSTFLAGS" -Value "-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384"
   Write-Host "  cargo build -p quark-android --target $($t.rust) --release"
   Push-Location $root
   try {
@@ -63,4 +64,15 @@ foreach ($t in $targets) {
   New-Item -ItemType Directory -Force -Path $destDir | Out-Null
   Copy-Item $src (Join-Path $destDir "libquark.so") -Force
   Write-Host "  -> $destDir\libquark.so"
+}
+
+$align = Join-Path $root "scripts\align_elf_16k.py"
+if (Test-Path $align) {
+  Write-Host "  Aligning JNI libs to 16 KiB pages..."
+  $py = Get-Command py -ErrorAction SilentlyContinue
+  if ($py) {
+    & py -3 $align $jni
+  } else {
+    python $align $jni
+  }
 }

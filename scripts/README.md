@@ -10,12 +10,21 @@ Windows:
 - `windows/build.ps1`
 - `windows/run-gui.ps1`
 - `windows/run-android.ps1` (`just android-run`)
+- `windows/release-android.ps1` (`just android-release`)
+- `windows/build-android-jni.ps1`
 - `windows/clean.ps1`
 
 Unix/macOS:
 
 - `unix/build.sh`
 - `unix/clean.sh`
+- `unix/run-android.sh` (`just android-run`)
+- `unix/release-android.sh` (`just android-release`)
+- `unix/build-android-jni.sh`
+
+Shared:
+
+- `align_elf_16k.py` — 16 KB ELF page alignment for Android `.so` files
 
 ## Windows Helpers
 

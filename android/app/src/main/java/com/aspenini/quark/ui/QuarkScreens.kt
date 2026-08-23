@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -99,6 +100,10 @@ fun QuarkRoot(
     onSave: () -> Unit,
     onPickFolder: () -> Unit,
     onUpdateYtDlp: () -> Unit,
+    onCheckAppUpdate: () -> Unit,
+    onDismissUpdate: () -> Unit,
+    onOpenUpdate: (String) -> Unit,
+    onShareLogs: () -> Unit,
     onConsumeSnack: () -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
@@ -112,6 +117,26 @@ fun QuarkRoot(
         if (!download.running && download.status.isNotBlank() && download.queueTotal > 0) {
             snackbar.showSnackbar(download.status)
         }
+    }
+    ui.appUpdate?.let { update ->
+        AlertDialog(
+            onDismissRequest = onDismissUpdate,
+            title = { Text("Update available") },
+            text = {
+                Text("Quark Downloader ${update.version} is out. Download the APK from GitHub?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onOpenUpdate(update.apkUrl)
+                        onDismissUpdate()
+                    },
+                ) { Text("Download APK") }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissUpdate) { Text("Not now") }
+            },
+        )
     }
     Scaffold(
         modifier = Modifier.imePadding(),
@@ -156,6 +181,8 @@ fun QuarkRoot(
                 onUpdateYtDlp = {
                     scope.launch { onUpdateYtDlp() }
                 },
+                onCheckAppUpdate = onCheckAppUpdate,
+                onShareLogs = onShareLogs,
             )
         } else {
             MainScreen(
@@ -389,6 +416,8 @@ private fun SettingsScreen(
     onSave: () -> Unit,
     onPickFolder: () -> Unit,
     onUpdateYtDlp: () -> Unit,
+    onCheckAppUpdate: () -> Unit,
+    onShareLogs: () -> Unit,
 ) {
     Column(
         modifier =
@@ -440,6 +469,19 @@ private fun SettingsScreen(
         )
         FilledTonalButton(onClick = onUpdateYtDlp, modifier = Modifier.fillMaxWidth()) {
             Text("Check for yt-dlp update")
+        }
+        HorizontalDivider()
+        Text("App", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "Quark Downloader ${com.aspenini.quark.BuildConfig.VERSION_NAME} (not on Play Store)",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FilledTonalButton(onClick = onCheckAppUpdate, modifier = Modifier.fillMaxWidth()) {
+            Text("Check for app updates")
+        }
+        FilledTonalButton(onClick = onShareLogs, modifier = Modifier.fillMaxWidth()) {
+            Text("Share latest download log")
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

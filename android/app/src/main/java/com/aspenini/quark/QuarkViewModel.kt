@@ -4,9 +4,12 @@ import android.app.Application
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.aspenini.quark.data.AppUpdate
 import com.aspenini.quark.data.Catalog
 import com.aspenini.quark.data.QuarkSettings
 import com.aspenini.quark.data.SettingsStore
+import com.aspenini.quark.data.UpdateCheck
 import com.aspenini.quark.data.toStringList
 import com.aspenini.quark.download.DownloadJob
 import com.aspenini.quark.download.DownloadService
@@ -16,8 +19,12 @@ import com.yausername.youtubedl_android.YoutubeDL
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import com.aspenini.quark.BuildConfig
 
 data class UiSnapshot(
     val urlField: String = "",
@@ -31,6 +38,7 @@ data class UiSnapshot(
     val snackbar: String? = null,
     val ytDlpVersion: String? = null,
     val formats: List<String> = emptyList(),
+    val appUpdate: AppUpdate? = null,
 )
 
 class QuarkViewModel(app: Application) : AndroidViewModel(app) {
@@ -47,6 +55,7 @@ class QuarkViewModel(app: Application) : AndroidViewModel(app) {
                 QuarkNative.sessionStart(settings.downloadDir, settings.toJson()),
             )
         applyDispatch(started)
+        viewModelScope.launch { runCatching { checkAppUpdate() } }
     }
 
     fun formats(): List<String> = _ui.value.formats.ifEmpty { Catalog.formatsFor(_ui.value.audio) }
@@ -132,6 +141,17 @@ class QuarkViewModel(app: Application) : AndroidViewModel(app) {
         val ctx = getApplication<Application>()
         val version = YoutubeDL.versionName(ctx) ?: YoutubeDL.version(ctx)
         _ui.update { it.copy(ytDlpVersion = version) }
+    }
+
+    suspend fun checkAppUpdate(): AppUpdate? {
+        val found =
+            withContext(Dispatchers.IO) { UpdateCheck.latest(BuildConfig.VERSION_NAME) }
+        _ui.update { it.copy(appUpdate = found) }
+        return found
+    }
+
+    fun dismissAppUpdate() {
+        _ui.update { it.copy(appUpdate = null) }
     }
 
     fun updateYtDlp(): String {

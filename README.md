@@ -19,15 +19,15 @@
 
 ## Dependencies
 
-| Dependency         | Windows                           | macOS             | Linux                                                 |
-| ------------------ | --------------------------------- | ----------------- | ----------------------------------------------------- |
-| **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH (package manager / `pipx`)                       |
-| **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH (package manager)                                |
-| **GUI (optional)** | Win32 | AppKit | Qt 6; CuteCosmic integration on COSMIC |
+| Dependency         | Windows                           | macOS             | Linux                                                 | Android |
+| ------------------ | --------------------------------- | ----------------- | ----------------------------------------------------- | ------- |
+| **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH (package manager / `pipx`)                       | bundled (youtubedl-android) |
+| **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH (package manager)                                | bundled |
+| **GUI (optional)** | Win32 | AppKit | Qt 6; CuteCosmic integration on COSMIC | Jetpack Compose |
 
 **Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
-**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024); Linux GUI also needs Qt 6 Declarative development files | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools + `just dmg`
+**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024); Linux GUI also needs Qt 6 Declarative development files | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools + `just dmg` | Android: JDK 17 + NDK, `just android-release` (see [`android/README.md`](android/README.md))
 
 ## Binaries
 
@@ -35,6 +35,7 @@
 |---------|---------|
 | `quark-downloader` | Full CLI - interactive in a terminal, or scriptable with flags |
 | `quark-downloader-gui` | Qt frontend on Linux; AppKit frontend on macOS; Win32 frontend on Windows |
+| Android APK | Compose app; GitHub Releases only (not Play Store). GPL-3.0 because it links youtubedl-android. |
 
 The GUI queues multiple URLs (Add/Remove list) and downloads them sequentially with combined progress ("URL 2 of 5"). Playlist URLs download every item into a folder named after the playlist (see `playlist_folders`), with per-item progress and a failure summary.
 
