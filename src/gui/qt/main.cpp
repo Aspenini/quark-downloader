@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QDir>
 #include <QByteArray>
+#include <QList>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -84,14 +85,23 @@ extern "C" int qt_ui_run(int argc, char **argv)
         fprintf(stderr, "usage: --session|--progress|--message\n");
         return 2;
     }
-    // Copy before QGuiApplication, which may mutate argv.
-    const QByteArray modeBytes = QByteArray(argv[1]);
+    // Snapshot before QGuiApplication. Qt treats `--session <id>` as its own
+    // flag and would otherwise swallow the default output dir; the next leftover
+    // argument is yt-dlp's "path", which then became a folder named "path".
+    QList<QByteArray> rawArgs;
+    rawArgs.reserve(argc);
+    for (int i = 0; i < argc; ++i)
+        rawArgs.append(QByteArray(argv[i]));
+
+    const QByteArray modeBytes = rawArgs.at(1);
     const char *mode = modeBytes.constData();
     const bool progressMode = strcmp(mode, "--progress") == 0;
     // HelperProgress argv: --progress <unused> <theme>
-    const QByteArray progressTheme = (progressMode && argc > 3) ? QByteArray(argv[3]) : QByteArray();
+    const QByteArray progressTheme = (progressMode && rawArgs.size() > 3) ? rawArgs.at(3) : QByteArray();
 
-    QGuiApplication app(argc, argv);
+    int qtArgc = 1;
+    char *qtArgv[] = { rawArgs[0].data(), nullptr };
+    QGuiApplication app(qtArgc, qtArgv);
 
     QQmlApplicationEngine engine;
     QQmlContext *ctx = engine.rootContext();
@@ -99,12 +109,14 @@ extern "C" int qt_ui_run(int argc, char **argv)
     ctx->setContextProperty("quarkMode", QString::fromUtf8(mode));
 
     auto arg = [&](int i, const QString &fb) -> QString {
-        return (i + 2 < argc) ? QString::fromLocal8Bit(argv[i + 2]) : fb;
+        const int idx = i + 2;
+        return (idx < rawArgs.size()) ? QString::fromLocal8Bit(rawArgs.at(idx)) : fb;
     };
     auto barg = [&](int i, bool fb) {
-        if (i + 2 >= argc)
+        const int idx = i + 2;
+        if (idx >= rawArgs.size())
             return fb;
-        const QString v = QString::fromLocal8Bit(argv[i + 2]).toLower();
+        const QString v = QString::fromLocal8Bit(rawArgs.at(idx)).toLower();
         return v == "1" || v == "true" || v == "yes" || v == "on";
     };
 
@@ -131,13 +143,13 @@ extern "C" int qt_ui_run(int argc, char **argv)
             ? QStringLiteral("Message.qml")
             : QStringLiteral("Session.qml");
     if (strcmp(mode, "--message") == 0) {
-        ctx->setContextProperty("msgKind", argc > 2 ? QString::fromLocal8Bit(argv[2]) : QStringLiteral("ok"));
-        ctx->setContextProperty("msgTitle", argc > 3 ? QString::fromLocal8Bit(argv[3]) : QStringLiteral("Quark Downloader"));
+        ctx->setContextProperty("msgKind", rawArgs.size() > 2 ? QString::fromLocal8Bit(rawArgs.at(2)) : QStringLiteral("ok"));
+        ctx->setContextProperty("msgTitle", rawArgs.size() > 3 ? QString::fromLocal8Bit(rawArgs.at(3)) : QStringLiteral("Quark Downloader"));
         QString body;
-        for (int i = 4; i < argc; ++i) {
+        for (int i = 4; i < rawArgs.size(); ++i) {
             if (i > 4)
                 body += ' ';
-            body += QString::fromLocal8Bit(argv[i]);
+            body += QString::fromLocal8Bit(rawArgs.at(i));
         }
         ctx->setContextProperty("msgBody", body);
     }

@@ -150,10 +150,11 @@ impl Settings {
     }
 
     pub fn download_dir_expanded(&self, fallback: &Path) -> PathBuf {
-        if self.download_dir.is_empty() {
+        let dir = self.download_dir.trim();
+        if dir.is_empty() || dir == "~/Downloads" || dir == "~/Downloads/" {
             return fallback.to_path_buf();
         }
-        expand_path(&self.download_dir)
+        expand_path(dir)
     }
 }
 
@@ -692,6 +693,32 @@ mod tests {
             "canonical path should be display-friendly, got {s}"
         );
         assert!(path.is_absolute(), "{s}");
+    }
+
+    #[test]
+    fn tilde_downloads_expands_under_home() {
+        let path = expand_path("~/Downloads");
+        assert!(path.is_absolute(), "{}", path.display());
+        assert_eq!(path.file_name().and_then(|n| n.to_str()), Some("Downloads"));
+        assert_ne!(path.as_os_str(), "path");
+    }
+
+    #[test]
+    fn stock_download_dir_uses_platform_folder() {
+        let settings = Settings {
+            download_dir: "~/Downloads".into(),
+            ..Settings::default()
+        };
+        let fallback = PathBuf::from("/tmp/user-downloads");
+        assert_eq!(settings.download_dir_expanded(&fallback), fallback);
+        let custom = Settings {
+            download_dir: "~/Videos".into(),
+            ..Settings::default()
+        };
+        assert_eq!(
+            custom.download_dir_expanded(&fallback),
+            expand_path("~/Videos")
+        );
     }
 
     #[test]

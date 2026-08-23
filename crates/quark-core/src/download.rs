@@ -45,7 +45,7 @@ pub fn default_downloads_dir() -> PathBuf {
     if let Some(xdg) = xdg_download_dir() {
         return xdg;
     }
-    config::user_home().join("Downloads")
+    config::expand_path("~/Downloads")
 }
 
 fn xdg_download_dir() -> Option<PathBuf> {
@@ -53,9 +53,12 @@ fn xdg_download_dir() -> Option<PathBuf> {
     let file = home.join(".config").join("user-dirs.dirs");
     let text = fs::read_to_string(file).ok()?;
     for line in text.lines() {
-        if let Some(rest) = line.strip_prefix("XDG_DOWNLOAD_DIR=\"")
-            && let Some(inner) = rest.strip_suffix('"')
-        {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("XDG_DOWNLOAD_DIR=") {
+            let inner = rest.trim().trim_matches('"').trim_matches('\'');
+            if inner.is_empty() {
+                continue;
+            }
             let expanded = inner.replace("$HOME", &home.to_string_lossy());
             return Some(config::expand_path(&expanded));
         }
