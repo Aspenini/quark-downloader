@@ -21,6 +21,13 @@ quark-downloader.conf
 /.crystal/
 /.shards/
 
+# Android
+/android/.gradle/
+/android/**/build/
+/android/local.properties
+/android/.cxx/
+/android/captures/
+
 # OS / editor
 .DS_Store
 Thumbs.db

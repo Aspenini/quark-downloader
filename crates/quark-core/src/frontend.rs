@@ -150,8 +150,7 @@ impl HelperFrontend {
     }
 
     fn uses_frontend_flag(&self) -> bool {
-        is_builtin_frontend(&self.id)
-            || std::env::current_exe().is_ok_and(|exe| exe == self.path)
+        is_builtin_frontend(&self.id) || std::env::current_exe().is_ok_and(|exe| exe == self.path)
     }
 
     fn run(&self, args: &[String]) -> Result<(i32, String), FrontendError> {

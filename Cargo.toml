@@ -9,6 +9,7 @@ members = [
     "crates/quark-gui-win32",
     "crates/quark-gui-appkit",
     "crates/quark-gui-qt",
+    "crates/quark-android",
 ]
 
 [workspace.package]

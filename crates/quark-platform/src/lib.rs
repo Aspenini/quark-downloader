@@ -4,8 +4,21 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
-#[cfg(unix)]
+static CONFIG_DIR_OVERRIDE: RwLock<Option<PathBuf>> = RwLock::new(None);
+
+/// Android (and tests) inject the app-private config directory because there
+/// is no HOME / XDG / APPDATA that matches desktop layout.
+pub fn set_config_dir_override(dir: Option<PathBuf>) {
+    *CONFIG_DIR_OVERRIDE
+        .write()
+        .unwrap_or_else(|e| e.into_inner()) = dir;
+}
+
+#[cfg(target_os = "android")]
+mod android;
+#[cfg(all(unix, not(target_os = "android")))]
 mod unix;
 #[cfg(windows)]
 mod windows;
@@ -18,7 +31,11 @@ pub fn fetch_body(url: &str, user_agent: &str) -> io::Result<String> {
     {
         windows::fetch_body(url, user_agent)
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "android")]
+    {
+        android::fetch_body(url, user_agent)
+    }
+    #[cfg(all(unix, not(target_os = "android")))]
     {
         unix::fetch_body(url, user_agent)
     }
@@ -29,7 +46,11 @@ pub fn download_file(url: &str, dest: &Path, user_agent: &str) -> io::Result<()>
     {
         windows::download_file(url, dest, user_agent)
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "android")]
+    {
+        android::download_file(url, dest, user_agent)
+    }
+    #[cfg(all(unix, not(target_os = "android")))]
     {
         unix::download_file(url, dest, user_agent)
     }
@@ -72,9 +93,9 @@ fn existing_exe(path: &Path) -> Option<PathBuf> {
     path.is_file().then(|| path.to_path_buf())
 }
 
-/// Windows can ship bundled yt-dlp/ffmpeg; other hosts always use PATH.
+/// Windows and Android ship bundled yt-dlp/ffmpeg; other hosts always use PATH.
 pub fn allows_bundled_tools() -> bool {
-    cfg!(windows)
+    cfg!(windows) || cfg!(target_os = "android")
 }
 
 pub fn uses_inprocess_gui() -> bool {
@@ -153,6 +174,13 @@ fn strip_extended_prefix(s: &str) -> String {
 }
 
 pub fn config_dir(app: &str) -> PathBuf {
+    if let Some(dir) = CONFIG_DIR_OVERRIDE
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+    {
+        return dir;
+    }
     if let Some(appdata) = std::env::var_os("APPDATA") {
         return PathBuf::from(appdata).join(app);
     }
@@ -178,7 +206,11 @@ pub fn enable_virtual_terminal() {
 }
 
 pub fn is_root() -> bool {
-    #[cfg(unix)]
+    #[cfg(target_os = "android")]
+    {
+        android::is_root()
+    }
+    #[cfg(all(unix, not(target_os = "android")))]
     {
         unix::is_root()
     }
@@ -193,7 +225,11 @@ pub fn local_offset_secs() -> i64 {
     {
         windows::local_offset_secs()
     }
-    #[cfg(unix)]
+    #[cfg(target_os = "android")]
+    {
+        android::local_offset_secs()
+    }
+    #[cfg(all(unix, not(target_os = "android")))]
     {
         unix::local_offset_secs()
     }
@@ -208,13 +244,25 @@ pub fn sha256_hex(path: &Path) -> io::Result<String> {
     {
         windows::sha256_hex(path)
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "android")]
+    {
+        android::sha256_hex(path)
+    }
+    #[cfg(all(unix, not(target_os = "android")))]
     {
         sha256_hex_command(path)
     }
+    #[cfg(not(any(windows, unix)))]
+    {
+        let _ = path;
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "sha256 is not available on this host",
+        ))
+    }
 }
 
-#[cfg(not(windows))]
+#[cfg(all(unix, not(target_os = "android")))]
 fn sha256_hex_command(path: &Path) -> io::Result<String> {
     use std::process::Command;
     let output = Command::new("sha256sum").arg(path).output().or_else(|_| {
@@ -232,10 +280,13 @@ fn sha256_hex_command(path: &Path) -> io::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static CONFIG_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn cli_name_matches_host() {
-        if allows_bundled_tools() {
+        if cfg!(windows) {
             assert!(cli_name().ends_with(".exe"));
             assert_eq!(exe("ffmpeg"), "ffmpeg.exe");
         } else {
@@ -246,8 +297,19 @@ mod tests {
 
     #[test]
     fn config_dir_is_under_app_name() {
+        let _g = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_config_dir_override(None);
         let dir = config_dir("quark-downloader");
         assert!(dir.ends_with("quark-downloader"));
+    }
+
+    #[test]
+    fn config_dir_override_wins() {
+        let _g = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_config_dir_override(Some(PathBuf::from("/data/data/app/files/config")));
+        let dir = config_dir("quark-downloader");
+        set_config_dir_override(None);
+        assert_eq!(dir, PathBuf::from("/data/data/app/files/config"));
     }
 
     #[test]

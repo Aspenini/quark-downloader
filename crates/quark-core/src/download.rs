@@ -355,58 +355,27 @@ fn run_single(
         }
     }
 
-    let name_template = if settings.strip_video_ids {
-        "%(title)s.%(ext)s"
+    let ffmpeg_location = if format.needs_ffmpeg() {
+        Some(ffmpeg::ensure(settings).map_err(|e| e.0)?)
     } else {
-        "%(title)s [%(id)s].%(ext)s"
+        None
     };
-    let outtmpl = target_dir.join(name_template);
-
-    let mut cmd = vec![ytdlp.to_string_lossy().into_owned()];
-    if is_playlist {
-        cmd.extend(["--yes-playlist".into(), "--ignore-errors".into()]);
-    } else {
-        cmd.push("--no-playlist".into());
-    }
-    cmd.extend(["-o".into(), outtmpl.to_string_lossy().into_owned()]);
-    cmd.extend([
-        "--socket-timeout".into(),
-        "30".into(),
-        "--retries".into(),
-        "3".into(),
-        "--fragment-retries".into(),
-        "3".into(),
-    ]);
-
-    if media_type == MediaType::Audio {
-        cmd.extend(["-f".into(), "bestaudio/best".into()]);
-        if format.needs_ffmpeg() {
-            ffmpeg::append_to_cmd(&mut cmd, settings).map_err(|e| e.0)?;
-            cmd.extend(["-x".into(), "--audio-format".into(), format.as_str().into()]);
-        }
-    } else if format.needs_ffmpeg() {
-        ffmpeg::append_to_cmd(&mut cmd, settings).map_err(|e| e.0)?;
-        cmd.extend([
-            "-f".into(),
-            "bv*+ba/b".into(),
-            "--merge-output-format".into(),
-            format.as_str().into(),
-        ]);
-        match format {
-            Format::Webm => cmd.extend(["--recode-video".into(), "webm".into()]),
-            Format::Mp4 => cmd.extend(["--remux-video".into(), "mp4".into()]),
-            _ => {}
-        }
-    }
-
-    cmd.extend(["--newline".into(), "--windows-filenames".into()]);
-    if settings.sanitize_filenames {
-        cmd.push("--restrict-filenames".into());
-    }
-    if std::env::var_os("QUARK_GUI").as_deref() == Some(std::ffi::OsStr::new("1")) {
-        cmd.push("--no-color".into());
-    }
-    cmd.extend(ytdlp::extra_args(url));
+    let js_runtime = ytdlp::js_runtime();
+    let no_color = std::env::var_os("QUARK_GUI").as_deref() == Some(std::ffi::OsStr::new("1"));
+    let cmd = ytdlp::plan(&ytdlp::PlanRequest {
+        ytdlp,
+        url,
+        media_type,
+        format,
+        target_dir: &target_dir,
+        settings,
+        ffmpeg_location: ffmpeg_location.as_deref(),
+        js_runtime: js_runtime.as_deref(),
+        is_playlist,
+        no_color,
+    })
+    .map_err(|e| e.0)?
+    .command_line();
 
     let tracker = DestinationTracker::new();
     let active_timeout = stall_timeout_from_env(STALL_ACTIVE);

@@ -1,14 +1,18 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::{self, Settings, ToolSource};
 use crate::http;
 use crate::json;
 use crate::logs;
+use crate::media::{Format, MediaType};
 use crate::process;
 use crate::version_cmp;
+
+static INJECTED_JS_RUNTIME: RwLock<Option<String>> = RwLock::new(None);
 
 pub const MIN_YOUTUBE_YTDLP: &str = "2025.01.26";
 
@@ -120,12 +124,27 @@ pub fn youtube_url(url: &str) -> bool {
         || host.ends_with(".youtu.be")
 }
 
-pub fn js_runtime() -> Option<&'static str> {
+/// Override PATH detection with a yt-dlp `--js-runtimes` spec such as
+/// `quickjs:/data/app/.../libqjs.so`. Pass `None` to clear.
+pub fn set_injected_js_runtime(spec: Option<String>) {
+    *INJECTED_JS_RUNTIME
+        .write()
+        .unwrap_or_else(|e| e.into_inner()) = spec.filter(|s| !s.is_empty());
+}
+
+pub fn js_runtime() -> Option<String> {
+    if let Some(spec) = INJECTED_JS_RUNTIME
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+    {
+        return Some(spec);
+    }
     if process::which("deno").is_some() {
-        return Some("deno");
+        return Some("deno".into());
     }
     if process::which("node").is_some() {
-        return Some("node");
+        return Some("node".into());
     }
     None
 }
@@ -140,19 +159,131 @@ pub fn preflight_youtube(url: &str) -> Result<(), Error> {
 }
 
 pub fn extra_args(url: &str) -> Vec<String> {
+    extra_args_for_runtime(url, js_runtime().as_deref())
+}
+
+pub fn extra_args_for_runtime(url: &str, runtime: Option<&str>) -> Vec<String> {
     if !youtube_url(url) {
         return Vec::new();
     }
-    let mut args = Vec::new();
-    if let Some(runtime) = js_runtime() {
-        args.extend([
-            "--remote-components".into(),
-            "ejs".into(),
-            "--js-runtimes".into(),
-            runtime.into(),
-        ]);
+    let Some(runtime) = runtime.filter(|s| !s.is_empty()) else {
+        return Vec::new();
+    };
+    vec![
+        "--remote-components".into(),
+        "ejs".into(),
+        "--js-runtimes".into(),
+        runtime.to_string(),
+    ]
+}
+
+/// Program + args for one URL. Callers spawn this on desktop or hand `args`
+/// to an embedded runner on Android. Does not touch the filesystem.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Plan {
+    pub program: String,
+    pub args: Vec<String>,
+}
+
+impl Plan {
+    pub fn command_line(&self) -> Vec<String> {
+        let mut cmd = Vec::with_capacity(self.args.len() + 1);
+        cmd.push(self.program.clone());
+        cmd.extend(self.args.iter().cloned());
+        cmd
     }
-    args
+}
+
+pub struct PlanRequest<'a> {
+    pub ytdlp: &'a Path,
+    pub url: &'a str,
+    pub media_type: MediaType,
+    pub format: Format,
+    pub target_dir: &'a Path,
+    pub settings: &'a Settings,
+    pub ffmpeg_location: Option<&'a Path>,
+    pub js_runtime: Option<&'a str>,
+    pub is_playlist: bool,
+    pub no_color: bool,
+}
+
+pub fn plan(req: &PlanRequest<'_>) -> Result<Plan, Error> {
+    if req.format.needs_ffmpeg() && req.ffmpeg_location.is_none() {
+        return Err(Error(
+            "ffmpeg is required for this format but no ffmpeg location was provided".into(),
+        ));
+    }
+
+    let name_template = if req.settings.strip_video_ids {
+        "%(title)s.%(ext)s"
+    } else {
+        "%(title)s [%(id)s].%(ext)s"
+    };
+    let outtmpl = req.target_dir.join(name_template);
+
+    let mut args = Vec::new();
+    if req.is_playlist {
+        args.extend(["--yes-playlist".into(), "--ignore-errors".into()]);
+    } else {
+        args.push("--no-playlist".into());
+    }
+    args.extend(["-o".into(), outtmpl.to_string_lossy().into_owned()]);
+    args.extend([
+        "--socket-timeout".into(),
+        "30".into(),
+        "--retries".into(),
+        "3".into(),
+        "--fragment-retries".into(),
+        "3".into(),
+    ]);
+
+    if req.media_type == MediaType::Audio {
+        args.extend(["-f".into(), "bestaudio/best".into()]);
+        if req.format.needs_ffmpeg() {
+            push_ffmpeg_location(&mut args, req.ffmpeg_location)?;
+            args.extend([
+                "-x".into(),
+                "--audio-format".into(),
+                req.format.as_str().into(),
+            ]);
+        }
+    } else if req.format.needs_ffmpeg() {
+        push_ffmpeg_location(&mut args, req.ffmpeg_location)?;
+        args.extend([
+            "-f".into(),
+            "bv*+ba/b".into(),
+            "--merge-output-format".into(),
+            req.format.as_str().into(),
+        ]);
+        match req.format {
+            Format::Webm => args.extend(["--recode-video".into(), "webm".into()]),
+            Format::Mp4 => args.extend(["--remux-video".into(), "mp4".into()]),
+            _ => {}
+        }
+    }
+
+    args.extend(["--newline".into(), "--windows-filenames".into()]);
+    if req.settings.sanitize_filenames {
+        args.push("--restrict-filenames".into());
+    }
+    if req.no_color {
+        args.push("--no-color".into());
+    }
+    args.extend(extra_args_for_runtime(req.url, req.js_runtime));
+
+    Ok(Plan {
+        program: req.ytdlp.to_string_lossy().into_owned(),
+        args,
+    })
+}
+
+fn push_ffmpeg_location(args: &mut Vec<String>, location: Option<&Path>) -> Result<(), Error> {
+    let location = location.ok_or_else(|| {
+        Error("ffmpeg is required for this format but no ffmpeg location was provided".into())
+    })?;
+    args.push("--ffmpeg-location".into());
+    args.push(location.to_string_lossy().into_owned());
+    Ok(())
 }
 
 pub fn youtube_failure_hints() -> String {
@@ -424,5 +555,159 @@ mod tests {
         assert!(!youtube_url("https://evil.example/youtube.com"));
         assert!(!youtube_url("https://youtu.be.attacker.test/x"));
         assert!(!youtube_url("not a url"));
+    }
+
+    #[test]
+    fn extra_args_empty_for_non_youtube() {
+        assert!(extra_args_for_runtime("https://vimeo.com/1", Some("node")).is_empty());
+    }
+
+    #[test]
+    fn extra_args_skip_js_when_no_runtime() {
+        assert!(extra_args_for_runtime("https://www.youtube.com/watch?v=abc", None).is_empty());
+    }
+
+    #[test]
+    fn extra_args_include_injected_runtime_for_youtube() {
+        let args = extra_args_for_runtime(
+            "https://www.youtube.com/watch?v=abc",
+            Some("quickjs:/data/libqjs.so"),
+        );
+        assert_eq!(
+            args,
+            [
+                "--remote-components",
+                "ejs",
+                "--js-runtimes",
+                "quickjs:/data/libqjs.so"
+            ]
+        );
+    }
+
+    fn sample_settings() -> Settings {
+        let mut settings = Settings::default();
+        settings.strip_video_ids = true;
+        settings.sanitize_filenames = true;
+        settings
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn sample_request<'a>(
+        ytdlp: &'a Path,
+        url: &'a str,
+        media: MediaType,
+        format: Format,
+        target: &'a Path,
+        settings: &'a Settings,
+        ffmpeg: Option<&'a Path>,
+        runtime: Option<&'a str>,
+        playlist: bool,
+    ) -> PlanRequest<'a> {
+        PlanRequest {
+            ytdlp,
+            url,
+            media_type: media,
+            format,
+            target_dir: target,
+            settings,
+            ffmpeg_location: ffmpeg,
+            js_runtime: runtime,
+            is_playlist: playlist,
+            no_color: true,
+        }
+    }
+
+    #[test]
+    fn plan_rejects_convert_without_ffmpeg() {
+        let settings = sample_settings();
+        let err = plan(&sample_request(
+            Path::new("yt-dlp"),
+            "https://example.com/a",
+            MediaType::Video,
+            Format::Mp4,
+            Path::new("/out"),
+            &settings,
+            None,
+            None,
+            false,
+        ));
+        assert!(err.is_err(), "{err:?}");
+    }
+
+    #[test]
+    fn plan_audio_mp3_uses_extract_and_ffmpeg() {
+        let settings = sample_settings();
+        let ffmpeg = Path::new("/opt/ffmpeg");
+        let planned = plan(&sample_request(
+            Path::new("yt-dlp"),
+            "https://example.com/a",
+            MediaType::Audio,
+            Format::Mp3,
+            Path::new("/out"),
+            &settings,
+            Some(ffmpeg),
+            None,
+            false,
+        ))
+        .unwrap();
+        assert_eq!(planned.program, "yt-dlp");
+        let args = planned.args.join(" ");
+        assert!(args.contains("--no-playlist"));
+        assert!(args.contains("-f bestaudio/best"));
+        assert!(args.contains("--ffmpeg-location"));
+        assert!(args.contains("-x"));
+        assert!(args.contains("--audio-format mp3"));
+        assert!(args.contains("--restrict-filenames"));
+        assert!(args.contains("--no-color"));
+        assert!(!args.contains("--yes-playlist"));
+    }
+
+    #[test]
+    fn plan_video_mp4_merges_and_remuxes() {
+        let settings = sample_settings();
+        let ffmpeg = Path::new("/opt/ffmpeg");
+        let planned = plan(&sample_request(
+            Path::new("yt-dlp"),
+            "https://www.youtube.com/watch?v=abc",
+            MediaType::Video,
+            Format::Mp4,
+            Path::new("/out"),
+            &settings,
+            Some(ffmpeg),
+            Some("quickjs:/qjs"),
+            false,
+        ))
+        .unwrap();
+        let args = planned.args.join(" ");
+        assert!(args.contains("-f bv*+ba/b"));
+        assert!(args.contains("--merge-output-format mp4"));
+        assert!(args.contains("--remux-video mp4"));
+        assert!(args.contains("--js-runtimes quickjs:/qjs"));
+        assert!(args.contains("%(title)s.%(ext)s"));
+    }
+
+    #[test]
+    fn plan_playlist_and_keep_video_ids() {
+        let mut settings = sample_settings();
+        settings.strip_video_ids = false;
+        settings.sanitize_filenames = false;
+        let planned = plan(&sample_request(
+            Path::new("yt-dlp"),
+            "https://www.youtube.com/playlist?list=PLx",
+            MediaType::Video,
+            Format::Original,
+            Path::new("/out"),
+            &settings,
+            None,
+            None,
+            true,
+        ))
+        .unwrap();
+        let args = planned.args.join(" ");
+        assert!(args.contains("--yes-playlist"));
+        assert!(args.contains("--ignore-errors"));
+        assert!(args.contains("%(title)s [%(id)s].%(ext)s"));
+        assert!(!args.contains("--restrict-filenames"));
+        assert!(!args.contains("-f "));
     }
 }

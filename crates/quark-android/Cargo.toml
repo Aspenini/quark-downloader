@@ -1,0 +1,19 @@
+[package]
+name = "quark-android"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "JNI bindings for the Android Compose frontend"
+publish = false
+
+[lib]
+name = "quark"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jni = "0.21"
+quark-core = { path = "../quark-core" }
+quark-gui = { path = "../quark-gui" }
+quark-platform = { path = "../quark-platform" }

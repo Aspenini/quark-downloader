@@ -49,6 +49,11 @@ run-gui:
 run-gui:
     @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/run-gui.ps1
 
+[group('android')]
+[windows]
+android-spike:
+    @& .\android\gradlew.bat :app:assembleDebug
+
 [group('test')]
 test:
     @cargo test --workspace
