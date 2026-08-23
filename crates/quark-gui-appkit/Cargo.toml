@@ -4,12 +4,15 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Quark Downloader AppKit frontend helper (script runner; visual UI stays Swift)"
+description = "Quark Downloader AppKit frontend"
 publish = false
 
-[[bin]]
-name = "quark-downloader-gui-appkit-script"
-path = "src/main.rs"
+[lib]
+name = "quark_gui_appkit"
+path = "src/lib.rs"
 
 [dependencies]
 quark-gui = { path = "../quark-gui" }
+
+[build-dependencies]
+cc = "1"

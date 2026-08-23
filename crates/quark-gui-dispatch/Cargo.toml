@@ -20,3 +20,6 @@ quark-gui-win32 = { path = "../quark-gui-win32" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 quark-gui-qt = { path = "../quark-gui-qt" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+quark-gui-appkit = { path = "../quark-gui-appkit" }

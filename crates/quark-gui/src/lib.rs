@@ -6,7 +6,6 @@ pub mod capture;
 pub mod catalog;
 pub mod copy;
 pub mod event;
-pub mod ffi;
 pub mod reduce;
 pub mod script;
 

@@ -30,15 +30,6 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   fi
 fi
 
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  if command -v swiftc >/dev/null 2>&1; then
-    echo "  Compiling macOS GUI helper (swiftc)..."
-    swiftc -O -o "$build_dir/quark-downloader-gui-appkit" "$root"/src/gui/macos/*.swift -framework AppKit
-  else
-    echo "  (swiftc not found; skipping native macOS UI)"
-  fi
-fi
-
 echo "  UPX (CLI only)..."
 if [[ "$(uname -s)" == "Darwin" ]]; then
   echo "  (upx skipped on macOS)"
@@ -58,7 +49,4 @@ echo "  $binary"
 echo "  $gui_binary"
 if [[ -d "$build_dir/qml" ]]; then
   echo "  $build_dir/qml"
-fi
-if [[ -x "$build_dir/quark-downloader-gui-appkit" ]]; then
-  echo "  $build_dir/quark-downloader-gui-appkit"
 fi

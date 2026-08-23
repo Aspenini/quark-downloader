@@ -43,6 +43,7 @@ dependencies = [
 name = "quark-gui-appkit"
 version = "0.7.0"
 dependencies = [
+ "cc",
  "quark-gui",
 ]
 
@@ -52,6 +53,7 @@ version = "0.7.0"
 dependencies = [
  "quark-core",
  "quark-gui",
+ "quark-gui-appkit",
  "quark-gui-qt",
  "quark-gui-win32",
 ]

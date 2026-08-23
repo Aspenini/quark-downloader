@@ -26,6 +26,37 @@ fn unknown_frontend_exits_nonzero() {
     );
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn appkit_script_cancel() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = bin()
+        .args(["--frontend", "appkit", "--script"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(br#"{"args":{"default_dir":"/tmp/dl"},"events":[{"cancel":true}]}"#)
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\"action\":\"cancel\"") || stdout.contains("cancel"),
+        "stdout was {stdout:?}"
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn qt_script_cancel() {

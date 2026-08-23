@@ -49,7 +49,14 @@ fn builtin_frontends() -> Vec<&'static str> {
             .into_iter()
             .collect()
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        quark_gui_appkit::available()
+            .then_some("appkit")
+            .into_iter()
+            .collect()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         Vec::new()
     }
@@ -60,6 +67,8 @@ fn run_frontend(id: &str, args: &[String]) -> i32 {
     match id {
         #[cfg(target_os = "linux")]
         "qt" => quark_gui_qt::invoke(args),
+        #[cfg(target_os = "macos")]
+        "appkit" => quark_gui_appkit::invoke(args),
         other => {
             eprintln!("frontend '{other}' is not compiled into this binary");
             1

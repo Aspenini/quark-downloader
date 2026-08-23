@@ -66,27 +66,22 @@ fn frontend_bins() -> Vec<FrontendCmd> {
             prefix: Vec::new(),
         });
     }
-    if let Some(path) = option_env!("CARGO_BIN_EXE_quark-downloader-gui-appkit-script") {
-        bins.push(FrontendCmd {
-            name: "appkit-script",
-            bin: (*path).into(),
-            prefix: Vec::new(),
-        });
-    }
     // Integration tests in quark-gui cannot see other crates' CARGO_BIN_EXE.
     let mut candidates: Vec<(&str, &str, Vec<String>)> = vec![
         ("win32", "quark-downloader-gui-win32", vec![]),
-        (
-            "appkit-script",
-            "quark-downloader-gui-appkit-script",
-            vec![],
-        ),
     ];
     if cfg!(target_os = "linux") {
         candidates.push((
             "qt",
             "quark-downloader-gui",
             vec!["--frontend".into(), "qt".into()],
+        ));
+    }
+    if cfg!(target_os = "macos") {
+        candidates.push((
+            "appkit",
+            "quark-downloader-gui",
+            vec!["--frontend".into(), "appkit".into()],
         ));
     }
     for (name, file, prefix) in candidates {

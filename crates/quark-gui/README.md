@@ -4,11 +4,11 @@ Shared GUI library for Quark Downloader. Frontends bind widgets to the
 reducer in this crate. They must not invent format lists or session JSON.
 
 ```
-quark-gui              library: catalog, reduce, --script, C ABI
-quark-gui-dispatch     binary: quark-downloader-gui (Linux Qt frontend compiled in)
+quark-gui              library: catalog, reduce, --script
+quark-gui-dispatch     binary: quark-downloader-gui (Qt on Linux, AppKit on macOS)
 quark-gui-win32        Windows frontend (in-process + --script)
 quark-gui-qt           Qt 6 frontend (uses the system CuteCosmic theme on COSMIC)
-quark-gui-appkit       --script runner; visual UI is still Swift AppKit
+quark-gui-appkit       AppKit frontend (Objective-C compiled into the dispatcher)
 ```
 
 ## Contract
@@ -42,10 +42,11 @@ Does not open a window or need a display.
 `quark-downloader-gui` uses the frontend for this OS:
 
 1. Windows — in-process Win32
-2. macOS — AppKit helper beside the dispatcher, then `PATH`
+2. macOS — AppKit, compiled into `quark-downloader-gui` and run as
+   `quark-downloader-gui --frontend appkit` in its own process
 3. Linux — Qt, compiled into `quark-downloader-gui` and run as
    `quark-downloader-gui --frontend qt` in its own process
 
 `QUARK_GUI_FRONTEND` (id or full path) overrides helper discovery. On COSMIC,
 Qt consumes the system CuteCosmic platform theme when it is installed. Only
-`quark-downloader` and `quark-downloader-gui` are Linux executables.
+`quark-downloader` and `quark-downloader-gui` are shipped executables.

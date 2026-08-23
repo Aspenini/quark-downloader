@@ -10,7 +10,6 @@ publish = false
 [lib]
 name = "quark_gui"
 path = "src/lib.rs"
-crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 quark-core = { path = "../quark-core" }

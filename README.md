@@ -27,19 +27,18 @@
 
 **Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
-**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024); Linux GUI also needs Qt 6 Declarative development files | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools (`swiftc`) + `just dmg`
+**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024); Linux GUI also needs Qt 6 Declarative development files | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools + `just dmg`
 
 ## Binaries
 
 | Program | Purpose |
 |---------|---------|
 | `quark-downloader` | Full CLI - interactive in a terminal, or scriptable with flags |
-| `quark-downloader-gui` | Qt frontend on Linux; Win32 frontend on Windows |
-| `quark-downloader-gui-appkit` | macOS only: native AppKit windows (built with `swiftc`) |
+| `quark-downloader-gui` | Qt frontend on Linux; AppKit frontend on macOS; Win32 frontend on Windows |
 
 The GUI queues multiple URLs (Add/Remove list) and downloads them sequentially with combined progress ("URL 2 of 5"). Playlist URLs download every item into a folder named after the playlist (see `playlist_folders`), with per-item progress and a failure summary.
 
-Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop). Linux builds link the Qt 6 frontend when Qt Declarative is present. Qt automatically uses the installed [CuteCosmic](https://github.com/IgKh/cutecosmic) platform theme in a COSMIC session. On macOS the GUI uses `quark-downloader-gui-appkit` beside the binary. Frontends share `quark-gui` (catalog + session reducer + `--script` contract); see [`crates/quark-gui/README.md`](crates/quark-gui/README.md).
+Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop). Linux builds link the Qt 6 frontend when Qt Declarative is present. Qt automatically uses the installed [CuteCosmic](https://github.com/IgKh/cutecosmic) platform theme in a COSMIC session. macOS builds compile the AppKit frontend into `quark-downloader-gui`. Frontends share `quark-gui` (catalog + session reducer + `--script` contract); see [`crates/quark-gui/README.md`](crates/quark-gui/README.md).
 
 Windows shortcuts from the installer open the GUI; the CLI remains in the install folder as **Quark Downloader (CLI)**. Use **Check for updates** in settings to compare against the latest [GitHub release](https://github.com/Aspenini/quark-downloader/releases) and open the installer download when a newer version is published.
 
@@ -68,7 +67,7 @@ The download-naming settings are grouped under **Download Naming** in the GUI se
 ```bash
 just run          # cargo run CLI
 just run-gui      # cargo run GUI dispatcher
-just build        # release -> build/ (CLI + GUI; AppKit helper on macOS; UPX CLI)
+just build        # release -> build/ (CLI + GUI; UPX CLI)
 just dmg          # macOS: build "Quark Downloader.app" + DMG into dist/
 just test         # cargo test --workspace
 just clean

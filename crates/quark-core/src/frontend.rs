@@ -50,12 +50,18 @@ pub fn linux_auto_order() -> &'static [&'static str] {
     LINUX_AUTO_ORDER
 }
 
-/// The Qt frontend is compiled into quark-downloader-gui on Linux.
-pub fn is_builtin_linux_frontend(id: &str) -> bool {
-    id == "qt"
+/// Frontends compiled into quark-downloader-gui and re-exec'd with `--frontend`.
+pub fn is_builtin_frontend(id: &str) -> bool {
+    id == "qt" || id == "appkit"
 }
-pub const MACOS_HELPER_NAMES: &[&str] =
-    &["quark-downloader-gui-appkit", "quark-downloader-gui-helper"];
+
+pub fn host_auto_order() -> &'static [&'static str] {
+    if quark_platform::prefers_appkit() {
+        MACOS_AUTO_ORDER
+    } else {
+        linux_auto_order()
+    }
+}
 
 pub fn helper_binary_name(id: &str) -> String {
     format!("quark-downloader-gui-{id}")
@@ -80,20 +86,12 @@ pub fn discover_helper(builtins: &[&str]) -> Result<(String, PathBuf), FrontendE
             "QUARK_GUI_FRONTEND={value} was set but no helper was found."
         )));
     }
-    if quark_platform::prefers_appkit() {
-        for name in MACOS_HELPER_NAMES {
-            if let Some(path) = lookup_named(name) {
-                return Ok(("appkit".into(), path));
-            }
-        }
-        return Err(missing_helper_error(Some("appkit")));
-    }
-    for id in linux_auto_order() {
+    for id in host_auto_order() {
         if let Some(path) = lookup_id(id, builtins) {
             return Ok(((*id).to_string(), path));
         }
     }
-    Err(missing_helper_error(None))
+    Err(missing_helper_error(host_auto_order().first().copied()))
 }
 
 fn lookup_id(id: &str, builtins: &[&str]) -> Option<PathBuf> {
@@ -128,17 +126,14 @@ fn is_executable(path: &Path) -> bool {
 }
 
 fn missing_helper_error(id: Option<&str>) -> FrontendError {
-    let hint = if quark_platform::prefers_appkit() {
-        "Install the AppKit helper (quark-downloader-gui-appkit) next to this program.".to_string()
-    } else {
-        match id {
-            Some("qt") => {
-                "Qt frontend is not available.\nInstall Qt 6 Declarative and rebuild quark-downloader-gui."
-                    .into()
-            }
-            Some(id) => format!("GUI frontend '{id}' is not available in this build."),
-            None => "No GUI frontend is available in this build.".into(),
+    let hint = match id {
+        Some("qt") => {
+            "Qt frontend is not available.\nInstall Qt 6 Declarative and rebuild quark-downloader-gui."
+                .into()
         }
+        Some("appkit") => "AppKit frontend is not available in this build.".into(),
+        Some(id) => format!("GUI frontend '{id}' is not available in this build."),
+        None => "No GUI frontend is available in this build.".into(),
     };
     FrontendError(hint)
 }
@@ -155,14 +150,14 @@ impl HelperFrontend {
     }
 
     fn uses_frontend_flag(&self) -> bool {
-        is_builtin_linux_frontend(&self.id)
+        is_builtin_frontend(&self.id)
             || std::env::current_exe().is_ok_and(|exe| exe == self.path)
     }
 
     fn run(&self, args: &[String]) -> Result<(i32, String), FrontendError> {
         eprintln!("Opening {} ({})", self.id, self.path.display());
-        // The Qt frontend lives in this binary. Re-exec with --frontend so it
-        // gets a dedicated process and can write session JSON.
+        // Builtin frontends live in this binary. Re-exec with --frontend so they
+        // get a dedicated process and can write session JSON.
         let mut cmd = if self.uses_frontend_flag() {
             let mut c = Command::new(std::env::current_exe().unwrap_or_else(|_| self.path.clone()));
             c.arg("--frontend").arg(&self.id);
@@ -314,8 +309,10 @@ mod tests {
     fn helper_names() {
         assert_eq!(helper_binary_name("appkit"), "quark-downloader-gui-appkit");
         assert_eq!(LINUX_AUTO_ORDER, &["qt"]);
-        assert!(is_builtin_linux_frontend("qt"));
-        assert!(!is_builtin_linux_frontend("appkit"));
+        assert_eq!(MACOS_AUTO_ORDER, &["appkit"]);
+        assert!(is_builtin_frontend("qt"));
+        assert!(is_builtin_frontend("appkit"));
+        assert!(!is_builtin_frontend("win32"));
     }
 
     #[test]
@@ -336,6 +333,14 @@ mod tests {
     fn builtin_id_resolves_to_current_exe() {
         let (id, path) = discover_helper(&["qt"]).unwrap();
         assert_eq!(id, "qt");
+        assert_eq!(path, std::env::current_exe().unwrap());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn builtin_id_resolves_to_current_exe() {
+        let (id, path) = discover_helper(&["appkit"]).unwrap();
+        assert_eq!(id, "appkit");
         assert_eq!(path, std::env::current_exe().unwrap());
     }
 }
