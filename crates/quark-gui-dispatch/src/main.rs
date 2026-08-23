@@ -99,7 +99,7 @@ fn run_controller() {
         match session.action {
             MainAction::Download(params) => {
                 run_download(&cli.to_string_lossy(), &params);
-                continue;
+                return;
             }
             MainAction::Cancel => return,
             MainAction::Error(message) => {
