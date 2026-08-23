@@ -15,7 +15,8 @@ android {
         versionCode = 1
         versionName = "0.7.0-android-spike"
         ndk {
-            abiFilters += "arm64-v8a"
+            // arm64 for devices; x86_64 so `just android-run` can install on the desktop emulator.
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
 

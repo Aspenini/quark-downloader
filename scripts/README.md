@@ -9,6 +9,7 @@ Windows:
 
 - `windows/build.ps1`
 - `windows/run-gui.ps1`
+- `windows/run-android.ps1` (`just android-run`)
 - `windows/clean.ps1`
 
 Unix/macOS:

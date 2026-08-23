@@ -54,6 +54,11 @@ run-gui:
 android-spike:
     @& .\android\gradlew.bat :app:assembleDebug
 
+[group('android')]
+[windows]
+android-run:
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/run-android.ps1
+
 [group('test')]
 test:
     @cargo test --workspace

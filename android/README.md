@@ -21,11 +21,19 @@ If that fails, stop. Do not invent a Python embed.
 Need JDK 17 and Android SDK (`ANDROID_HOME` or `android/local.properties`).
 
 ```bash
-cd android
-./gradlew :app:assembleDebug
+just android-spike    # debug APK
+just android-run      # boot emulator, install, launch
 ```
 
-Install `app/build/outputs/apk/debug/app-debug.apk`. arm64-v8a only.
+`just android-run` builds arm64-v8a + x86_64, starts AVD **Quark** (android-35 google_apis x86_64, 4 KB pages) if needed, then `adb install` + launches the spike. Override the AVD with `ANDROID_AVD`. The existing Pixel 9 Pro image is 16 KB pages and often cannot load youtubedl-android's Python.
+
+First-time Quark AVD (if `just android-run` has not created it):
+
+```bash
+sdkmanager "system-images;android-35;google_apis;x86_64"
+```
+
+Debug APK: `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 Legacy JNI packaging (`useLegacyPackaging`) is required so Python and ffmpeg
 are executable from `nativeLibraryDir`.
