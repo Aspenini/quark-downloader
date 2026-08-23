@@ -99,43 +99,6 @@ impl FilenameSpaces {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum GuiFrontend {
-    #[default]
-    Auto,
-    Win32,
-    Appkit,
-    Qt,
-}
-
-impl GuiFrontend {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Win32 => "win32",
-            Self::Appkit => "appkit",
-            Self::Qt => "qt",
-        }
-    }
-
-    pub fn id(self) -> Option<&'static str> {
-        match self {
-            Self::Auto => None,
-            Self::Win32 => Some("win32"),
-            Self::Appkit => Some("appkit"),
-            Self::Qt => Some("qt"),
-        }
-    }
-
-    /// Windows in-process dialogs when Auto or an explicit Win32 pick.
-    pub fn uses_inprocess_win32(self) -> bool {
-        if !quark_platform::uses_inprocess_gui() {
-            return false;
-        }
-        matches!(self, Self::Auto | Self::Win32)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub download_dir: String,
@@ -149,7 +112,6 @@ pub struct Settings {
     pub sanitize_filenames: bool,
     pub filename_spaces: FilenameSpaces,
     pub playlist_folders: bool,
-    pub gui_frontend: GuiFrontend,
 }
 
 impl Default for Settings {
@@ -166,7 +128,6 @@ impl Default for Settings {
             sanitize_filenames: true,
             filename_spaces: FilenameSpaces::Keep,
             playlist_folders: true,
-            gui_frontend: GuiFrontend::Auto,
         }
     }
 }
@@ -230,7 +191,6 @@ fn public_keys() -> &'static [&'static str] {
             "sanitize_filenames",
             "filename_spaces",
             "playlist_folders",
-            "gui_frontend",
         ]
     } else {
         &[
@@ -243,7 +203,6 @@ fn public_keys() -> &'static [&'static str] {
             "sanitize_filenames",
             "filename_spaces",
             "playlist_folders",
-            "gui_frontend",
         ]
     }
 }
@@ -396,9 +355,7 @@ pub fn parse_file_with_keys(
                 settings.playlist_folders = parse_bool(value, "playlist_folders", true, quiet);
             }
             "gui_frontend" => {
-                if quark_platform::persist_gui_frontend() {
-                    settings.gui_frontend = parse_gui_frontend(value, quiet);
-                }
+                // Ignored: each OS has one frontend.
             }
             _ => {
                 if !quiet {
@@ -457,7 +414,6 @@ pub fn config_value(settings: &Settings, key: &str) -> String {
         "sanitize_filenames" => settings.sanitize_filenames.to_string(),
         "filename_spaces" => settings.filename_spaces.as_str().into(),
         "playlist_folders" => settings.playlist_folders.to_string(),
-        "gui_frontend" => settings.gui_frontend.as_str().into(),
         _ => String::new(),
     }
 }
@@ -634,21 +590,6 @@ fn parse_gtk_settings(text: &str) -> Option<bool> {
     None
 }
 
-pub fn parse_gui_frontend(value: &str, quiet: bool) -> GuiFrontend {
-    match value.to_ascii_lowercase().as_str() {
-        "win32" => GuiFrontend::Win32,
-        "appkit" => GuiFrontend::Appkit,
-        "qt" => GuiFrontend::Qt,
-        "auto" => GuiFrontend::Auto,
-        _ => {
-            if !quiet {
-                println!("Warning: invalid gui_frontend value {value:?}, using auto");
-            }
-            GuiFrontend::Auto
-        }
-    }
-}
-
 pub fn parse_bool(value: &str, key: &str, default: bool, quiet: bool) -> bool {
     match value.to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => true,
@@ -726,18 +667,6 @@ pub fn render(settings: &Settings) -> String {
         String::new(),
     ]);
 
-    if quark_platform::persist_gui_frontend() {
-        lines.extend([
-            "# Which GUI frontend to use".into(),
-            "#   auto     - Qt on Linux, the native frontend elsewhere".into(),
-            "#   qt       - Qt 6 (uses CuteCosmic when installed on COSMIC)".into(),
-            "#   win32    - in-process Win32 (Windows)".into(),
-            "#   appkit   - AppKit helper (macOS)".into(),
-            format!("gui_frontend = {}", settings.gui_frontend.as_str()),
-            String::new(),
-        ]);
-    }
-
     lines.join("\n")
 }
 
@@ -814,7 +743,6 @@ mod tests {
         assert!(settings.sanitize_filenames);
         assert_eq!(settings.filename_spaces, FilenameSpaces::Keep);
         assert!(settings.playlist_folders);
-        assert_eq!(settings.gui_frontend, GuiFrontend::Auto);
         let _ = fs::remove_file(&path);
     }
 
@@ -832,7 +760,6 @@ mod tests {
             sanitize_filenames: false,
             filename_spaces: FilenameSpaces::Dash,
             playlist_folders: false,
-            gui_frontend: GuiFrontend::Qt,
         };
         let rendered = render(&settings);
         assert!(rendered.contains("download_dir = D:/Downloads"));
@@ -844,7 +771,7 @@ mod tests {
             assert!(!rendered.contains("ffmpeg ="));
             assert!(rendered.contains("always resolved from PATH"));
         }
-        assert!(rendered.contains("gui_frontend = qt"));
+        assert!(!rendered.contains("gui_frontend"));
         assert!(rendered.contains("gui_download_mode = external_cli"));
         assert!(rendered.contains("download_logs = false"));
         assert!(rendered.contains("open_output_dir = true"));
@@ -875,9 +802,7 @@ mod tests {
         assert!(migrated.contains("sanitize_filenames = true"));
         assert!(migrated.contains("filename_spaces = keep"));
         assert!(migrated.contains("playlist_folders = true"));
-        if quark_platform::persist_gui_frontend() {
-            assert!(migrated.contains("gui_frontend = auto"));
-        }
+        assert!(!migrated.contains("gui_frontend"));
         let _ = fs::remove_file(&path);
     }
 

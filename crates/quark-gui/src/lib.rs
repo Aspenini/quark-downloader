@@ -10,10 +10,7 @@ pub mod ffi;
 pub mod reduce;
 pub mod script;
 
-pub use catalog::{
-    ALL_FRONTEND_IDS, AUDIO_FORMATS, MODES, SPACES, THEMES, TOOL_SOURCES, VIDEO_FORMATS,
-    supported_frontends,
-};
+pub use catalog::{AUDIO_FORMATS, MODES, SPACES, THEMES, TOOL_SOURCES, VIDEO_FORMATS};
 pub use copy::{ERR_EMPTY_DOWNLOAD_DIR, ERR_EMPTY_OUTPUT, ERR_EMPTY_QUEUE};
 pub use event::{REQUIRED_ACTIONS, UiEffect, UiEvent, View};
 pub use reduce::{UiState, reduce};

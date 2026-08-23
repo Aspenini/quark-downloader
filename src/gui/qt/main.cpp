@@ -72,7 +72,6 @@ static QJsonObject settingsFromCtx(QQmlContext *ctx)
         {"sanitize_filenames", b("sanitize")},
         {"filename_spaces", s("spaces")},
         {"playlist_folders", b("playlistFolders")},
-        {"gui_frontend", s("frontend")},
     };
 }
 
@@ -114,8 +113,7 @@ extern "C" int qt_ui_run(int argc, char **argv)
     ctx->setContextProperty("sanitize", barg(8, true));
     ctx->setContextProperty("spaces", arg(9, QStringLiteral("keep")));
     ctx->setContextProperty("playlistFolders", barg(10, true));
-    ctx->setContextProperty("frontend", arg(11, QStringLiteral("auto")));
-    ctx->setContextProperty("openOutputDir", barg(12, false));
+    ctx->setContextProperty("openOutputDir", barg(11, false));
     ctx->setContextProperty("outputDir", defaultDir);
 
     const QString qmlName = strcmp(mode, "--progress") == 0

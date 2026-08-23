@@ -29,11 +29,9 @@ QQC.ApplicationWindow {
     property bool draftSanitize: sanitize
     property string draftSpaces: spaces
     property bool draftFolders: playlistFolders
-    property string draftFrontend: frontend
 
     readonly property var audioFormats: ["original", "mp3", "m4a", "flac", "wav", "opus", "vorbis"]
     readonly property var videoFormats: ["original", "mp4", "mkv", "webm"]
-    readonly property var frontendChoices: ["auto", "qt"]
 
     onClosing: function(close) {
         close.accepted = false
@@ -52,8 +50,7 @@ QQC.ApplicationWindow {
             strip_video_ids: draftStrip,
             sanitize_filenames: draftSanitize,
             filename_spaces: draftSpaces,
-            playlist_folders: draftFolders,
-            gui_frontend: draftFrontend
+            playlist_folders: draftFolders
         }
     }
 
@@ -197,12 +194,6 @@ QQC.ApplicationWindow {
                 model: ["system", "light", "dark"]
                 Component.onCompleted: currentIndex = Math.max(0, model.indexOf(root.draftTheme))
                 onActivated: root.draftTheme = currentText
-            }
-            QQC.Label { text: "GUI frontend" }
-            QQC.ComboBox {
-                model: root.frontendChoices
-                Component.onCompleted: currentIndex = Math.max(0, model.indexOf(root.draftFrontend))
-                onActivated: root.draftFrontend = currentText
             }
             RowLayout {
                 Item { Layout.fillWidth: true }

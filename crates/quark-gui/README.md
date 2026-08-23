@@ -39,14 +39,13 @@ Does not open a window or need a display.
 
 ## Dispatcher protocol
 
-`quark-downloader-gui` picks a frontend and speaks:
+`quark-downloader-gui` uses the frontend for this OS:
 
-1. `QUARK_GUI_FRONTEND` — id or full path
-2. Config `gui_frontend` (`auto`, `qt`, `win32`, `appkit`)
-3. macOS AppKit helper beside the dispatcher, then `PATH`
+1. Windows — in-process Win32
+2. macOS — AppKit helper beside the dispatcher, then `PATH`
+3. Linux — Qt, compiled into `quark-downloader-gui` and run as
+   `quark-downloader-gui --frontend qt` in its own process
 
-Windows `auto`/`win32` is in-process Win32. Linux `auto` uses the Qt frontend,
-compiled into `quark-downloader-gui` and run as
-`quark-downloader-gui --frontend qt` in its own process. On COSMIC, Qt consumes
-the system CuteCosmic platform theme when it is installed. Only
+`QUARK_GUI_FRONTEND` (id or full path) overrides helper discovery. On COSMIC,
+Qt consumes the system CuteCosmic platform theme when it is installed. Only
 `quark-downloader` and `quark-downloader-gui` are Linux executables.

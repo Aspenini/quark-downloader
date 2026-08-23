@@ -77,11 +77,6 @@ pub fn allows_bundled_tools() -> bool {
     cfg!(windows)
 }
 
-/// All platforms persist `gui_frontend` so settings can pick a helper.
-pub fn persist_gui_frontend() -> bool {
-    true
-}
-
 pub fn uses_inprocess_gui() -> bool {
     cfg!(windows)
 }

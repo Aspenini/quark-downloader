@@ -56,7 +56,6 @@ On first run, Quark creates `quark-downloader.conf` under the user config direct
 | `download_logs` | `true` or `false`; applies to both CLI and GUI downloads |
 | `open_output_dir` | `true` or `false` (default `false`); GUI only, opens the output folder when a download finishes |
 | `gui_theme` | `system` (default), `light`, or `dark`. `system` follows Qt/CuteCosmic on Linux, macOS appearance in AppKit, and native Windows colors. |
-| `gui_frontend` | `auto` plus the frontend for this OS (`win32`, `appkit`, or `qt`). Pick in Settings. |
 | `strip_video_ids` | `true` (default) drops the trailing ` [VIDEOID]` from filenames |
 | `sanitize_filenames` | `true` (default) makes filenames mostly ASCII-safe on all platforms (`｜` -> `-`, accents transliterated, Windows-invalid characters removed) |
 | `filename_spaces` | `keep` (default), `underscore`, `dash`, or `remove` |

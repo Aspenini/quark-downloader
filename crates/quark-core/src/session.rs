@@ -34,7 +34,6 @@ pub struct SettingsForm {
     pub sanitize_filenames: bool,
     pub filename_spaces: String,
     pub playlist_folders: bool,
-    pub gui_frontend: String,
 }
 
 impl SettingsForm {
@@ -50,7 +49,6 @@ impl SettingsForm {
         sanitize_filenames: &str,
         filename_spaces: &str,
         playlist_folders: &str,
-        gui_frontend: &str,
         open_output_dir: &str,
     ) -> Self {
         Self {
@@ -72,9 +70,6 @@ impl SettingsForm {
                 .as_str()
                 .into(),
             playlist_folders: config::parse_bool(playlist_folders, "playlist_folders", true, true),
-            gui_frontend: config::parse_gui_frontend(gui_frontend, true)
-                .as_str()
-                .into(),
         }
     }
 
@@ -99,7 +94,6 @@ impl SettingsForm {
             sanitize_filenames: self.sanitize_filenames,
             filename_spaces: config::parse_filename_spaces(&self.filename_spaces, true),
             playlist_folders: self.playlist_folders,
-            gui_frontend: config::parse_gui_frontend(&self.gui_frontend, true),
         }
     }
 }
@@ -157,7 +151,6 @@ pub fn build_session_args(default_dir: &str, settings: &Settings) -> Vec<String>
         settings.sanitize_filenames.to_string(),
         settings.filename_spaces.as_str().into(),
         settings.playlist_folders.to_string(),
-        settings.gui_frontend.as_str().into(),
         settings.open_output_dir.to_string(),
     ]
 }
@@ -247,7 +240,6 @@ fn parse_settings_json(node: Option<&Value>) -> Option<SettingsForm> {
         &obj.get("playlist_folders")
             .map(Value::raw_display)
             .unwrap_or_else(|| "true".into()),
-        obj.get_str("gui_frontend").unwrap_or("auto"),
         &obj.get("open_output_dir")
             .map(Value::raw_display)
             .unwrap_or_else(|| "false".into()),
@@ -269,7 +261,7 @@ pub fn emit_json(
     );
     if let Some(settings) = settings {
         out.push_str(&format!(
-            ",\"settings\":{{\"download_dir\":{},\"yt_dlp\":{},\"ffmpeg\":{},\"gui_download_mode\":{},\"download_logs\":{},\"open_output_dir\":{},\"gui_theme\":{},\"strip_video_ids\":{},\"sanitize_filenames\":{},\"filename_spaces\":{},\"playlist_folders\":{},\"gui_frontend\":{}}}",
+            ",\"settings\":{{\"download_dir\":{},\"yt_dlp\":{},\"ffmpeg\":{},\"gui_download_mode\":{},\"download_logs\":{},\"open_output_dir\":{},\"gui_theme\":{},\"strip_video_ids\":{},\"sanitize_filenames\":{},\"filename_spaces\":{},\"playlist_folders\":{}}}",
             json::stringify_str(&settings.download_dir),
             json::stringify_str(&settings.yt_dlp),
             json::stringify_str(&settings.ffmpeg),
@@ -281,7 +273,6 @@ pub fn emit_json(
             settings.sanitize_filenames,
             json::stringify_str(&settings.filename_spaces),
             settings.playlist_folders,
-            json::stringify_str(&settings.gui_frontend),
         ));
     }
     if action == "download" {
@@ -376,9 +367,16 @@ fn parse_settings(block: &[&str]) -> Option<SettingsForm> {
             .copied()
             .unwrap_or(FilenameSpaces::Keep.as_str()),
         block.get(9).copied().unwrap_or("true"),
-        block.get(10).copied().unwrap_or("auto"),
-        block.get(11).copied().unwrap_or("false"),
+        open_output_from_legacy(block),
     ))
+}
+
+fn open_output_from_legacy<'a>(block: &[&'a str]) -> &'a str {
+    match block.get(10).copied() {
+        Some("auto" | "qt" | "win32" | "appkit") => block.get(11).copied().unwrap_or("false"),
+        Some(value) => value,
+        None => "false",
+    }
 }
 
 fn parse_download_multi(block: &[&str]) -> Option<MainAction> {
@@ -485,7 +483,6 @@ mod tests {
             sanitize_filenames: true,
             filename_spaces: FilenameSpaces::Underscore,
             playlist_folders: false,
-            gui_frontend: crate::config::GuiFrontend::Qt,
         };
         let expected_ytdlp = if quark_platform::allows_bundled_tools() {
             "bundled"
@@ -507,7 +504,6 @@ mod tests {
                 "true",
                 "underscore",
                 "false",
-                "qt",
                 "true",
             ]
         );
@@ -647,7 +643,6 @@ mod tests {
             "true",
             "keep",
             "true",
-            "auto",
             "on",
         );
         let settings = form.to_settings();
@@ -663,14 +658,5 @@ mod tests {
         assert!(!settings.download_logs);
         assert!(settings.open_output_dir);
         assert_eq!(settings.gui_theme, GuiTheme::Dark);
-    }
-
-    #[test]
-    fn parses_named_frontends() {
-        use crate::config::{GuiFrontend, parse_gui_frontend};
-        assert_eq!(parse_gui_frontend("qt", true), GuiFrontend::Qt);
-        assert_eq!(parse_gui_frontend("win32", true), GuiFrontend::Win32);
-        assert_eq!(parse_gui_frontend("appkit", true), GuiFrontend::Appkit);
-        assert_eq!(parse_gui_frontend("gtk", true), GuiFrontend::Auto);
     }
 }

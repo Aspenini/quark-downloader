@@ -61,11 +61,8 @@ pub fn helper_binary_name(id: &str) -> String {
     format!("quark-downloader-gui-{id}")
 }
 
-pub fn discover_helper(
-    settings: &Settings,
-    builtins: &[&str],
-) -> Result<(String, PathBuf), FrontendError> {
-    if settings.gui_frontend.uses_inprocess_win32() {
+pub fn discover_helper(builtins: &[&str]) -> Result<(String, PathBuf), FrontendError> {
+    if quark_platform::uses_inprocess_gui() {
         return Err(FrontendError(
             "Win32 in-process frontend does not use a helper binary".into(),
         ));
@@ -82,11 +79,6 @@ pub fn discover_helper(
         return Err(FrontendError(format!(
             "QUARK_GUI_FRONTEND={value} was set but no helper was found."
         )));
-    }
-    if let Some(id) = settings.gui_frontend.id() {
-        return lookup_id(id, builtins)
-            .map(|p| (id.to_string(), p))
-            .ok_or_else(|| missing_helper_error(Some(id)));
     }
     if quark_platform::prefers_appkit() {
         for name in MACOS_HELPER_NAMES {
@@ -157,8 +149,8 @@ pub struct HelperFrontend {
 }
 
 impl HelperFrontend {
-    pub fn discover(settings: &Settings, builtins: &[&str]) -> Result<Self, FrontendError> {
-        let (id, path) = discover_helper(settings, builtins)?;
+    pub fn discover(builtins: &[&str]) -> Result<Self, FrontendError> {
+        let (id, path) = discover_helper(builtins)?;
         Ok(Self { id, path })
     }
 
@@ -332,21 +324,17 @@ mod tests {
         unsafe {
             std::env::set_var("QUARK_GUI_FRONTEND", "/no/such/quark-frontend-binary");
         }
-        let settings = Settings::default();
-        let err = discover_helper(&settings, &[]);
+        let err = discover_helper(&[]);
         unsafe {
             std::env::remove_var("QUARK_GUI_FRONTEND");
         }
         assert!(err.is_err());
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn builtin_id_resolves_to_current_exe() {
-        let settings = Settings {
-            gui_frontend: crate::config::GuiFrontend::Qt,
-            ..Settings::default()
-        };
-        let (id, path) = discover_helper(&settings, &["qt"]).unwrap();
+        let (id, path) = discover_helper(&["qt"]).unwrap();
         assert_eq!(id, "qt");
         assert_eq!(path, std::env::current_exe().unwrap());
     }
