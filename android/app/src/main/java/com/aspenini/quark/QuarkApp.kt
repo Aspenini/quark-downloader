@@ -14,6 +14,8 @@ class QuarkApp : Application() {
         } catch (e: Exception) {
             Log.e(TAG, "youtubedl-android init failed", e)
         }
+        QuarkNative.setPaths(filesDir.absolutePath)
+        com.aspenini.quark.data.Catalog.load()
     }
 
     companion object {

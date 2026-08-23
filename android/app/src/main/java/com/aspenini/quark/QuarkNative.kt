@@ -1,18 +1,21 @@
 package com.aspenini.quark
 
-/**
- * JNI to `libquark.so` ([crates/quark-android]). The spike APK does not load
- * this yet; the Compose frontend will once cargo-ndk ships the cdylib.
- */
 object QuarkNative {
-    @JvmStatic
-    external fun setPaths(configDir: String)
+    init {
+        System.loadLibrary("quark")
+    }
 
-    @JvmStatic
-    external fun setJsRuntime(spec: String)
+    @JvmStatic external fun setPaths(configDir: String)
 
-    @JvmStatic
-    external fun guiScript(input: String): String
+    @JvmStatic external fun setJsRuntime(spec: String)
+
+    @JvmStatic external fun catalog(): String
+
+    @JvmStatic external fun sessionStart(defaultDir: String, settingsJson: String): String
+
+    @JvmStatic external fun sessionDispatch(eventJson: String): String
+
+    @JvmStatic external fun guiScript(input: String): String
 
     @JvmStatic
     external fun buildYtDlpArgs(
@@ -25,9 +28,13 @@ object QuarkNative {
         jsRuntime: String,
     ): String
 
-    @JvmStatic
-    external fun parseProgress(line: String): String
+    @JvmStatic external fun parseProgress(line: String): String
+
+    @JvmStatic external fun isPlaylistUrl(url: String): Boolean
 
     @JvmStatic
     external fun sanitizeFilename(name: String, asciiOnly: Boolean, spaces: String): String
+
+    @JvmStatic
+    external fun sanitizeComponent(name: String, asciiOnly: Boolean, spaces: String): String
 }

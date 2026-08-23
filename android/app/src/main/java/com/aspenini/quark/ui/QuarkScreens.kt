@@ -272,7 +272,7 @@ private fun MainScreen(
         item {
             FormatPicker(
                 value = ui.format,
-                options = Catalog.formatsFor(ui.audio),
+                options = ui.formats.ifEmpty { Catalog.formatsFor(ui.audio) },
                 enabled = !download.running,
                 onChange = onFormat,
             )

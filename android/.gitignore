@@ -8,4 +8,5 @@ captures/
 *.apk
 *.ap_
 *.aab
+app/src/main/jniLibs/
 .DS_Store

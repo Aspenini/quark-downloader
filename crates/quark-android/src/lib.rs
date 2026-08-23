@@ -16,6 +16,8 @@ use quark_core::progress;
 use quark_core::session::SettingsForm;
 use quark_core::ytdlp;
 
+mod session;
+
 pub fn set_paths(config_dir: Option<&str>) {
     quark_platform::set_config_dir_override(config_dir.map(PathBuf::from));
 }
@@ -54,6 +56,40 @@ pub fn build_ytdlp_args(
     })
     .map_err(|e| e.0)?;
     Ok(plan.args)
+}
+
+fn opts_json(args: &[String]) -> String {
+    const TAKES_VALUE: &[&str] = &[
+        "-o",
+        "-f",
+        "--socket-timeout",
+        "--retries",
+        "--fragment-retries",
+        "--ffmpeg-location",
+        "--audio-format",
+        "--merge-output-format",
+        "--recode-video",
+        "--remux-video",
+        "--remote-components",
+        "--js-runtimes",
+    ];
+    let mut i = 0;
+    let mut parts = Vec::new();
+    while i < args.len() {
+        let name = &args[i];
+        if TAKES_VALUE.contains(&name.as_str()) && i + 1 < args.len() {
+            parts.push(format!(
+                "{{\"n\":{},\"v\":{}}}",
+                json::stringify_str(name),
+                json::stringify_str(&args[i + 1])
+            ));
+            i += 2;
+        } else {
+            parts.push(format!("{{\"n\":{}}}", json::stringify_str(name)));
+            i += 1;
+        }
+    }
+    format!("[{}]", parts.join(","))
 }
 
 pub fn settings_from_json(text: &str) -> Result<Settings, String> {
@@ -97,18 +133,6 @@ pub fn sanitize_file_name(name: &str, ascii_only: bool, spaces: &str) -> Result<
     Ok(filename::sanitize_filename(name, ascii_only, policy))
 }
 
-fn json_string_array(items: &[String]) -> String {
-    let mut out = String::from("[");
-    for (i, item) in items.iter().enumerate() {
-        if i > 0 {
-            out.push(',');
-        }
-        out.push_str(&json::stringify_str(item));
-    }
-    out.push(']');
-    out
-}
-
 fn jni_string(env: &mut JNIEnv, value: JString) -> Result<String, String> {
     env.get_string(&value)
         .map(|s| String::from(s))
@@ -129,6 +153,81 @@ fn jni_return(env: &mut JNIEnv, s: &str) -> jstring {
 fn jni_error(env: &mut JNIEnv, msg: &str) -> jstring {
     let _ = env.throw_new("java/lang/IllegalArgumentException", msg);
     std::ptr::null_mut()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_aspenini_quark_QuarkNative_catalog(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    jni_return(&mut env, &session::catalog_json())
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_aspenini_quark_QuarkNative_sessionStart(
+    mut env: JNIEnv,
+    _class: JClass,
+    default_dir: JString,
+    settings_json: JString,
+) -> jstring {
+    match (|| {
+        let dir = jni_string(&mut env, default_dir)?;
+        let settings = jni_string(&mut env, settings_json)?;
+        session::start(&dir, &settings)
+    })() {
+        Ok(json) => jni_return(&mut env, &json),
+        Err(e) => jni_error(&mut env, &e),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_aspenini_quark_QuarkNative_sessionDispatch(
+    mut env: JNIEnv,
+    _class: JClass,
+    event_json: JString,
+) -> jstring {
+    match jni_string(&mut env, event_json).and_then(|s| session::dispatch(&s)) {
+        Ok(json) => jni_return(&mut env, &json),
+        Err(e) => jni_error(&mut env, &e),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_aspenini_quark_QuarkNative_isPlaylistUrl(
+    mut env: JNIEnv,
+    _class: JClass,
+    url: JString,
+) -> jni::sys::jboolean {
+    match jni_string(&mut env, url) {
+        Ok(url) => playlist::playlist_url(&url) as u8,
+        Err(_) => 0,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_aspenini_quark_QuarkNative_sanitizeComponent(
+    mut env: JNIEnv,
+    _class: JClass,
+    name: JString,
+    ascii_only: jni::sys::jboolean,
+    spaces: JString,
+) -> jstring {
+    let result = (|| {
+        let name = jni_string(&mut env, name)?;
+        let spaces = jni_string(&mut env, spaces)?;
+        let policy = match spaces.as_str() {
+            "keep" => SpacesPolicy::Keep,
+            "underscore" => SpacesPolicy::Underscore,
+            "dash" => SpacesPolicy::Dash,
+            "remove" => SpacesPolicy::Remove,
+            other => return Err(format!("unknown spaces policy: {other}")),
+        };
+        Ok(filename::sanitize_component(&name, ascii_only != 0, policy))
+    })();
+    match result {
+        Ok(s) => jni_return(&mut env, &s),
+        Err(e) => jni_error(&mut env, &e),
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -189,8 +288,12 @@ pub extern "system" fn Java_com_aspenini_quark_QuarkNative_buildYtDlpArgs(
         let format = jni_string(&mut env, format)?;
         let output_dir = jni_string(&mut env, output_dir)?;
         let settings = settings_from_json(&jni_string(&mut env, settings_json)?)?;
-        let ffmpeg = jni_optional(&mut env, ffmpeg_location)?;
+        let mut ffmpeg = jni_optional(&mut env, ffmpeg_location)?;
         let runtime = jni_optional(&mut env, js_runtime)?;
+        let parsed = Format::parse_for(MediaType::parse(&media)?, &format)?;
+        if parsed.needs_ffmpeg() && ffmpeg.is_none() {
+            ffmpeg = Some("ffmpeg".into());
+        }
         let args = build_ytdlp_args(
             &url,
             &media,
@@ -200,7 +303,7 @@ pub extern "system" fn Java_com_aspenini_quark_QuarkNative_buildYtDlpArgs(
             ffmpeg.as_deref().map(Path::new),
             runtime.as_deref(),
         )?;
-        Ok::<String, String>(json_string_array(&args))
+        Ok::<String, String>(opts_json(&args))
     })();
     match result {
         Ok(json) => jni_return(&mut env, &json),

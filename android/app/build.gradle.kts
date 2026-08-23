@@ -45,7 +45,25 @@ android {
             useLegacyPackaging = true
         }
     }
+    sourceSets.getByName("main") {
+        jniLibs.srcDir("src/main/jniLibs")
+    }
 }
+
+val repoRoot = rootProject.projectDir.parentFile
+val cargoJni =
+    tasks.register<Exec>("cargoJniLibs") {
+        workingDir = repoRoot
+        commandLine(
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            File(repoRoot, "scripts/windows/build-android-jni.ps1").absolutePath,
+        )
+    }
+tasks.named("preBuild").configure { dependsOn(cargoJni) }
 
 dependencies {
     val ytdl = "0.18.1"

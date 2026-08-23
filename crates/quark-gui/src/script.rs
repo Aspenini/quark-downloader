@@ -141,7 +141,7 @@ pub fn settings_from_value(value: &Value) -> Option<SettingsForm> {
     ))
 }
 
-fn events_from_value(value: &Value) -> Result<Vec<UiEvent>, String> {
+pub fn events_from_value(value: &Value) -> Result<Vec<UiEvent>, String> {
     if let Some(url) = value.get_str("add_url") {
         return Ok(vec![UiEvent::SetUrlField(url.to_string()), UiEvent::AddUrl]);
     }

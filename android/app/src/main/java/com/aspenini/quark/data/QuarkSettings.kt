@@ -2,6 +2,7 @@ package com.aspenini.quark.data
 
 import android.content.Context
 import android.os.Environment
+import org.json.JSONObject
 import java.io.File
 
 data class QuarkSettings(
@@ -31,7 +32,34 @@ data class QuarkSettings(
                 playlistFolders = true,
             )
         }
+
+        fun fromJson(o: JSONObject) =
+            QuarkSettings(
+                downloadDir = o.optString("download_dir", defaults().downloadDir),
+                downloadLogs = o.optBoolean("download_logs", true),
+                openOutputDir = o.optBoolean("open_output_dir", false),
+                guiTheme = o.optString("gui_theme", "system"),
+                stripVideoIds = o.optBoolean("strip_video_ids", true),
+                sanitizeFilenames = o.optBoolean("sanitize_filenames", true),
+                filenameSpaces = o.optString("filename_spaces", "keep"),
+                playlistFolders = o.optBoolean("playlist_folders", true),
+            )
     }
+
+    fun toJson(): String =
+        JSONObject()
+            .put("download_dir", downloadDir)
+            .put("yt_dlp", "auto")
+            .put("ffmpeg", "auto")
+            .put("gui_download_mode", "progress")
+            .put("download_logs", downloadLogs)
+            .put("open_output_dir", openOutputDir)
+            .put("gui_theme", guiTheme)
+            .put("strip_video_ids", stripVideoIds)
+            .put("sanitize_filenames", sanitizeFilenames)
+            .put("filename_spaces", filenameSpaces)
+            .put("playlist_folders", playlistFolders)
+            .toString()
 }
 
 class SettingsStore(context: Context) {

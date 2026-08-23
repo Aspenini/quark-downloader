@@ -67,9 +67,8 @@ fn frontend_bins() -> Vec<FrontendCmd> {
         });
     }
     // Integration tests in quark-gui cannot see other crates' CARGO_BIN_EXE.
-    let mut candidates: Vec<(&str, &str, Vec<String>)> = vec![
-        ("win32", "quark-downloader-gui-win32", vec![]),
-    ];
+    let mut candidates: Vec<(&str, &str, Vec<String>)> =
+        vec![("win32", "quark-downloader-gui-win32", vec![])];
     if cfg!(target_os = "linux") {
         candidates.push((
             "qt",

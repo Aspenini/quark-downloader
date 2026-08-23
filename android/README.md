@@ -41,19 +41,13 @@ Debug APK: `android/app/build/outputs/apk/debug/app-debug.apk`.
 Legacy JNI packaging (`useLegacyPackaging`) is required so Python and ffmpeg
 are executable from `nativeLibraryDir`.
 
-## Shared engine (next)
+## Shared engine
 
-`crates/quark-android` is the JNI cdylib (`libquark.so`): reducer script,
-yt-dlp argv, progress parse, filename sanitize. Host tests:
+The APK loads `libquark.so` (`crates/quark-android`). Catalog, session reducer,
+yt-dlp argv, playlist detection, filename sanitize, and progress parse all live
+in Rust. `just android-run` / Gradle `preBuild` cross-compiles it for arm64-v8a
+and x86_64 via `scripts/windows/build-android-jni.ps1` (needs NDK 26+).
 
 ```bash
 cargo test -p quark-android
 ```
-
-Cross-compile after `cargo install cargo-ndk` (NDK 26+ on `ANDROID_NDK_HOME`):
-
-```bash
-cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build -p quark-android --release
-```
-
-Do not `System.loadLibrary("quark")` in the spike until that `.so` is in the APK.

@@ -2,12 +2,12 @@ package com.aspenini.quark
 
 import android.app.Application
 import android.content.Intent
-import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import com.aspenini.quark.data.Catalog
 import com.aspenini.quark.data.QuarkSettings
 import com.aspenini.quark.data.SettingsStore
+import com.aspenini.quark.data.toStringList
 import com.aspenini.quark.download.DownloadJob
 import com.aspenini.quark.download.DownloadService
 import com.aspenini.quark.download.DownloadSession
@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import org.json.JSONObject
 
 data class UiSnapshot(
     val urlField: String = "",
@@ -29,145 +30,86 @@ data class UiSnapshot(
     val showSettings: Boolean = false,
     val snackbar: String? = null,
     val ytDlpVersion: String? = null,
+    val formats: List<String> = emptyList(),
 )
 
 class QuarkViewModel(app: Application) : AndroidViewModel(app) {
     private val store = SettingsStore(app)
-    private val _ui: MutableStateFlow<UiSnapshot>
-
-    init {
-        val settings = store.load()
-        _ui =
-            MutableStateFlow(
-                UiSnapshot(
-                    output = settings.downloadDir,
-                    settings = settings,
-                    draft = settings,
-                ),
-            )
-    }
+    private val _ui = MutableStateFlow(UiSnapshot())
 
     val ui: StateFlow<UiSnapshot> = _ui.asStateFlow()
     val download = DownloadSession.state
 
-    fun formats(): List<String> = Catalog.formatsFor(_ui.value.audio)
+    init {
+        val settings = store.load()
+        val started =
+            JSONObject(
+                QuarkNative.sessionStart(settings.downloadDir, settings.toJson()),
+            )
+        applyDispatch(started)
+    }
+
+    fun formats(): List<String> = _ui.value.formats.ifEmpty { Catalog.formatsFor(_ui.value.audio) }
 
     fun setUrlField(value: String) {
-        _ui.update { it.copy(urlField = value) }
+        dispatch(JSONObject().put("set_url_field", value))
     }
 
     fun addUrl() {
-        val url = _ui.value.urlField.trim()
-        if (url.isEmpty()) return
-        _ui.update { state ->
-            val queue = if (state.queue.contains(url)) state.queue else state.queue + url
-            state.copy(urlField = "", queue = queue)
-        }
+        val url = _ui.value.urlField
+        dispatch(JSONObject().put("add_url", url))
     }
 
     fun paste(text: String) {
-        val urls = ShareParser.extract(text).ifEmpty {
-            text.split(Regex("\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
-        }
-        if (urls.isEmpty()) return
-        _ui.update { state ->
-            val queue = state.queue.toMutableList()
-            for (url in urls) {
-                if (url !in queue) queue += url
-            }
-            state.copy(urlField = "", queue = queue)
-        }
+        dispatch(JSONObject().put("paste", text))
     }
 
     fun ingestIntent(intent: Intent?) {
         val urls = ShareParser.urlsFrom(intent)
         if (urls.isEmpty()) return
-        _ui.update { state ->
-            val queue = state.queue.toMutableList()
-            for (url in urls) {
-                if (url !in queue) queue += url
-            }
-            state.copy(
-                showSettings = false,
-                snackbar = if (urls.size == 1) "Added to queue" else "Added ${urls.size} URLs",
-                queue = queue,
-            )
-        }
+        dispatch(JSONObject().put("paste", urls.joinToString(" ")))
+        val msg = if (urls.size == 1) "Added to queue" else "Added ${urls.size} URLs"
+        _ui.update { it.copy(snackbar = msg) }
     }
 
     fun removeAt(index: Int) {
-        _ui.update { state ->
-            if (index !in state.queue.indices) return@update state
-            state.copy(queue = state.queue.toMutableList().also { it.removeAt(index) })
-        }
+        dispatch(JSONObject().put("select", index))
+        dispatch(JSONObject().put("remove_selected", true))
     }
 
     fun setAudio(audio: Boolean) {
-        _ui.update { it.copy(audio = audio, format = "original") }
+        dispatch(JSONObject().put("set_media", if (audio) "audio" else "video"))
     }
 
     fun setFormat(format: String) {
-        if (format !in Catalog.formatsFor(_ui.value.audio)) return
-        _ui.update { it.copy(format = format) }
+        dispatch(JSONObject().put("set_format", format))
     }
 
     fun openSettings() {
-        _ui.update { it.copy(showSettings = true, draft = it.settings) }
+        dispatch(JSONObject().put("open_settings", true))
     }
 
     fun closeSettings() {
-        _ui.update { it.copy(showSettings = false, draft = it.settings) }
+        dispatch(JSONObject().put("close_settings", true))
     }
 
     fun updateDraft(draft: QuarkSettings) {
-        _ui.update { it.copy(draft = draft) }
+        dispatch(JSONObject().put("set_setting", JSONObject(draft.toJson())))
     }
 
     fun resetDraft() {
-        _ui.update { it.copy(draft = QuarkSettings.defaults()) }
+        dispatch(JSONObject().put("reset_settings", true))
     }
 
     fun saveSettings() {
-        val draft = _ui.value.draft
-        if (draft.downloadDir.trim().isEmpty()) {
-            snack(Catalog.ERR_EMPTY_DOWNLOAD_DIR)
-            return
-        }
-        store.save(draft)
-        _ui.update {
-            it.copy(
-                settings = draft,
-                output = draft.downloadDir,
-                showSettings = false,
-            )
+        dispatch(JSONObject().put("save_settings", true))
+        if (!_ui.value.showSettings) {
+            store.save(_ui.value.settings)
         }
     }
 
     fun download() {
-        addUrl()
-        val state = _ui.value
-        if (state.queue.isEmpty()) {
-            snack(Catalog.ERR_EMPTY_QUEUE)
-            return
-        }
-        if (state.output.trim().isEmpty()) {
-            snack(Catalog.ERR_EMPTY_OUTPUT)
-            return
-        }
-        if (DownloadSession.state.value.running) {
-            snack("A download is already running.")
-            return
-        }
-        DownloadSession.pending =
-            DownloadJob(
-                urls = state.queue,
-                audio = state.audio,
-                format = state.format,
-                outputDir = state.output.trim(),
-                settings = state.settings,
-            )
-        val intent = Intent(getApplication(), DownloadService::class.java)
-        ContextCompat.startForegroundService(getApplication(), intent)
+        dispatch(JSONObject().put("download", true))
     }
 
     fun cancelDownload() {
@@ -200,5 +142,54 @@ class QuarkViewModel(app: Application) : AndroidViewModel(app) {
         return "yt-dlp $status ($version)"
     }
 
-    fun needsStoragePermission(): Boolean = Build.VERSION.SDK_INT < 29
+    private fun dispatch(event: JSONObject) {
+        applyDispatch(JSONObject(QuarkNative.sessionDispatch(event.toString())))
+    }
+
+    private fun applyDispatch(out: JSONObject) {
+        val state = out.getJSONObject("state")
+        val settings = QuarkSettings.fromJson(state.getJSONObject("settings"))
+        val draft = QuarkSettings.fromJson(state.getJSONObject("draft"))
+        val media = state.optString("media") == "audio"
+        _ui.update { prev ->
+            prev.copy(
+                urlField = state.optString("url_field"),
+                queue = state.getJSONArray("queue").toStringList(),
+                audio = media,
+                format = state.optString("format", "original"),
+                output = state.optString("output", settings.downloadDir),
+                settings = settings,
+                draft = draft,
+                showSettings = state.optString("view") == "settings",
+                formats = state.optJSONArray("formats")?.toStringList() ?: Catalog.formatsFor(media),
+            )
+        }
+        val effects = out.optJSONArray("effects") ?: return
+        for (i in 0 until effects.length()) {
+            val effect = effects.getJSONObject(i)
+            when {
+                effect.has("error") -> snack(effect.getString("error"))
+                effect.has("emit") -> onEmit(effect.getJSONObject("emit"))
+            }
+        }
+    }
+
+    private fun onEmit(emit: JSONObject) {
+        if (emit.optString("action") != "download") return
+        if (DownloadSession.state.value.running) {
+            snack("A download is already running.")
+            return
+        }
+        val urls = emit.getJSONArray("urls").toStringList()
+        DownloadSession.pending =
+            DownloadJob(
+                urls = urls,
+                audio = emit.optString("media_type") == "audio",
+                format = emit.optString("format"),
+                outputDir = emit.optString("output_dir"),
+                settings = _ui.value.settings,
+            )
+        val intent = Intent(getApplication(), DownloadService::class.java)
+        ContextCompat.startForegroundService(getApplication(), intent)
+    }
 }

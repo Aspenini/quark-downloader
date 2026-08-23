@@ -12,9 +12,11 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.aspenini.quark.MainActivity
+import com.aspenini.quark.QuarkNative
 import com.aspenini.quark.R
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -66,29 +68,36 @@ class DownloadService : Service() {
                 it.deleteRecursively()
                 it.mkdirs()
             }
-            val playlist = isPlaylistUrl(url)
+            val playlist = QuarkNative.isPlaylistUrl(url)
             var subdir: String? = null
             if (playlist && job.settings.playlistFolders) {
                 probePlaylistTitle(url)?.let { title ->
-                    subdir = sanitizeFolder(title)
+                    subdir =
+                        QuarkNative.sanitizeComponent(
+                            title,
+                            job.settings.sanitizeFilenames,
+                            job.settings.filenameSpaces,
+                        )
                 }
             }
             try {
                 val request = YoutubeDLRequest(url)
-                YtDlpPlanner.apply(
+                applyRustArgs(
                     request,
-                    YtDlpPlanner.build(
-                        url = url,
-                        audio = job.audio,
-                        format = job.format,
-                        targetDir = workDir,
-                        settings = job.settings,
-                        playlist = playlist,
+                    QuarkNative.buildYtDlpArgs(
+                        url,
+                        if (job.audio) "audio" else "video",
+                        job.format,
+                        workDir.absolutePath,
+                        job.settings.toJson(),
+                        "",
+                        "",
                     ),
                 )
                 YoutubeDL.execute(request, DownloadSession.PROCESS_ID) { percent, _, line ->
-                    DownloadSession.progress(n, job.urls.size, percent, line)
-                    notifyProgress(n, job.urls.size, percent.toInt(), line)
+                    val status = statusFromRust(line)
+                    DownloadSession.progress(n, job.urls.size, percent, status)
+                    notifyProgress(n, job.urls.size, percent.toInt(), status)
                 }
                 saved +=
                     MediaPublisher.publishTree(this, workDir, publicRoot, subdir)
@@ -211,6 +220,27 @@ class DownloadService : Service() {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW),
         )
+    }
+
+    private fun statusFromRust(line: String): String {
+        val parsed = QuarkNative.parseProgress(line)
+        if (parsed == "null" || parsed.isBlank()) return line
+        return runCatching {
+            JSONObject(parsed).optString("status").ifEmpty { line }
+        }.getOrDefault(line)
+    }
+
+    private fun applyRustArgs(request: YoutubeDLRequest, json: String) {
+        val arr = JSONArray(json)
+        for (i in 0 until arr.length()) {
+            val opt = arr.getJSONObject(i)
+            val name = opt.getString("n")
+            if (opt.has("v")) {
+                request.addOption(name, opt.getString("v"))
+            } else {
+                request.addOption(name)
+            }
+        }
     }
 
     companion object {
