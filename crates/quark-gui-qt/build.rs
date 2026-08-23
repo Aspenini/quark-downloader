@@ -1,6 +1,6 @@
 fn main() {
-    println!("cargo:rerun-if-changed=../../src/gui/kirigami");
-    println!("cargo:rustc-check-cfg=cfg(kirigami_ui)");
+    println!("cargo:rerun-if-changed=../../src/gui/qt");
+    println!("cargo:rustc-check-cfg=cfg(qt_ui)");
     #[cfg(target_os = "linux")]
     linux::try_compile();
 }
@@ -12,22 +12,22 @@ mod linux {
 
     pub fn try_compile() {
         let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        let src = manifest.join("../../src/gui/kirigami");
+        let src = manifest.join("../../src/gui/qt");
         let cpp = src.join("main.cpp");
         if !cpp.is_file() {
-            println!("cargo:warning=Kirigami main.cpp missing at {}", cpp.display());
+            println!("cargo:warning=Qt main.cpp missing at {}", cpp.display());
             return;
         }
 
         let Some(cflags) = pkg_config(&["--cflags", "Qt6Core", "Qt6Gui", "Qt6Qml", "Qt6Quick"])
         else {
             println!(
-                "cargo:warning=Qt 6 QML not found via pkg-config; Kirigami UI will not be linked (install qt6-declarative / qt6-declarative-dev and kirigami)"
+                "cargo:warning=Qt 6 QML not found via pkg-config; Qt UI will not be linked (install qt6-declarative / qt6-declarative-dev)"
             );
             return;
         };
         let Some(libs) = pkg_config(&["--libs", "Qt6Core", "Qt6Gui", "Qt6Qml", "Qt6Quick"]) else {
-            println!("cargo:warning=pkg-config --libs Qt6Quick failed; Kirigami UI will not be linked");
+            println!("cargo:warning=pkg-config --libs Qt6Quick failed; Qt UI will not be linked");
             return;
         };
 
@@ -39,32 +39,39 @@ mod linux {
             .file(&cpp)
             .flag_if_supported("-std=c++17")
             .flag_if_supported("-fPIC")
-            .define("KIRIGAMI_AS_LIBRARY", None)
-            .define("QUARK_KIRIGAMI_QML", qml_define.as_str())
+            .define("QUARK_QT_AS_LIBRARY", None)
+            .define("QUARK_QT_QML", qml_define.as_str())
             .warnings(false)
             .cargo_metadata(true);
 
-        for flag in &cflags {
+        let mut cflags = cflags.iter();
+        while let Some(flag) = cflags.next() {
+            if flag == "-I" || flag == "-isystem" {
+                if let Some(path) = cflags.next() {
+                    build.include(path);
+                }
+                continue;
+            }
             if let Some(inc) = flag.strip_prefix("-I") {
                 build.include(inc);
             } else if let Some(inc) = flag.strip_prefix("-isystem") {
-                if inc.is_empty() {
-                    continue;
+                let inc = inc.trim_start_matches('=');
+                if !inc.is_empty() {
+                    build.include(inc);
                 }
-                build.flag(flag);
             } else {
                 build.flag_if_supported(flag);
             }
         }
 
-        match build.try_compile("quark_kirigami_ui") {
+        match build.try_compile("quark_qt_ui") {
             Ok(()) => {
-                println!("cargo:rustc-cfg=kirigami_ui");
+                println!("cargo:rustc-cfg=qt_ui");
                 println!("cargo:rustc-link-lib=dylib=stdc++");
                 apply_link_flags(&libs);
             }
             Err(e) => {
-                println!("cargo:warning=failed to compile Kirigami UI with system Qt: {e}");
+                println!("cargo:warning=failed to compile Qt UI with system Qt: {e}");
             }
         }
     }

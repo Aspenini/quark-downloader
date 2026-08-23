@@ -23,23 +23,23 @@
 | ------------------ | --------------------------------- | ----------------- | ----------------------------------------------------- |
 | **yt-dlp**         | PATH or auto-download to `tools/` | PATH via Homebrew | PATH (package manager / `pipx`)                       |
 | **ffmpeg**         | PATH or bundled                   | PATH via Homebrew | PATH (package manager)                                |
-| **GUI (optional)** | Win32 | AppKit | COSMIC (iced) or Kirigami — pick in Settings |
+| **GUI (optional)** | Win32 | AppKit | Qt 6; CuteCosmic integration on COSMIC |
 
 **Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
-**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024); Linux COSMIC GUI needs 1.93+ (libcosmic) | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools (`swiftc`) + `just dmg`
+**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024); Linux GUI also needs Qt 6 Declarative development files | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools (`swiftc`) + `just dmg`
 
 ## Binaries
 
 | Program | Purpose |
 |---------|---------|
 | `quark-downloader` | Full CLI - interactive in a terminal, or scriptable with flags |
-| `quark-downloader-gui` | Dispatcher plus compiled-in Linux frontends (COSMIC / Kirigami); Win32 on Windows |
+| `quark-downloader-gui` | Qt frontend on Linux; Win32 frontend on Windows |
 | `quark-downloader-gui-appkit` | macOS only: native AppKit windows (built with `swiftc`) |
 
 The GUI queues multiple URLs (Add/Remove list) and downloads them sequentially with combined progress ("URL 2 of 5"). Playlist URLs download every item into a folder named after the playlist (see `playlist_folders`), with per-item progress and a failure summary.
 
-Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop). Linux builds include the COSMIC UI; Kirigami is linked when Qt 6 is present at compile time. On macOS the GUI uses `quark-downloader-gui-appkit` beside the binary. Frontends share `quark-gui` (catalog + session reducer + `--script` contract); see [`crates/quark-gui/README.md`](crates/quark-gui/README.md).
+Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop). Linux builds link the Qt 6 frontend when Qt Declarative is present. Qt automatically uses the installed [CuteCosmic](https://github.com/IgKh/cutecosmic) platform theme in a COSMIC session. On macOS the GUI uses `quark-downloader-gui-appkit` beside the binary. Frontends share `quark-gui` (catalog + session reducer + `--script` contract); see [`crates/quark-gui/README.md`](crates/quark-gui/README.md).
 
 Windows shortcuts from the installer open the GUI; the CLI remains in the install folder as **Quark Downloader (CLI)**. Use **Check for updates** in settings to compare against the latest [GitHub release](https://github.com/Aspenini/quark-downloader/releases) and open the installer download when a newer version is published.
 
@@ -54,8 +54,8 @@ On first run, Quark creates `quark-downloader.conf` under the user config direct
 | `ffmpeg` | **Windows only:** `auto`, `path`, or `bundled`. macOS/Linux always use PATH. |
 | `gui_download_mode` | `progress` for the GUI progress dialog, or `external_cli` to open the CLI window after Download |
 | `download_logs` | `true` or `false`; applies to both CLI and GUI downloads |
-| `gui_theme` | `system` (default), `light`, or `dark`. `system` follows the desktop: Plasma theme in Kirigami, COSMIC theme (including frosted glass) in the COSMIC UI, macOS appearance in AppKit. Windows stays native. |
-| `gui_frontend` | `auto` plus the frontends for this OS (`win32`, `appkit`, `cosmic`, `kirigami`). Pick in Settings. |
+| `gui_theme` | `system` (default), `light`, or `dark`. `system` follows Qt/CuteCosmic on Linux, macOS appearance in AppKit, and native Windows colors. |
+| `gui_frontend` | `auto` plus the frontend for this OS (`win32`, `appkit`, or `qt`). Pick in Settings. |
 | `strip_video_ids` | `true` (default) drops the trailing ` [VIDEOID]` from filenames |
 | `sanitize_filenames` | `true` (default) makes filenames mostly ASCII-safe on all platforms (`｜` -> `-`, accents transliterated, Windows-invalid characters removed) |
 | `filename_spaces` | `keep` (default), `underscore`, `dash`, or `remove` |

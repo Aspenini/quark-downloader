@@ -19,12 +19,14 @@ cp "$root/target/release/quark-downloader-gui" "$gui_binary"
 if [[ "$(uname -s)" == "Linux" ]]; then
   have_pkg() { command -v pkg-config >/dev/null && pkg-config --exists "$1"; }
   mkdir -p "$build_dir/qml"
-  cp "$root"/src/gui/kirigami/*.qml "$build_dir/qml/"
+  cp "$root"/src/gui/qt/*.qml "$build_dir/qml/"
   echo "  qml/"
   if ! have_pkg Qt6Quick || ! have_pkg Qt6Qml; then
-    echo "  (Kirigami UI not linked — no Qt6Quick.pc; COSMIC is still in the GUI)"
-    echo "    Arch:  sudo pacman -S --needed qt6-declarative kirigami pkgconf"
-    echo "    Debian/Ubuntu: sudo apt install qt6-declarative-dev qml6-module-org-kde-kirigami"
+    echo "  (Qt UI not linked — no Qt6Quick.pc)"
+    echo "    Arch:  sudo pacman -S --needed qt6-declarative pkgconf"
+    echo "    Debian/Ubuntu: sudo apt install qt6-declarative-dev"
+  elif [[ "${XDG_CURRENT_DESKTOP:-}" == *COSMIC* ]]; then
+    echo "  Tip: install CuteCosmic for native COSMIC colors, fonts, icons, and dialogs."
   fi
 fi
 

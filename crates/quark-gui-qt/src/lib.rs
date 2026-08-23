@@ -1,8 +1,8 @@
-//! Kirigami frontend. Visual UI is system Qt 6 + Kirigami QML, linked
-//! into quark-downloader-gui when Qt is present at build time.
+//! Qt 6 frontend for Linux. CuteCosmic is consumed as a system Qt platform
+//! theme when available; this crate does not link a desktop-specific toolkit.
 
 pub fn available() -> bool {
-    cfg!(kirigami_ui)
+    cfg!(qt_ui)
 }
 
 pub fn invoke(args: &[String]) -> i32 {
@@ -22,21 +22,21 @@ pub fn invoke(args: &[String]) -> i32 {
 }
 
 fn run_ui(args: &[String]) -> i32 {
-    #[cfg(kirigami_ui)]
+    #[cfg(qt_ui)]
     {
         return run_embedded(args);
     }
-    #[cfg(not(kirigami_ui))]
+    #[cfg(not(qt_ui))]
     {
         let _ = args;
         eprintln!(
-            "Kirigami UI was not compiled into this binary.\nInstall Qt 6 + Kirigami (qt6-declarative, kirigami) and rebuild."
+            "Qt UI was not compiled into this binary.\nInstall Qt 6 Declarative and rebuild."
         );
         1
     }
 }
 
-#[cfg(kirigami_ui)]
+#[cfg(qt_ui)]
 fn run_embedded(args: &[String]) -> i32 {
     use std::ffi::CString;
     use std::os::raw::c_char;
@@ -54,12 +54,12 @@ fn run_embedded(args: &[String]) -> i32 {
         argv.push(CString::new(a.as_str()).unwrap_or_default());
     }
     let mut ptrs: Vec<*mut c_char> = argv.iter().map(|s| s.as_ptr() as *mut c_char).collect();
-    unsafe { kirigami_ui_run(ptrs.len() as i32, ptrs.as_mut_ptr()) }
+    unsafe { qt_ui_run(ptrs.len() as i32, ptrs.as_mut_ptr()) }
 }
 
-#[cfg(kirigami_ui)]
+#[cfg(qt_ui)]
 fn set_qml_env() {
-    if std::env::var_os("QUARK_KIRIGAMI_QML").is_some() {
+    if std::env::var_os("QUARK_QT_QML").is_some() {
         return;
     }
     if let Ok(exe) = std::env::current_exe()
@@ -69,13 +69,13 @@ fn set_qml_env() {
         if qml.is_dir() {
             // Safety: called once before QGuiApplication; no other threads yet.
             unsafe {
-                std::env::set_var("QUARK_KIRIGAMI_QML", qml);
+                std::env::set_var("QUARK_QT_QML", qml);
             }
         }
     }
 }
 
-#[cfg(kirigami_ui)]
+#[cfg(qt_ui)]
 unsafe extern "C" {
-    fn kirigami_ui_run(argc: i32, argv: *mut *mut std::os::raw::c_char) -> i32;
+    fn qt_ui_run(argc: i32, argv: *mut *mut std::os::raw::c_char) -> i32;
 }

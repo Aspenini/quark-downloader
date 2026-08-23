@@ -105,8 +105,7 @@ pub enum GuiFrontend {
     Auto,
     Win32,
     Appkit,
-    Cosmic,
-    Kirigami,
+    Qt,
 }
 
 impl GuiFrontend {
@@ -115,8 +114,7 @@ impl GuiFrontend {
             Self::Auto => "auto",
             Self::Win32 => "win32",
             Self::Appkit => "appkit",
-            Self::Cosmic => "cosmic",
-            Self::Kirigami => "kirigami",
+            Self::Qt => "qt",
         }
     }
 
@@ -125,8 +123,7 @@ impl GuiFrontend {
             Self::Auto => None,
             Self::Win32 => Some("win32"),
             Self::Appkit => Some("appkit"),
-            Self::Cosmic => Some("cosmic"),
-            Self::Kirigami => Some("kirigami"),
+            Self::Qt => Some("qt"),
         }
     }
 
@@ -612,7 +609,11 @@ fn parse_gtk_settings(text: &str) -> Option<bool> {
             return parse_boolish(rest.trim().trim_start_matches('=').trim());
         }
         if let Some(rest) = line.strip_prefix("gtk-interface-color-scheme") {
-            let v = rest.trim().trim_start_matches('=').trim().to_ascii_lowercase();
+            let v = rest
+                .trim()
+                .trim_start_matches('=')
+                .trim()
+                .to_ascii_lowercase();
             if v.contains("dark") {
                 return Some(true);
             }
@@ -628,8 +629,7 @@ pub fn parse_gui_frontend(value: &str, quiet: bool) -> GuiFrontend {
     match value.to_ascii_lowercase().as_str() {
         "win32" => GuiFrontend::Win32,
         "appkit" => GuiFrontend::Appkit,
-        "cosmic" => GuiFrontend::Cosmic,
-        "kirigami" => GuiFrontend::Kirigami,
+        "qt" => GuiFrontend::Qt,
         "auto" => GuiFrontend::Auto,
         _ => {
             if !quiet {
@@ -717,9 +717,8 @@ pub fn render(settings: &Settings) -> String {
     if quark_platform::persist_gui_frontend() {
         lines.extend([
             "# Which GUI frontend to use".into(),
-            "#   auto     - Kirigami on KDE, COSMIC otherwise".into(),
-            "#   cosmic   - COSMIC / libcosmic (compiled into the GUI)".into(),
-            "#   kirigami - Kirigami (compiled into the GUI; needs Qt 6 at build)".into(),
+            "#   auto     - Qt on Linux, the native frontend elsewhere".into(),
+            "#   qt       - Qt 6 (uses CuteCosmic when installed on COSMIC)".into(),
             "#   win32    - in-process Win32 (Windows)".into(),
             "#   appkit   - AppKit helper (macOS)".into(),
             format!("gui_frontend = {}", settings.gui_frontend.as_str()),
@@ -807,7 +806,7 @@ mod tests {
             sanitize_filenames: false,
             filename_spaces: FilenameSpaces::Dash,
             playlist_folders: false,
-            gui_frontend: GuiFrontend::Cosmic,
+            gui_frontend: GuiFrontend::Qt,
         };
         let rendered = render(&settings);
         assert!(rendered.contains("download_dir = D:/Downloads"));
@@ -819,7 +818,7 @@ mod tests {
             assert!(!rendered.contains("ffmpeg ="));
             assert!(rendered.contains("always resolved from PATH"));
         }
-        assert!(rendered.contains("gui_frontend = cosmic"));
+        assert!(rendered.contains("gui_frontend = qt"));
         assert!(rendered.contains("gui_download_mode = external_cli"));
         assert!(rendered.contains("download_logs = false"));
         assert!(rendered.contains("gui_theme = dark"));

@@ -6,13 +6,12 @@ pkgdesc='Interactive CLI and GUI wrapper for yt-dlp'
 arch=('x86_64')
 url='https://github.com/Aspenini/quark-downloader'
 license=('MIT')
-depends=('ffmpeg' 'hicolor-icon-theme' 'yt-dlp')
-makedepends=('cargo' 'rust')
+depends=('ffmpeg' 'hicolor-icon-theme' 'qt6-declarative' 'yt-dlp')
+makedepends=('cargo' 'pkgconf' 'rust')
 optdepends=(
+  'cutecosmic-git: COSMIC desktop integration for the Qt GUI'
   'deno: JavaScript runtime support for YouTube downloads'
   'nodejs: JavaScript runtime support for YouTube downloads'
-  'qt6-declarative: Kirigami GUI at build time'
-  'kirigami: Kirigami GUI at build time'
 )
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
 sha256sums=('SKIP')
@@ -34,7 +33,7 @@ package() {
   ln -s "../lib/${pkgname}/quark-downloader-gui" "${pkgdir}/usr/bin/quark-downloader-gui"
 
   install -dm755 "${pkgdir}/usr/lib/${pkgname}/qml"
-  install -Dm644 src/gui/kirigami/*.qml "${pkgdir}/usr/lib/${pkgname}/qml/"
+  install -Dm644 src/gui/qt/*.qml "${pkgdir}/usr/lib/${pkgname}/qml/"
 
   install -Dm644 packaging/quark-downloader.desktop "${pkgdir}/usr/share/applications/quark-downloader.desktop"
   install -Dm644 packaging/quark-downloader-gui.desktop "${pkgdir}/usr/share/applications/quark-downloader-gui.desktop"

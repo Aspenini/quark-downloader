@@ -8,7 +8,7 @@ pub const THEMES: &[&str] = &["system", "light", "dark"];
 pub const TOOL_SOURCES: &[&str] = &["auto", "path", "bundled"];
 
 /// Every settings UI must offer this list (plus `auto`).
-pub const ALL_FRONTEND_IDS: &[&str] = &["cosmic", "kirigami", "win32", "appkit"];
+pub const ALL_FRONTEND_IDS: &[&str] = &["qt", "win32", "appkit"];
 
 pub fn formats_for(media: quark_core::MediaType) -> &'static [&'static str] {
     quark_core::Format::choices(media)
@@ -26,7 +26,7 @@ pub fn supported_frontends() -> &'static [&'static str] {
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        &["auto", "cosmic", "kirigami"]
+        &["auto", "qt"]
     }
     #[cfg(not(any(windows, unix)))]
     {
@@ -45,8 +45,7 @@ mod tests {
         assert_eq!(list.first().copied(), Some("auto"));
         #[cfg(all(unix, not(target_os = "macos")))]
         {
-            assert!(list.contains(&"cosmic"));
-            assert!(list.contains(&"kirigami"));
+            assert!(list.contains(&"qt"));
         }
         #[cfg(windows)]
         {

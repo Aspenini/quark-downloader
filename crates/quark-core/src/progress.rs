@@ -418,12 +418,8 @@ mod tests {
             .unwrap();
         let text = String::from_utf8(output).unwrap();
         let lines: Vec<&str> = text.lines().collect();
-        assert!(lines.iter().any(|l| *l == "QUEUE\tURL 2 of 5"));
-        assert!(
-            lines
-                .iter()
-                .any(|l| *l == "QUEUE\tURL 2 of 5 - item 3 of 12")
-        );
+        assert!(lines.contains(&"QUEUE\tURL 2 of 5"));
+        assert!(lines.contains(&"QUEUE\tURL 2 of 5 - item 3 of 12"));
         assert_eq!(lines.iter().filter(|l| l.starts_with("ETA")).count(), 2);
     }
 
@@ -476,7 +472,7 @@ mod tests {
             .unwrap();
         let text = String::from_utf8(output).unwrap();
         let lines: Vec<&str> = text.lines().collect();
-        assert!(lines.iter().any(|l| *l == "QUEUE\titem 2 of 3"));
+        assert!(lines.contains(&"QUEUE\titem 2 of 3"));
         assert!(lines.last().unwrap().starts_with("STATUS\t"));
     }
 }

@@ -1,5 +1,5 @@
-// Quark Downloader — Kirigami helper. Dynamically links system Qt 6.
-// Kirigami itself is a QML module provided by the distro.
+// Quark Downloader — Qt Quick helper. Dynamically links system Qt 6 and
+// picks up platform themes such as CuteCosmic through Qt itself.
 #include <QGuiApplication>
 #include <QStyleHints>
 #include <QQmlApplicationEngine>
@@ -17,15 +17,15 @@
 
 static QString qmlDir()
 {
-    const QString fromEnv = qEnvironmentVariable("QUARK_KIRIGAMI_QML");
+    const QString fromEnv = qEnvironmentVariable("QUARK_QT_QML");
     if (!fromEnv.isEmpty() && QDir(fromEnv).exists())
         return fromEnv;
     const QString sibling = QCoreApplication::applicationDirPath() + "/qml";
     if (QDir(sibling).exists())
         return sibling;
-#ifdef QUARK_KIRIGAMI_QML
+#ifdef QUARK_QT_QML
     {
-        const QString baked = QString::fromUtf8(QUARK_KIRIGAMI_QML);
+        const QString baked = QString::fromUtf8(QUARK_QT_QML);
         if (QDir(baked).exists())
             return baked;
     }
@@ -75,7 +75,7 @@ static QJsonObject settingsFromCtx(QQmlContext *ctx)
     };
 }
 
-extern "C" int kirigami_ui_run(int argc, char **argv)
+extern "C" int qt_ui_run(int argc, char **argv)
 {
     if (argc < 2) {
         fprintf(stderr, "usage: --session|--progress|--message\n");
@@ -85,7 +85,6 @@ extern "C" int kirigami_ui_run(int argc, char **argv)
     const QByteArray modeBytes = QByteArray(argv[1]);
     const char *mode = modeBytes.constData();
 
-    qputenv("QT_QUICK_CONTROLS_STYLE", "org.kde.desktop");
     QGuiApplication app(argc, argv);
 
     QQmlApplicationEngine engine;
@@ -144,8 +143,7 @@ extern "C" int kirigami_ui_run(int argc, char **argv)
         return 1;
     QObject *root = engine.rootObjects().constFirst();
 
-    // Qt 6 cannot mix SIGNAL() with a lambda. QML writes pendingSubmit /
-    // pendingClose; a typed QTimer slot reads them.
+    // QML writes pendingSubmit; a typed QTimer slot forwards it to stdout.
     auto *timer = new QTimer(&app);
     timer->setInterval(20);
     QObject::connect(timer, &QTimer::timeout, &app, [root]() {
@@ -159,8 +157,6 @@ extern "C" int kirigami_ui_run(int argc, char **argv)
             QCoreApplication::exit(0);
             return;
         }
-        if (root->property("pendingClose").toBool())
-            QCoreApplication::quit();
     });
     timer->start();
 
@@ -179,9 +175,9 @@ extern "C" int kirigami_ui_run(int argc, char **argv)
     return app.exec();
 }
 
-#ifndef KIRIGAMI_AS_LIBRARY
+#ifndef QUARK_QT_AS_LIBRARY
 int main(int argc, char **argv)
 {
-    return kirigami_ui_run(argc, argv);
+    return qt_ui_run(argc, argv);
 }
 #endif

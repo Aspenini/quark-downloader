@@ -81,7 +81,7 @@ pub fn reduce(state: &mut UiState, event: UiEvent) -> Vec<UiEffect> {
             Vec::new()
         }
         UiEvent::Download => download(state),
-        UiEvent::Cancel | UiEvent::Close => vec![UiEffect::Emit(emit_cancel(state))],
+        UiEvent::Cancel | UiEvent::Close => vec![UiEffect::Emit(Box::new(emit_cancel(state)))],
         UiEvent::OpenSettings => {
             state.draft = state.settings.clone();
             state.view = View::Settings;
@@ -137,7 +137,7 @@ fn download(state: &mut UiState) -> Vec<UiEffect> {
         effects.push(UiEffect::Error(copy::ERR_EMPTY_OUTPUT.into()));
         return effects;
     }
-    effects.push(UiEffect::Emit(MainSessionResult {
+    effects.push(UiEffect::Emit(Box::new(MainSessionResult {
         action: MainAction::Download(DownloadParams {
             urls: state.queue.clone(),
             media_type: state.media.as_str().into(),
@@ -145,7 +145,7 @@ fn download(state: &mut UiState) -> Vec<UiEffect> {
             output_dir: output.to_string(),
         }),
         settings_form: state.settings_if_saved().cloned(),
-    }));
+    })));
     effects
 }
 

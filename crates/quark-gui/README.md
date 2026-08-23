@@ -5,10 +5,9 @@ reducer in this crate. They must not invent format lists or session JSON.
 
 ```
 quark-gui              library: catalog, reduce, --script, C ABI
-quark-gui-dispatch     binary: quark-downloader-gui (Linux frontends compiled in)
+quark-gui-dispatch     binary: quark-downloader-gui (Linux Qt frontend compiled in)
 quark-gui-win32        Windows frontend (in-process + --script)
-quark-gui-cosmic       COSMIC / libcosmic (linked into the GUI; desktop theme + frosted glass)
-quark-gui-kirigami     Kirigami (linked into the GUI when Qt 6 is present; qml/ next to the GUI)
+quark-gui-qt           Qt 6 frontend (uses the system CuteCosmic theme on COSMIC)
 quark-gui-appkit       --script runner; visual UI is still Swift AppKit
 ```
 
@@ -43,12 +42,11 @@ Does not open a window or need a display.
 `quark-downloader-gui` picks a frontend and speaks:
 
 1. `QUARK_GUI_FRONTEND` — id or full path
-2. Config `gui_frontend` (`auto`, `cosmic`, `kirigami`, `win32`, `appkit`)
+2. Config `gui_frontend` (`auto`, `qt`, `win32`, `appkit`)
 3. macOS AppKit helper beside the dispatcher, then `PATH`
 
-Windows `auto`/`win32` is in-process Win32. Linux `auto` prefers Kirigami on
-KDE and COSMIC otherwise. COSMIC uses libcosmic (desktop theme and frosted
-glass when the compositor provides it). COSMIC and Kirigami are compiled into
-`quark-downloader-gui` and run as `quark-downloader-gui --frontend <id>`
-so each toolkit gets its own process. Only `quark-downloader` and
-`quark-downloader-gui` are Linux executables.
+Windows `auto`/`win32` is in-process Win32. Linux `auto` uses the Qt frontend,
+compiled into `quark-downloader-gui` and run as
+`quark-downloader-gui --frontend qt` in its own process. On COSMIC, Qt consumes
+the system CuteCosmic platform theme when it is installed. Only
+`quark-downloader` and `quark-downloader-gui` are Linux executables.

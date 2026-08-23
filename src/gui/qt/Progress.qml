@@ -1,21 +1,13 @@
 import QtQuick
 import QtQuick.Controls as QQC
 import QtQuick.Layouts
-import org.kde.kirigami as Kirigami
 
-Kirigami.ApplicationWindow {
+QQC.ApplicationWindow {
     id: root
     title: quarkVersion ? "Quark Downloader " + quarkVersion : "Quark Downloader"
     width: 480
     height: 180
     visible: true
-
-    signal submit(string json)
-    signal closed()
-    property string pendingSubmit: ""
-    property bool pendingClose: false
-    onSubmit: pendingSubmit = json
-    onClosed: pendingClose = true
 
     property string statusText: "Starting download..."
     property string etaText: ""
@@ -38,15 +30,13 @@ Kirigami.ApplicationWindow {
             Qt.quit()
     }
 
-    onClosing: closed()
-
-    pageStack.initialPage: Kirigami.Page {
-        ColumnLayout {
-            anchors.fill: parent
-            Kirigami.Heading { text: root.queueText; level: 4; visible: root.queueText.length > 0 }
-            QQC.Label { text: root.statusText; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-            QQC.ProgressBar { Layout.fillWidth: true; value: root.fraction }
-            QQC.Label { text: root.etaText.length ? "Time left: " + root.etaText : "Time left: estimating..." }
-        }
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 16
+        spacing: 10
+        QQC.Label { text: root.queueText; font.bold: true; visible: root.queueText.length > 0 }
+        QQC.Label { text: root.statusText; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+        QQC.ProgressBar { Layout.fillWidth: true; value: root.fraction }
+        QQC.Label { text: root.etaText.length ? "Time left: " + root.etaText : "Time left: estimating..." }
     }
 }

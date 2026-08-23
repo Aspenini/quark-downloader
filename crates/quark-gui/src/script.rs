@@ -96,10 +96,12 @@ pub fn run(input: &str) -> Result<ScriptOutput, String> {
         });
     }
     Ok(ScriptOutput {
-        result: last_emit.unwrap_or_else(|| MainSessionResult {
-            action: MainAction::Cancel,
-            settings_form: state.settings_saved.then_some(state.settings),
-        }),
+        result: last_emit
+            .map(|result| *result)
+            .unwrap_or_else(|| MainSessionResult {
+                action: MainAction::Cancel,
+                settings_form: state.settings_saved.then_some(state.settings),
+            }),
         validation_error: None,
     })
 }

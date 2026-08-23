@@ -818,8 +818,6 @@ fn run_command(
         }
         if process::interrupted() {
             130
-        } else if monitor.is_some_and(|m| m.killed()) {
-            process::exit_code(status, 1)
         } else {
             process::exit_code(status, 1)
         }
@@ -974,46 +972,6 @@ fn fail_result(
     result
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stall_monitor_sees_progress_ticks() {
-        let monitor = StallMonitor::new(0, Some(3), true);
-        assert!(!monitor.stalled(Duration::from_secs(60), Duration::from_secs(60)));
-        let _ = monitor.observe("[download]  10.0% of 1.00MiB");
-        assert!(monitor.had_output.lock().map(|h| *h).unwrap_or(false));
-        let rewritten = monitor.observe("[download] Downloading item 2 of 3");
-        assert_eq!(rewritten, "[download] Downloading item 2 of 3");
-        assert_eq!(monitor.current_item(), Some(2));
-    }
-
-    #[test]
-    fn apply_naming_keeps_path_when_rename_is_skipped() {
-        // collision_free / sanitize no-op still reports the original file.
-        let dir = std::env::temp_dir().join(format!(
-            "quark-naming-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("clip.mp4");
-        fs::write(&path, b"ok").unwrap();
-        let tracker = DestinationTracker::new();
-        tracker.observe(&format!("[download] Destination: {}", path.display()));
-        let settings = Settings::default();
-        let files = apply_naming(&tracker, &dir, &settings);
-        assert!(
-            files.iter().any(|f| f.ends_with("clip.mp4")),
-            "files were {files:?}"
-        );
-        let _ = fs::remove_dir_all(&dir);
-    }
-}
-
 pub fn press_any_key(no_pause: bool, message: &str) {
     if no_pause || !quark_platform::pause_before_exit() {
         return;
@@ -1105,4 +1063,44 @@ fn run_command_hidden(
         }
         process::exit_code(None, status as i32)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stall_monitor_sees_progress_ticks() {
+        let monitor = StallMonitor::new(0, Some(3), true);
+        assert!(!monitor.stalled(Duration::from_secs(60), Duration::from_secs(60)));
+        let _ = monitor.observe("[download]  10.0% of 1.00MiB");
+        assert!(monitor.had_output.lock().map(|h| *h).unwrap_or(false));
+        let rewritten = monitor.observe("[download] Downloading item 2 of 3");
+        assert_eq!(rewritten, "[download] Downloading item 2 of 3");
+        assert_eq!(monitor.current_item(), Some(2));
+    }
+
+    #[test]
+    fn apply_naming_keeps_path_when_rename_is_skipped() {
+        // collision_free / sanitize no-op still reports the original file.
+        let dir = std::env::temp_dir().join(format!(
+            "quark-naming-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("clip.mp4");
+        fs::write(&path, b"ok").unwrap();
+        let tracker = DestinationTracker::new();
+        tracker.observe(&format!("[download] Destination: {}", path.display()));
+        let settings = Settings::default();
+        let files = apply_naming(&tracker, &dir, &settings);
+        assert!(
+            files.iter().any(|f| f.ends_with("clip.mp4")),
+            "files were {files:?}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

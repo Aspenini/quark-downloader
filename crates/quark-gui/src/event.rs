@@ -34,7 +34,7 @@ pub enum UiEffect {
     ClearUrlField,
     ApplyTheme(String),
     Show(View),
-    Emit(quark_core::session::MainSessionResult),
+    Emit(Box<quark_core::session::MainSessionResult>),
 }
 
 pub const REQUIRED_ACTIONS: &[fn() -> UiEvent] = &[

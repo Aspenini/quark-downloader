@@ -53,7 +53,7 @@ run:
 [unix]
 run-gui:
     @cargo build -p quark-cli -p quark-gui-dispatch
-    @mkdir -p target/debug/qml && cp src/gui/kirigami/*.qml target/debug/qml/ || true
+    @mkdir -p target/debug/qml && cp src/gui/qt/*.qml target/debug/qml/ || true
     @QUARK_DOWNLOADER_CLI=target/debug/quark-downloader cargo run -p quark-gui-dispatch --
 
 [group('dev')]

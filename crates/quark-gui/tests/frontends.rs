@@ -83,18 +83,11 @@ fn frontend_bins() -> Vec<FrontendCmd> {
         ),
     ];
     if cfg!(target_os = "linux") {
-        candidates.extend([
-            (
-                "cosmic",
-                "quark-downloader-gui",
-                vec!["--frontend".into(), "cosmic".into()],
-            ),
-            (
-                "kirigami",
-                "quark-downloader-gui",
-                vec!["--frontend".into(), "kirigami".into()],
-            ),
-        ]);
+        candidates.push((
+            "qt",
+            "quark-downloader-gui",
+            vec!["--frontend".into(), "qt".into()],
+        ));
     }
     for (name, file, prefix) in candidates {
         if bins.iter().any(|b| b.name == name) {

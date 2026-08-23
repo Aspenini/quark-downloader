@@ -39,14 +39,10 @@ fn main() {
 fn builtin_frontends() -> Vec<&'static str> {
     #[cfg(target_os = "linux")]
     {
-        let mut ids = Vec::new();
-        if quark_gui_cosmic::available() {
-            ids.push("cosmic");
-        }
-        if quark_gui_kirigami::available() {
-            ids.push("kirigami");
-        }
-        ids
+        quark_gui_qt::available()
+            .then_some("qt")
+            .into_iter()
+            .collect()
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -58,9 +54,7 @@ fn run_frontend(id: &str, args: &[String]) -> i32 {
     let _ = args;
     match id {
         #[cfg(target_os = "linux")]
-        "cosmic" => quark_gui_cosmic::invoke(args),
-        #[cfg(target_os = "linux")]
-        "kirigami" => quark_gui_kirigami::invoke(args),
+        "qt" => quark_gui_qt::invoke(args),
         other => {
             eprintln!("frontend '{other}' is not compiled into this binary");
             1
@@ -149,7 +143,6 @@ fn show_error(message: &str) {
     #[cfg(windows)]
     {
         windows::message_box(message, true);
-        return;
     }
     #[cfg(not(windows))]
     frontend::last_resort_error(message);
@@ -163,7 +156,6 @@ fn show_info(message: &str) {
     #[cfg(windows)]
     {
         windows::message_box(message, false);
-        return;
     }
     #[cfg(not(windows))]
     println!("{message}");
@@ -270,7 +262,7 @@ fn run_download_with_progress_helper(
                        tx: std::sync::mpsc::Sender<String>| {
         if let Some(pipe) = pipe {
             std::thread::spawn(move || {
-                for line in std::io::BufReader::new(pipe).lines().flatten() {
+                for line in std::io::BufReader::new(pipe).lines().map_while(Result::ok) {
                     let _ = tx.send(line);
                 }
             });
@@ -280,7 +272,7 @@ fn run_download_with_progress_helper(
     if let Some(pipe) = stdout {
         let tx = tx.clone();
         std::thread::spawn(move || {
-            for line in std::io::BufReader::new(pipe).lines().flatten() {
+            for line in std::io::BufReader::new(pipe).lines().map_while(Result::ok) {
                 let _ = tx.send(line);
             }
         });
@@ -288,7 +280,7 @@ fn run_download_with_progress_helper(
     if let Some(pipe) = stderr {
         let tx = tx.clone();
         std::thread::spawn(move || {
-            for line in std::io::BufReader::new(pipe).lines().flatten() {
+            for line in std::io::BufReader::new(pipe).lines().map_while(Result::ok) {
                 let _ = tx.send(line);
             }
         });

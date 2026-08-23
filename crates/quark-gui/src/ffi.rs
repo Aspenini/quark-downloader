@@ -4,7 +4,13 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn quark_gui_script(input: *const c_char) -> *mut c_char {
+/// Runs a GUI reducer script through the C ABI.
+///
+/// # Safety
+///
+/// `input` must be null or point to a valid, NUL-terminated byte string for
+/// the duration of this call.
+pub unsafe extern "C" fn quark_gui_script(input: *const c_char) -> *mut c_char {
     if input.is_null() {
         return to_cstring(r#"{"v":1,"action":"error","message":"null script"}"#);
     }
@@ -23,7 +29,13 @@ pub extern "C" fn quark_gui_script(input: *const c_char) -> *mut c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn quark_gui_string_free(ptr: *mut c_char) {
+/// Frees a string returned by [`quark_gui_script`].
+///
+/// # Safety
+///
+/// `ptr` must be null or a pointer returned by [`quark_gui_script`] that has
+/// not already been freed.
+pub unsafe extern "C" fn quark_gui_string_free(ptr: *mut c_char) {
     if ptr.is_null() {
         return;
     }

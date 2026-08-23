@@ -1,9 +1,8 @@
 import QtQuick
 import QtQuick.Controls as QQC
 import QtQuick.Layouts
-import org.kde.kirigami as Kirigami
 
-Kirigami.ApplicationWindow {
+QQC.ApplicationWindow {
     id: root
     title: quarkVersion ? "Quark Downloader " + quarkVersion : "Quark Downloader"
     width: 520
@@ -11,11 +10,8 @@ Kirigami.ApplicationWindow {
     visible: true
 
     signal submit(string json)
-    signal closed()
     property string pendingSubmit: ""
-    property bool pendingClose: false
     onSubmit: pendingSubmit = json
-    onClosed: pendingClose = true
 
     property bool settingsSaved: false
     property bool showSettings: false
@@ -36,11 +32,11 @@ Kirigami.ApplicationWindow {
 
     readonly property var audioFormats: ["original", "mp3", "m4a", "flac", "wav", "opus", "vorbis"]
     readonly property var videoFormats: ["original", "mp4", "mkv", "webm"]
-    readonly property var frontendChoices: ["auto", "cosmic", "kirigami"]
+    readonly property var frontendChoices: ["auto", "qt"]
 
-    onClosing: {
+    onClosing: function(close) {
+        close.accepted = false
         emitCancel()
-        closed()
     }
 
     function settingsObject() {
@@ -75,14 +71,24 @@ Kirigami.ApplicationWindow {
         urlText = ""
     }
 
-    pageStack.initialPage: Kirigami.ScrollablePage {
-        title: root.showSettings ? "Settings" : root.title
+    QQC.ScrollView {
+        id: scroll
+        anchors.fill: parent
+        anchors.margins: 16
+        contentWidth: availableWidth
 
-        ColumnLayout {
-            visible: !root.showSettings
-            spacing: Kirigami.Units.smallSpacing
+        Item {
+            width: scroll.availableWidth
+            implicitHeight: root.showSettings ? settingsColumn.implicitHeight : sessionColumn.implicitHeight
 
-            Kirigami.Heading { text: "Video or playlist URL"; level: 4 }
+            ColumnLayout {
+                id: sessionColumn
+                anchors.left: parent.left
+                anchors.right: parent.right
+                visible: !root.showSettings
+                spacing: 10
+
+            QQC.Label { text: "Video or playlist URL"; font.bold: true }
             RowLayout {
                 QQC.TextField {
                     Layout.fillWidth: true
@@ -95,13 +101,15 @@ Kirigami.ApplicationWindow {
                 QQC.Button {
                     text: "Paste"
                     onClicked: {
-                        var t = ""
-                        try { t = clipboard.text() } catch (e) {}
+                        pasteBuffer.text = ""
+                        pasteBuffer.paste()
+                        var t = pasteBuffer.text
                         t.split(/\s+/).forEach(function (p) { root.addUrl(p) })
                     }
                 }
             }
-            Kirigami.Heading { text: "Queue"; level: 4 }
+            QQC.TextField { id: pasteBuffer; visible: false }
+            QQC.Label { text: "Queue"; font.bold: true }
             Repeater {
                 model: root.queue
                 delegate: RowLayout {
@@ -128,12 +136,12 @@ Kirigami.ApplicationWindow {
                     onClicked: { root.audio = true; root.format = "original" }
                 }
             }
-            Kirigami.Heading { text: "Format"; level: 4 }
+            QQC.Label { text: "Format"; font.bold: true }
             QQC.ComboBox {
                 model: root.audio ? root.audioFormats : root.videoFormats
                 onActivated: root.format = currentText
             }
-            Kirigami.Heading { text: "Output folder"; level: 4 }
+            QQC.Label { text: "Output folder"; font.bold: true }
             QQC.TextField {
                 Layout.fillWidth: true
                 text: root.outDir
@@ -163,12 +171,15 @@ Kirigami.ApplicationWindow {
                     }
                 }
             }
-        }
+            }
 
-        ColumnLayout {
-            visible: root.showSettings
-            spacing: Kirigami.Units.smallSpacing
-            Kirigami.Heading { text: "Default download folder"; level: 4 }
+            ColumnLayout {
+                id: settingsColumn
+                anchors.left: parent.left
+                anchors.right: parent.right
+                visible: root.showSettings
+                spacing: 10
+            QQC.Label { text: "Default download folder"; font.bold: true }
             QQC.TextField { Layout.fillWidth: true; text: root.draftDir; onTextChanged: root.draftDir = text }
             QQC.CheckBox { text: "Remove trailing video ID"; checked: root.draftStrip; onToggled: root.draftStrip = checked }
             QQC.CheckBox { text: "Sanitize filenames"; checked: root.draftSanitize; onToggled: root.draftSanitize = checked }
@@ -202,6 +213,7 @@ Kirigami.ApplicationWindow {
                         root.showSettings = false
                     }
                 }
+            }
             }
         }
     }

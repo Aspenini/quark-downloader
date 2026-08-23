@@ -229,7 +229,8 @@ fn parse_settings_json(node: Option<&Value>) -> Option<SettingsForm> {
         &obj.get("download_logs")
             .map(Value::raw_display)
             .unwrap_or_else(|| "true".into()),
-        obj.get_str("gui_theme").unwrap_or(GuiTheme::System.as_str()),
+        obj.get_str("gui_theme")
+            .unwrap_or(GuiTheme::System.as_str()),
         &obj.get("strip_video_ids")
             .map(Value::raw_display)
             .unwrap_or_else(|| "true".into()),
@@ -473,7 +474,7 @@ mod tests {
             sanitize_filenames: true,
             filename_spaces: FilenameSpaces::Underscore,
             playlist_folders: false,
-            gui_frontend: crate::config::GuiFrontend::Cosmic,
+            gui_frontend: crate::config::GuiFrontend::Qt,
         };
         let expected_ytdlp = if quark_platform::allows_bundled_tools() {
             "bundled"
@@ -495,7 +496,7 @@ mod tests {
                 "true",
                 "underscore",
                 "false",
-                "cosmic",
+                "qt",
             ]
         );
     }
@@ -651,8 +652,7 @@ mod tests {
     #[test]
     fn parses_named_frontends() {
         use crate::config::{GuiFrontend, parse_gui_frontend};
-        assert_eq!(parse_gui_frontend("cosmic", true), GuiFrontend::Cosmic);
-        assert_eq!(parse_gui_frontend("kirigami", true), GuiFrontend::Kirigami);
+        assert_eq!(parse_gui_frontend("qt", true), GuiFrontend::Qt);
         assert_eq!(parse_gui_frontend("win32", true), GuiFrontend::Win32);
         assert_eq!(parse_gui_frontend("appkit", true), GuiFrontend::Appkit);
         assert_eq!(parse_gui_frontend("gtk", true), GuiFrontend::Auto);
