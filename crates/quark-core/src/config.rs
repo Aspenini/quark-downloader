@@ -260,7 +260,7 @@ pub fn expand_path(path: &str) -> PathBuf {
     } else {
         PathBuf::from(path)
     };
-    fs::canonicalize(&expanded).unwrap_or_else(|_| {
+    let resolved = fs::canonicalize(&expanded).unwrap_or_else(|_| {
         if expanded.is_absolute() {
             expanded
         } else {
@@ -268,7 +268,8 @@ pub fn expand_path(path: &str) -> PathBuf {
                 .unwrap_or_else(|_| PathBuf::from("."))
                 .join(expanded)
         }
-    })
+    });
+    quark_platform::simplify_path(resolved)
 }
 
 pub fn app_dir() -> PathBuf {
@@ -740,6 +741,17 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("quark-config-{name}-{nanos}.conf"))
+    }
+
+    #[test]
+    fn expand_path_drops_windows_extended_prefix() {
+        let path = expand_path(".");
+        let s = path.to_string_lossy();
+        assert!(
+            !s.starts_with(r"\\?\"),
+            "canonical path should be display-friendly, got {s}"
+        );
+        assert!(path.is_absolute(), "{s}");
     }
 
     #[test]

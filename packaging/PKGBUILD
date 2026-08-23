@@ -9,7 +9,6 @@ license=('MIT')
 depends=('ffmpeg' 'hicolor-icon-theme' 'qt6-declarative' 'yt-dlp')
 makedepends=('cargo' 'pkgconf' 'rust')
 optdepends=(
-  'cutecosmic-git: COSMIC desktop integration for the Qt GUI'
   'deno: JavaScript runtime support for YouTube downloads'
   'nodejs: JavaScript runtime support for YouTube downloads'
 )

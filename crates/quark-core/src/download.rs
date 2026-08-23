@@ -156,7 +156,9 @@ pub fn execute(
                 .unwrap_or_else(|_| PathBuf::from("."))
                 .join(dir)
         };
-        result.output_dir = output_path.to_string_lossy().into_owned();
+        result.output_dir = quark_platform::simplify_path(&output_path)
+            .to_string_lossy()
+            .into_owned();
 
         let ytdlp = match preflight(&settings, urls, media_type, format, &output_path) {
             Ok(p) => p,
@@ -192,7 +194,9 @@ pub fn execute(
             result.errors.extend(outcome.errors);
             result.playlist_error_count += outcome.playlist_error_count;
             if urls.len() == 1 {
-                result.output_dir = outcome.target_dir.to_string_lossy().into_owned();
+                result.output_dir = quark_platform::simplify_path(&outcome.target_dir)
+                    .to_string_lossy()
+                    .into_owned();
             }
             if outcome.exit_code != 0 {
                 failed.push((url.clone(), outcome.exit_code));
@@ -333,7 +337,7 @@ fn run_single(
                     logs::log_line(&format!("Playlist: {}{count_note}", probe.title));
                     logs::log_line(&format!(
                         "Saving into: {}",
-                        color::cyan(&target_dir.to_string_lossy())
+                        color::cyan(&quark_platform::simplify_path(&target_dir).to_string_lossy())
                     ));
                 }
                 Err(ex) => logs::log_line(&color::yellow(&format!(
@@ -444,7 +448,7 @@ fn report_saved_files(paths: &[String], target_dir: &Path) {
     logs::log_line(&format!(
         "{} {}",
         color::bold("Output folder:"),
-        color::cyan(&target_dir.to_string_lossy())
+        color::cyan(&quark_platform::simplify_path(target_dir).to_string_lossy())
     ));
     let existing: Vec<&String> = paths
         .iter()
@@ -503,19 +507,23 @@ fn warn_if_unwritable_config() {
     }
 }
 
+fn nice_canonical(path: &Path) -> PathBuf {
+    quark_platform::simplify_path(fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()))
+}
+
 fn apply_naming(
     tracker: &DestinationTracker,
     output_path: &Path,
     settings: &Settings,
 ) -> Vec<String> {
     let policy = settings.filename_spaces.to_policy();
-    let base = fs::canonicalize(output_path).unwrap_or_else(|_| output_path.to_path_buf());
+    let base = nice_canonical(output_path);
     let mut finals = Vec::new();
     for path in tracker.paths() {
         if path.ends_with(".part") || path.ends_with(".ytdl") {
             continue;
         }
-        let expanded = fs::canonicalize(&path).unwrap_or_else(|_| PathBuf::from(&path));
+        let expanded = nice_canonical(Path::new(&path));
         let base_s = base.to_string_lossy();
         let exp_s = expanded.to_string_lossy();
         let sep = std::path::MAIN_SEPARATOR;
@@ -1100,6 +1108,10 @@ mod tests {
         assert!(
             files.iter().any(|f| f.ends_with("clip.mp4")),
             "files were {files:?}"
+        );
+        assert!(
+            files.iter().all(|f| !f.starts_with(r"\\?\")),
+            "saved paths should not use the Windows extended prefix: {files:?}"
         );
         let _ = fs::remove_dir_all(&dir);
     }

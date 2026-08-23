@@ -122,6 +122,41 @@ pub fn exe(name: &str) -> String {
     }
 }
 
+/// Drop the Windows `\\?\` extended-length prefix so paths look like `C:\Users\...`.
+///
+/// Rust's `fs::canonicalize` uses `GetFinalPathNameByHandleW`, which returns
+/// verbatim paths (`\\?\C:\...`, `\\?\UNC\server\share`). Those are valid for
+/// Win32 I/O but look wrong in prompts, dialogs, and logs. Volume GUID and
+/// other device-namespace prefixes are left alone.
+pub fn simplify_path(path: impl AsRef<Path>) -> PathBuf {
+    PathBuf::from(strip_extended_prefix(&path.as_ref().to_string_lossy()))
+}
+
+fn strip_extended_prefix(s: &str) -> String {
+    let rest = s.strip_prefix(r"\\?\").or_else(|| s.strip_prefix("//?/"));
+    let Some(rest) = rest else {
+        return s.to_string();
+    };
+
+    if let Some(unc) = rest
+        .strip_prefix(r"UNC\")
+        .or_else(|| rest.strip_prefix("UNC/"))
+    {
+        return format!(r"\\{unc}");
+    }
+
+    let bytes = rest.as_bytes();
+    if bytes.len() >= 2
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes.len() == 2 || bytes[2] == b'\\' || bytes[2] == b'/')
+    {
+        return rest.to_string();
+    }
+
+    s.to_string()
+}
+
 pub fn config_dir(app: &str) -> PathBuf {
     if let Some(appdata) = std::env::var_os("APPDATA") {
         return PathBuf::from(appdata).join(app);
@@ -218,5 +253,52 @@ mod tests {
     fn config_dir_is_under_app_name() {
         let dir = config_dir("quark-downloader");
         assert!(dir.ends_with("quark-downloader"));
+    }
+
+    #[test]
+    fn simplify_path_strips_verbatim_disk() {
+        assert_eq!(
+            strip_extended_prefix(r"\\?\C:\Users\bob\Downloads"),
+            r"C:\Users\bob\Downloads"
+        );
+        assert_eq!(strip_extended_prefix(r"\\?\c:\Users\bob"), r"c:\Users\bob");
+        assert_eq!(strip_extended_prefix(r"\\?\D:"), "D:");
+        assert_eq!(strip_extended_prefix("//?/C:/Users/bob"), "C:/Users/bob");
+    }
+
+    #[test]
+    fn simplify_path_strips_verbatim_unc() {
+        assert_eq!(
+            strip_extended_prefix(r"\\?\UNC\server\share\dir"),
+            r"\\server\share\dir"
+        );
+        assert_eq!(
+            strip_extended_prefix("//?/UNC/server/share"),
+            r"\\server/share"
+        );
+    }
+
+    #[test]
+    fn simplify_path_leaves_normal_and_device_paths() {
+        assert_eq!(
+            strip_extended_prefix(r"C:\Users\bob\Downloads"),
+            r"C:\Users\bob\Downloads"
+        );
+        assert_eq!(
+            strip_extended_prefix("/home/bob/Downloads"),
+            "/home/bob/Downloads"
+        );
+        assert_eq!(
+            strip_extended_prefix(r"\\server\share\dir"),
+            r"\\server\share\dir"
+        );
+        assert_eq!(
+            strip_extended_prefix(r"\\?\Volume{12345678-1234-1234-1234-123456789abc}\foo"),
+            r"\\?\Volume{12345678-1234-1234-1234-123456789abc}\foo"
+        );
+        assert_eq!(
+            strip_extended_prefix(r"\\?\GLOBALROOT\Device\HarddiskVolume1"),
+            r"\\?\GLOBALROOT\Device\HarddiskVolume1"
+        );
     }
 }
