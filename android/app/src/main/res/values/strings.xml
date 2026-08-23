@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Quark Spike</string>
+    <string name="app_name">Quark Downloader</string>
+    <string name="add_to_quark">Add to Quark</string>
 </resources>

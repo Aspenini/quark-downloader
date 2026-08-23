@@ -1,9 +1,12 @@
-# Android (spike)
+# Android
 
 Jetpack Compose host for Quark Downloader. This is **not** a port of the desktop
 CLI. yt-dlp runs through [youtubedl-android](https://github.com/yausername/youtubedl-android)
 0.18.1 (embedded CPython + ffmpeg + QuickJS). The APK that links that library
 is GPL-3.0; desktop crates stay MIT.
+
+Share a link to Quark (or open a YouTube URL with it) to enqueue. Finished files
+go to the system **Downloads** folder.
 
 ## Kill criterion
 

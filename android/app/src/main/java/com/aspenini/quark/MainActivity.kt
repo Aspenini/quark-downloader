@@ -1,212 +1,125 @@
 package com.aspenini.quark
 
-import android.content.Context
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
+import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.youtubedl_android.YoutubeDLRequest
+import androidx.lifecycle.lifecycleScope
+import com.aspenini.quark.data.QuarkSettings
+import com.aspenini.quark.ui.QuarkRoot
+import com.aspenini.quark.ui.QuarkTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+    private val model: QuarkViewModel by viewModels()
+
+    private val folderPicker =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            runCatching {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            val path = treeToPath(uri) ?: return@registerForActivityResult
+            val draft = model.ui.value.draft.copy(downloadDir = path)
+            model.updateDraft(draft)
+        }
+
+    private val permissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
+            model.download()
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val outDir =
-            getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                ?: File(filesDir, "downloads").also { it.mkdirs() }
-        val app = applicationContext
+        model.refreshVersion()
+        model.ingestIntent(intent)
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    SpikeScreen(appContext = app, outDir = outDir)
-                }
+            val ui by model.ui.collectAsState()
+            val download by model.download.collectAsState()
+            QuarkTheme(ui.settings.guiTheme) {
+                QuarkRoot(
+                    ui = ui,
+                    download = download,
+                    onUrl = model::setUrlField,
+                    onAdd = model::addUrl,
+                    onPaste = model::paste,
+                    onRemove = model::removeAt,
+                    onAudio = model::setAudio,
+                    onFormat = model::setFormat,
+                    onDownload = ::requestAndDownload,
+                    onCancel = model::cancelDownload,
+                    onOpenSettings = {
+                        model.refreshVersion()
+                        model.openSettings()
+                    },
+                    onCloseSettings = model::closeSettings,
+                    onDraft = model::updateDraft,
+                    onReset = model::resetDraft,
+                    onSave = model::saveSettings,
+                    onPickFolder = {
+                        folderPicker.launch(null)
+                    },
+                    onUpdateYtDlp = {
+                        lifecycleScope.launch {
+                            val msg =
+                                withContext(Dispatchers.IO) {
+                                    runCatching { model.updateYtDlp() }
+                                        .getOrElse { e -> "Update failed: ${e.message}" }
+                                }
+                            model.snack(msg)
+                        }
+                    },
+                    onConsumeSnack = model::consumeSnackbar,
+                )
             }
         }
     }
-}
 
-private const val PROCESS_ID = "quark-spike"
-private const val DEFAULT_URL = "https://www.youtube.com/watch?v=jNQXAC9IVRw"
-
-@Composable
-private fun SpikeScreen(appContext: Context, outDir: File) {
-    val scope = rememberCoroutineScope()
-    val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    var url by remember { mutableStateOf(DEFAULT_URL) }
-    var log by remember { mutableStateOf("Output: ${outDir.absolutePath}\n") }
-    var busy by remember { mutableStateOf(false) }
-    var progress by remember { mutableFloatStateOf(0f) }
-
-    fun append(line: String) {
-        log += line.trimEnd() + "\n"
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        model.ingestIntent(intent)
     }
 
-    fun runJob(label: String, block: () -> String) {
-        if (busy) return
-        busy = true
-        progress = 0f
-        append("==> $label")
-        scope.launch {
-            val result =
-                withContext(Dispatchers.IO) {
-                    runCatching(block).fold(
-                        onSuccess = { it },
-                        onFailure = { e -> "ERROR: ${e.message}\n${e.stackTraceToString()}" },
-                    )
-                }
-            append(result)
-            busy = false
+    private fun requestAndDownload() {
+        val needed = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= 33) {
+            needed += Manifest.permission.POST_NOTIFICATIONS
+        } else if (Build.VERSION.SDK_INT <= 28) {
+            needed += Manifest.permission.WRITE_EXTERNAL_STORAGE
         }
+        if (needed.isEmpty()) {
+            model.download()
+            return
+        }
+        permissionLauncher.launch(needed.toTypedArray())
     }
 
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Quark Android spike", style = MaterialTheme.typography.titleLarge)
-        Text(
-            "Kill criterion: version, YouTube download, ffmpeg remux/extract. " +
-                "youtubedl-android injects QuickJS + ffmpeg.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        OutlinedTextField(
-            value = url,
-            onValueChange = { url = it },
-            label = { Text("URL") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !busy,
-            singleLine = true,
-        )
-        if (busy) {
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 100f) / 100f },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = {
-                    runJob("version") {
-                        YoutubeDL.versionName(appContext)
-                            ?: YoutubeDL.version(appContext)
-                            ?: "(unknown version)"
-                    }
-                },
-                enabled = !busy,
-            ) { Text("Version") }
-            Button(
-                onClick = {
-                    runJob("update yt-dlp") {
-                        val status =
-                            YoutubeDL.updateYoutubeDL(
-                                appContext,
-                                YoutubeDL.UpdateChannel.STABLE,
-                            )
-                        "update: $status\nversion: ${YoutubeDL.versionName(appContext)}"
-                    }
-                },
-                enabled = !busy,
-            ) { Text("Update") }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = {
-                    runJob("download original") {
-                        executeDownload(url, outDir, mp3 = false) { p, line ->
-                            mainHandler.post {
-                                progress = p
-                                append(line)
-                            }
-                        }
-                    }
-                },
-                enabled = !busy,
-            ) { Text("Download") }
-            Button(
-                onClick = {
-                    runJob("extract mp3") {
-                        executeDownload(url, outDir, mp3 = true) { p, line ->
-                            mainHandler.post {
-                                progress = p
-                                append(line)
-                            }
-                        }
-                    }
-                },
-                enabled = !busy,
-            ) { Text("MP3") }
-            TextButton(
-                onClick = { YoutubeDL.destroyProcessById(PROCESS_ID) },
-                enabled = busy,
-            ) { Text("Cancel") }
-        }
-        Text(
-            log,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-            style = MaterialTheme.typography.bodySmall,
-        )
+    private fun treeToPath(uri: Uri): String? {
+        if (uri.authority != "com.android.externalstorage.documents") return null
+        val docId = DocumentsContract.getTreeDocumentId(uri)
+        val split = docId.split(":", limit = 2)
+        if (split.size < 2) return null
+        if (split[0] != "primary") return null
+        val rest = split[1]
+        val root = Environment.getExternalStorageDirectory()
+        return if (rest.isEmpty()) root.absolutePath else File(root, rest).absolutePath
     }
-}
-
-private fun executeDownload(
-    url: String,
-    outDir: File,
-    mp3: Boolean,
-    onLine: (Float, String) -> Unit,
-): String {
-    outDir.mkdirs()
-    val request = YoutubeDLRequest(url.trim())
-    request.addOption("--no-playlist")
-    request.addOption("--newline")
-    request.addOption("--no-color")
-    request.addOption("-o", File(outDir, "%(title)s.%(ext)s").absolutePath)
-    if (mp3) {
-        request.addOption("-f", "bestaudio/best")
-        request.addOption("-x")
-        request.addOption("--audio-format", "mp3")
-    }
-    val response =
-        YoutubeDL.execute(request, PROCESS_ID) { p, _, line ->
-            onLine(p, line)
-        }
-    return "exit ${response.exitCode}\n${response.out}"
 }
