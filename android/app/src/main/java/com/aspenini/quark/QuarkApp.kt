@@ -14,8 +14,14 @@ class QuarkApp : Application() {
         } catch (e: Exception) {
             Log.e(TAG, "youtubedl-android init failed", e)
         }
+        com.aspenini.quark.download.YtDlpSupport.pinProcessTemp(this)
         QuarkNative.setPaths(filesDir.absolutePath)
         com.aspenini.quark.data.Catalog.load()
+        Thread({
+            runCatching {
+                com.aspenini.quark.download.YtDlpSupport.ensureUpdated(this)
+            }.onFailure { Log.w(TAG, "yt-dlp auto-update failed", it) }
+        }, "ytdlp-update").start()
     }
 
     companion object {

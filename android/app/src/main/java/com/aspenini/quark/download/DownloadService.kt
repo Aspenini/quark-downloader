@@ -51,6 +51,15 @@ class DownloadService : Service() {
 
     private fun runJob(job: DownloadJob) {
         DownloadSession.resetForStart(job.urls.size)
+        YtDlpSupport.pinProcessTemp(this)
+        DownloadSession.progress(0, job.urls.size, 0f, "Updating yt-dlp…")
+        notifyProgress(0, job.urls.size, 0, "Updating yt-dlp…")
+        runCatching { YtDlpSupport.ensureUpdated(this) }
+            .onSuccess { DownloadLog.append(this, job.settings.downloadLogs, "yt-dlp $it") }
+            .onFailure {
+                DownloadLog.append(this, job.settings.downloadLogs, "yt-dlp update failed: ${it.message}")
+            }
+
         val saved = mutableListOf<android.net.Uri>()
         val failures = mutableListOf<String>()
         val publicRoot = File(job.outputDir)
@@ -95,6 +104,7 @@ class DownloadService : Service() {
                         "",
                     ),
                 )
+                YtDlpSupport.applyAndroidPaths(request, this)
                 YoutubeDL.execute(request, DownloadSession.PROCESS_ID) { percent, _, line ->
                     val status = statusFromRust(line)
                     DownloadSession.progress(n, job.urls.size, percent, status)
@@ -143,6 +153,7 @@ class DownloadService : Service() {
             request.addOption("-J")
             request.addOption("--no-warnings")
             request.addOption("--no-color")
+            YtDlpSupport.applyAndroidPaths(request, this)
             val out = YoutubeDL.execute(request, null, null).out
             val json = JSONObject(out)
             if (json.optString("_type") != "playlist") return null
