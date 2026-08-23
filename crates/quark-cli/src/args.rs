@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use quark_core::color;
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Cli {
     pub urls: Vec<String>,
@@ -87,6 +89,34 @@ Interactive when run with no options.\n\n\
     --emit-result-json             Print a final __RESULT__ JSON line for GUI/tools\n\
     -h, --help                     Show help";
 
+pub fn print_help() {
+    for line in HELP.lines() {
+        println!("{}", colorize_help_line(line));
+    }
+}
+
+fn colorize_help_line(line: &str) -> String {
+    if line.starts_with("Usage:") {
+        return color::bold(line);
+    }
+    let spaces = line.bytes().take_while(|b| *b == b' ').count();
+    let trimmed = &line[spaces..];
+    if !trimmed.starts_with('-') {
+        if line.is_empty() {
+            return String::new();
+        }
+        return color::dim(line);
+    }
+    let indent = &line[..spaces];
+    if let Some(idx) = trimmed.find("  ") {
+        let flags = trimmed[..idx].trim_end();
+        let rest = &trimmed[flags.len()..];
+        format!("{indent}{}{}", color::cyan(flags), color::dim(rest))
+    } else {
+        format!("{indent}{}", color::cyan(trimmed))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,6 +160,15 @@ mod tests {
         assert!(parse_slice(&["--batch-file", "no-such-file.txt"]).is_err());
         assert!(parse_slice(&["--type", "image"]).is_err());
         assert!(parse_slice(&["--format", "avi"]).is_err());
+    }
+
+    #[test]
+    fn colorize_help_keeps_flag_text() {
+        let usage = colorize_help_line("Usage: quark-downloader [options]");
+        assert!(usage.contains("Usage: quark-downloader"));
+        let flag = colorize_help_line("    --no-pause                     Do not wait");
+        assert!(flag.contains("--no-pause"));
+        assert!(colorize_help_line("").is_empty());
     }
 
     #[test]

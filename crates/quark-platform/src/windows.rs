@@ -23,7 +23,9 @@ use windows_sys::Win32::Security::Cryptography::{
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::Storage::FileSystem::{ReadFile, SearchPathW};
 use windows_sys::Win32::System::Console::{
-    ENABLE_VIRTUAL_TERMINAL_PROCESSING, GetConsoleMode, GetStdHandle, STD_OUTPUT_HANDLE,
+    ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT, ENABLE_MOUSE_INPUT, ENABLE_VIRTUAL_TERMINAL_PROCESSING,
+    ENABLE_WINDOW_INPUT, FlushConsoleInputBuffer, GetConsoleMode, GetStdHandle, INPUT_RECORD,
+    KEY_EVENT, ReadConsoleInputW, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     SetConsoleMode,
 };
 use windows_sys::Win32::System::JobObjects::{
@@ -48,8 +50,13 @@ pub fn enable_virtual_terminal(tried: &AtomicU8) {
     if tried.swap(1, Ordering::Relaxed) == 1 {
         return;
     }
+    enable_vt(STD_OUTPUT_HANDLE);
+    enable_vt(STD_ERROR_HANDLE);
+}
+
+fn enable_vt(std_handle: u32) {
     unsafe {
-        let handle = GetStdHandle(STD_OUTPUT_HANDLE);
+        let handle = GetStdHandle(std_handle);
         if handle.is_null() || handle == INVALID_HANDLE_VALUE {
             return;
         }
@@ -59,6 +66,84 @@ pub fn enable_virtual_terminal(tried: &AtomicU8) {
         }
         let _ = SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     }
+}
+
+/// Wait for a key down. Windows stdin is line-buffered, so a 1-byte read
+/// only returns after Enter; this uses the console API instead.
+pub fn wait_for_keypress() {
+    unsafe {
+        let handle = GetStdHandle(STD_INPUT_HANDLE);
+        if handle.is_null() || handle == INVALID_HANDLE_VALUE {
+            wait_stdin_byte();
+            return;
+        }
+        let mut mode = 0u32;
+        if GetConsoleMode(handle, &mut mode) == 0 {
+            wait_stdin_byte();
+            return;
+        }
+        let raw = mode
+            & !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT);
+        if SetConsoleMode(handle, raw) == 0 {
+            wait_stdin_byte();
+            return;
+        }
+        struct RestoreMode {
+            handle: HANDLE,
+            mode: u32,
+        }
+        impl Drop for RestoreMode {
+            fn drop(&mut self) {
+                unsafe {
+                    let _ = SetConsoleMode(self.handle, self.mode);
+                }
+            }
+        }
+        let _restore = RestoreMode { handle, mode };
+        let _ = FlushConsoleInputBuffer(handle);
+        loop {
+            let mut record = std::mem::zeroed::<INPUT_RECORD>();
+            let mut read = 0u32;
+            if ReadConsoleInputW(handle, &mut record, 1, &mut read) == 0 || read == 0 {
+                wait_stdin_byte();
+                return;
+            }
+            if u32::from(record.EventType) != KEY_EVENT {
+                continue;
+            }
+            let key = record.Event.KeyEvent;
+            if key.bKeyDown == 0 || is_modifier_vk(key.wVirtualKeyCode) {
+                continue;
+            }
+            return;
+        }
+    }
+}
+
+fn is_modifier_vk(vk: u16) -> bool {
+    matches!(
+        vk,
+        0x10 | // VK_SHIFT
+        0x11 | // VK_CONTROL
+        0x12 | // VK_MENU (Alt)
+        0x14 | // VK_CAPITAL
+        0x5B | // VK_LWIN
+        0x5C | // VK_RWIN
+        0x90 | // VK_NUMLOCK
+        0x91 | // VK_SCROLL
+        0xA0 | // VK_LSHIFT
+        0xA1 | // VK_RSHIFT
+        0xA2 | // VK_LCONTROL
+        0xA3 | // VK_RCONTROL
+        0xA4 | // VK_LMENU
+        0xA5 // VK_RMENU
+    )
+}
+
+fn wait_stdin_byte() {
+    use std::io::Read;
+    let mut buf = [0u8; 1];
+    let _ = std::io::stdin().read_exact(&mut buf);
 }
 
 pub fn which(name: &str) -> Option<PathBuf> {

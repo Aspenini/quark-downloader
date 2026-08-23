@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
@@ -174,8 +174,9 @@ pub fn execute(
         for (index, url) in urls.iter().enumerate() {
             if multi {
                 logs::log_line(&format!(
-                    "\n{}: {url}",
-                    color::bold(&format!("==> URL {} of {}", index + 1, urls.len()))
+                    "\n{}: {}",
+                    color::bold(&format!("==> URL {} of {}", index + 1, urls.len())),
+                    color::cyan(url)
                 ));
             }
             let outcome = match run_single(&settings, &ytdlp, url, media_type, format, &output_path)
@@ -337,9 +338,14 @@ fn run_single(
                         .count
                         .map(|c| format!(" ({c} items)"))
                         .unwrap_or_default();
-                    logs::log_line(&format!("Playlist: {}{count_note}", probe.title));
                     logs::log_line(&format!(
-                        "Saving into: {}",
+                        "{} {}{count_note}",
+                        color::bold("Playlist:"),
+                        probe.title
+                    ));
+                    logs::log_line(&format!(
+                        "{} {}",
+                        color::bold("Saving into:"),
                         color::cyan(&quark_platform::simplify_path(&target_dir).to_string_lossy())
                     ));
                 }
@@ -361,7 +367,6 @@ fn run_single(
         None
     };
     let js_runtime = ytdlp::js_runtime();
-    let no_color = std::env::var_os("QUARK_GUI").as_deref() == Some(std::ffi::OsStr::new("1"));
     let cmd = ytdlp::plan(&ytdlp::PlanRequest {
         ytdlp,
         url,
@@ -372,7 +377,7 @@ fn run_single(
         ffmpeg_location: ffmpeg_location.as_deref(),
         js_runtime: js_runtime.as_deref(),
         is_playlist,
-        no_color,
+        no_color: true,
     })
     .map_err(|e| e.0)?
     .command_line();
@@ -527,7 +532,11 @@ fn apply_naming(
         let dest = dir.join(&final_name);
         match fs::rename(&expanded, &dest) {
             Ok(()) => {
-                logs::log_line(&format!("Renamed: {name} -> {final_name}"));
+                logs::log_line(&format!(
+                    "{} {name} -> {}",
+                    color::dim("Renamed:"),
+                    color::cyan(&final_name)
+                ));
                 finals.push(dest.to_string_lossy().into_owned());
             }
             Err(ex) => {
@@ -912,10 +921,11 @@ fn handle_relay_line(
     if let Some(t) = tracker {
         t.observe(&out_line);
     }
+    let painted = color::tool_line(&out_line);
     if is_err {
-        logs::log_line_err(&out_line);
+        logs::log_line_err(&painted);
     } else {
-        logs::log_line(&out_line);
+        logs::log_line(&painted);
     }
 }
 
@@ -957,9 +967,9 @@ pub fn press_any_key(no_pause: bool, message: &str) {
         return;
     }
     logs::log_line("");
-    logs::log_line(message);
-    let mut buf = [0u8; 1];
-    let _ = io::stdin().read_exact(&mut buf);
+    logs::log_line(&color::cyan(message));
+    let _ = io::stdout().flush();
+    quark_platform::wait_for_keypress();
 }
 
 #[cfg(not(windows))]

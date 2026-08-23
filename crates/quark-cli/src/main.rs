@@ -16,11 +16,15 @@ fn prompt_choice(prompt: &str, choices: &[&str], default: Option<&str>) -> Strin
             print!(
                 "{} ({}) [{}]: ",
                 color::bold(prompt),
-                choices.join("/"),
+                color::cyan(&choices.join("/")),
                 color::dim(&format!("default: {default}"))
             );
         } else {
-            print!("{} ({}): ", color::bold(prompt), choices.join("/"));
+            print!(
+                "{} ({}): ",
+                color::bold(prompt),
+                color::cyan(&choices.join("/"))
+            );
         }
         let _ = io::stdout().flush();
         let mut value = String::new();
@@ -73,7 +77,7 @@ fn prompt_nonempty(prompt: &str, default: Option<&str>) -> String {
 
 fn interactive_main() -> i32 {
     let _ = config::load(false);
-    println!("{}", color::bold(&version::window_title()));
+    println!("{}", color::title(&version::window_title()));
     println!("{}", color::dim(&"─".repeat(40)));
     println!();
 
@@ -129,7 +133,7 @@ fn main() -> ExitCode {
         Err(msg) => return abort(&msg),
     };
     if cli.help {
-        println!("{}", args::HELP);
+        args::print_help();
         return ExitCode::SUCCESS;
     }
     if cli.print_default_dir {

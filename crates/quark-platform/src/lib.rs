@@ -205,6 +205,21 @@ pub fn enable_virtual_terminal() {
     }
 }
 
+/// Block until a key is pressed. On Windows this is not line-buffered, so
+/// any key dismisses the wait (not only Enter).
+pub fn wait_for_keypress() {
+    #[cfg(windows)]
+    {
+        windows::wait_for_keypress();
+    }
+    #[cfg(not(windows))]
+    {
+        use std::io::Read;
+        let mut buf = [0u8; 1];
+        let _ = std::io::stdin().read_exact(&mut buf);
+    }
+}
+
 pub fn is_root() -> bool {
     #[cfg(target_os = "android")]
     {

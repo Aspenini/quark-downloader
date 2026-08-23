@@ -90,7 +90,7 @@ pub fn print_to(message: &str, io: &mut dyn Write) {
     if let Ok(mut guard) = ACTIVE.lock()
         && let Some(log) = guard.as_mut()
     {
-        let _ = writeln!(log.file, "{message}");
+        let _ = writeln!(log.file, "{}", crate::color::strip(message));
         let _ = log.file.flush();
     }
 }
