@@ -119,6 +119,7 @@ fn default_script_settings() -> SettingsForm {
         "keep",
         "true",
         "auto",
+        "false",
     )
 }
 
@@ -147,6 +148,10 @@ pub fn settings_from_value(value: &Value) -> Option<SettingsForm> {
             .map(Value::raw_display)
             .unwrap_or_else(|| "true".into()),
         value.get_str("gui_frontend").unwrap_or("auto"),
+        &value
+            .get("open_output_dir")
+            .map(Value::raw_display)
+            .unwrap_or_else(|| "false".into()),
     ))
 }
 

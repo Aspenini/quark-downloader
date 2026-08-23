@@ -23,6 +23,7 @@ QQC.ApplicationWindow {
     property string draftDir: downloadDir
     property string draftMode: guiMode
     property bool draftLogs: logs
+    property bool draftOpenOutput: openOutputDir
     property string draftTheme: theme
     property bool draftStrip: stripIds
     property bool draftSanitize: sanitize
@@ -46,6 +47,7 @@ QQC.ApplicationWindow {
             ffmpeg: "path",
             gui_download_mode: draftMode,
             download_logs: draftLogs,
+            open_output_dir: draftOpenOutput,
             gui_theme: draftTheme,
             strip_video_ids: draftStrip,
             sanitize_filenames: draftSanitize,
@@ -189,6 +191,7 @@ QQC.ApplicationWindow {
             QQC.Label { text: "Download window" }
             QQC.ComboBox { model: ["progress", "external_cli"]; currentIndex: root.draftMode === "external_cli" ? 1 : 0; onActivated: root.draftMode = currentText }
             QQC.CheckBox { text: "Download logs"; checked: root.draftLogs; onToggled: root.draftLogs = checked }
+            QQC.CheckBox { text: "Open output folder when done"; checked: root.draftOpenOutput; onToggled: root.draftOpenOutput = checked }
             QQC.Label { text: "Theme" }
             QQC.ComboBox {
                 model: ["system", "light", "dark"]

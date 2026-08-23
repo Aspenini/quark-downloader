@@ -4,13 +4,13 @@ use quark_gui::script::run;
 fn default_settings() -> SettingsForm {
     SettingsForm::from_strings(
         "~/Videos", "path", "path", "progress", "false", "dark", "true", "true", "keep", "true",
-        "auto",
+        "auto", "false",
     )
 }
 
 fn script(body: &str) -> String {
     format!(
-        r#"{{"args":{{"default_dir":"/tmp/dl","settings":{{"download_dir":"~/Videos","yt_dlp":"path","ffmpeg":"path","gui_download_mode":"progress","download_logs":false,"gui_theme":"dark","strip_video_ids":true,"sanitize_filenames":true,"filename_spaces":"keep","playlist_folders":true,"gui_frontend":"auto"}}}},"events":{body}}}"#
+        r#"{{"args":{{"default_dir":"/tmp/dl","settings":{{"download_dir":"~/Videos","yt_dlp":"path","ffmpeg":"path","gui_download_mode":"progress","download_logs":false,"open_output_dir":false,"gui_theme":"dark","strip_video_ids":true,"sanitize_filenames":true,"filename_spaces":"keep","playlist_folders":true,"gui_frontend":"auto"}}}},"events":{body}}}"#
     )
 }
 
@@ -96,7 +96,7 @@ fn audio_switch_resets_format_then_accepts_mp3() {
 #[test]
 fn save_settings_then_download_includes_settings() {
     let out = run(&script(
-        r#"[{"open_settings":true},{"set_setting":{"download_dir":"~/Media","yt_dlp":"path","ffmpeg":"path","gui_download_mode":"progress","download_logs":false,"gui_theme":"dark","strip_video_ids":false,"sanitize_filenames":true,"filename_spaces":"dash","playlist_folders":true,"gui_frontend":"auto"}},{"save_settings":true},{"add_url":"https://example.com/a"},{"download":true}]"#,
+        r#"[{"open_settings":true},{"set_setting":{"download_dir":"~/Media","yt_dlp":"path","ffmpeg":"path","gui_download_mode":"progress","download_logs":false,"open_output_dir":true,"gui_theme":"dark","strip_video_ids":false,"sanitize_filenames":true,"filename_spaces":"dash","playlist_folders":true,"gui_frontend":"auto"}},{"save_settings":true},{"add_url":"https://example.com/a"},{"download":true}]"#,
     ))
     .unwrap();
     let form = out
@@ -106,12 +106,13 @@ fn save_settings_then_download_includes_settings() {
     assert_eq!(form.download_dir, "~/Media");
     assert_eq!(form.filename_spaces, "dash");
     assert!(!form.strip_video_ids);
+    assert!(form.open_output_dir);
 }
 
 #[test]
 fn discarded_settings_are_not_emitted() {
     let out = run(&script(
-        r#"[{"open_settings":true},{"set_setting":{"download_dir":"~/Nope","yt_dlp":"path","ffmpeg":"path","gui_download_mode":"progress","download_logs":true,"gui_theme":"light","strip_video_ids":true,"sanitize_filenames":true,"filename_spaces":"keep","playlist_folders":true,"gui_frontend":"auto"}},{"close_settings":true},{"add_url":"https://example.com/a"},{"download":true}]"#,
+        r#"[{"open_settings":true},{"set_setting":{"download_dir":"~/Nope","yt_dlp":"path","ffmpeg":"path","gui_download_mode":"progress","download_logs":true,"open_output_dir":true,"gui_theme":"light","strip_video_ids":true,"sanitize_filenames":true,"filename_spaces":"keep","playlist_folders":true,"gui_frontend":"auto"}},{"close_settings":true},{"add_url":"https://example.com/a"},{"download":true}]"#,
     ))
     .unwrap();
     assert!(out.result.settings_form.is_none());

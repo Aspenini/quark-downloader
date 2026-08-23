@@ -170,7 +170,10 @@ fn helper_if_available() -> Option<HelperFrontend> {
 }
 
 fn show_completion(result: &DownloadResult) {
-    if result.success() {
+    let open_output = config::load(true)
+        .map(|s| s.open_output_dir)
+        .unwrap_or(false);
+    if result.success() && open_output {
         open_folder(&result.output_dir);
     }
     if let Some(fe) = helper_if_available() {

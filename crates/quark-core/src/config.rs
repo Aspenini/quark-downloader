@@ -143,6 +143,7 @@ pub struct Settings {
     pub ffmpeg: ToolSource,
     pub gui_download_mode: GuiDownloadMode,
     pub download_logs: bool,
+    pub open_output_dir: bool,
     pub gui_theme: GuiTheme,
     pub strip_video_ids: bool,
     pub sanitize_filenames: bool,
@@ -159,6 +160,7 @@ impl Default for Settings {
             ffmpeg: ToolSource::Auto,
             gui_download_mode: GuiDownloadMode::Progress,
             download_logs: true,
+            open_output_dir: false,
             gui_theme: GuiTheme::System,
             strip_video_ids: true,
             sanitize_filenames: true,
@@ -222,6 +224,7 @@ fn public_keys() -> &'static [&'static str] {
             "ffmpeg",
             "gui_download_mode",
             "download_logs",
+            "open_output_dir",
             "gui_theme",
             "strip_video_ids",
             "sanitize_filenames",
@@ -234,6 +237,7 @@ fn public_keys() -> &'static [&'static str] {
             "download_dir",
             "gui_download_mode",
             "download_logs",
+            "open_output_dir",
             "gui_theme",
             "strip_video_ids",
             "sanitize_filenames",
@@ -375,6 +379,9 @@ pub fn parse_file_with_keys(
             "download_logs" => {
                 settings.download_logs = parse_bool(value, "download_logs", true, quiet);
             }
+            "open_output_dir" => {
+                settings.open_output_dir = parse_bool(value, "open_output_dir", false, quiet);
+            }
             "gui_theme" => settings.gui_theme = parse_gui_theme(value, quiet),
             "strip_video_ids" => {
                 settings.strip_video_ids = parse_bool(value, "strip_video_ids", true, quiet);
@@ -444,6 +451,7 @@ pub fn config_value(settings: &Settings, key: &str) -> String {
         }
         "gui_download_mode" => settings.gui_download_mode.as_str().into(),
         "download_logs" => settings.download_logs.to_string(),
+        "open_output_dir" => settings.open_output_dir.to_string(),
         "gui_theme" => settings.gui_theme.as_str().into(),
         "strip_video_ids" => settings.strip_video_ids.to_string(),
         "sanitize_filenames" => settings.sanitize_filenames.to_string(),
@@ -707,6 +715,9 @@ pub fn render(settings: &Settings) -> String {
         "# Create rotated logs for CLI and GUI downloads".into(),
         format!("download_logs = {}", settings.download_logs),
         String::new(),
+        "# Open the output folder when a GUI download finishes".into(),
+        format!("open_output_dir = {}", settings.open_output_dir),
+        String::new(),
         "# GUI appearance".into(),
         "#   system - follow the desktop (Plasma, COSMIC, or macOS appearance)".into(),
         "#   light  - force light controls".into(),
@@ -759,7 +770,7 @@ mod tests {
         let path = temp_conf("all");
         fs::write(
             &path,
-            "download_dir = ~/Media\nyt_dlp = path\nffmpeg = bundled\ngui_download_mode = external_cli\ndownload_logs = off\ngui_theme = dark\nstrip_video_ids = false\nsanitize_filenames = false\nfilename_spaces = underscore\nplaylist_folders = false\n",
+            "download_dir = ~/Media\nyt_dlp = path\nffmpeg = bundled\ngui_download_mode = external_cli\ndownload_logs = off\nopen_output_dir = true\ngui_theme = dark\nstrip_video_ids = false\nsanitize_filenames = false\nfilename_spaces = underscore\nplaylist_folders = false\n",
         )
         .unwrap();
         let settings = parse_file(&path, true).unwrap();
@@ -775,6 +786,7 @@ mod tests {
         }
         assert_eq!(settings.gui_download_mode, GuiDownloadMode::ExternalCli);
         assert!(!settings.download_logs);
+        assert!(settings.open_output_dir);
         assert_eq!(settings.gui_theme, GuiTheme::Dark);
         assert!(!settings.strip_video_ids);
         assert!(!settings.sanitize_filenames);
@@ -788,7 +800,7 @@ mod tests {
         let path = temp_conf("invalid");
         fs::write(
             &path,
-            "yt_dlp = nope\nffmpeg = wrong\ngui_download_mode = mystery\ndownload_logs = maybe\ngui_theme = neon\nstrip_video_ids = maybe\nsanitize_filenames = perhaps\nfilename_spaces = tabs\nplaylist_folders = sometimes\ngui_frontend = neon\n",
+            "yt_dlp = nope\nffmpeg = wrong\ngui_download_mode = mystery\ndownload_logs = maybe\nopen_output_dir = maybe\ngui_theme = neon\nstrip_video_ids = maybe\nsanitize_filenames = perhaps\nfilename_spaces = tabs\nplaylist_folders = sometimes\ngui_frontend = neon\n",
         )
         .unwrap();
         let settings = parse_file(&path, true).unwrap();
@@ -796,6 +808,7 @@ mod tests {
         assert_eq!(settings.ffmpeg, ToolSource::Auto);
         assert_eq!(settings.gui_download_mode, GuiDownloadMode::Progress);
         assert!(settings.download_logs);
+        assert!(!settings.open_output_dir);
         assert_eq!(settings.gui_theme, GuiTheme::System);
         assert!(settings.strip_video_ids);
         assert!(settings.sanitize_filenames);
@@ -813,6 +826,7 @@ mod tests {
             ffmpeg: ToolSource::Path,
             gui_download_mode: GuiDownloadMode::ExternalCli,
             download_logs: false,
+            open_output_dir: true,
             gui_theme: GuiTheme::Dark,
             strip_video_ids: false,
             sanitize_filenames: false,
@@ -833,6 +847,7 @@ mod tests {
         assert!(rendered.contains("gui_frontend = qt"));
         assert!(rendered.contains("gui_download_mode = external_cli"));
         assert!(rendered.contains("download_logs = false"));
+        assert!(rendered.contains("open_output_dir = true"));
         assert!(rendered.contains("gui_theme = dark"));
         assert!(rendered.contains("strip_video_ids = false"));
         assert!(rendered.contains("sanitize_filenames = false"));
@@ -854,6 +869,7 @@ mod tests {
         assert!(migrated.contains("download_dir = ~/Downloads"));
         assert!(migrated.contains("gui_download_mode = progress"));
         assert!(migrated.contains("download_logs = true"));
+        assert!(migrated.contains("open_output_dir = false"));
         assert!(migrated.contains("gui_theme = system"));
         assert!(migrated.contains("strip_video_ids = true"));
         assert!(migrated.contains("sanitize_filenames = true"));

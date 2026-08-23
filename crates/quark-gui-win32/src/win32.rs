@@ -71,6 +71,7 @@ const IDC_SET_STRIP_IDS: i32 = 1032;
 const IDC_SET_SANITIZE: i32 = 1033;
 const IDC_SET_SPACES: i32 = 1034;
 const IDC_SET_PLAYLIST_FOLDERS: i32 = 1036;
+const IDC_SET_OPEN_OUTPUT: i32 = 1045;
 const IDC_PROGRESS_PLAYLIST_ETA: i32 = 1041;
 
 const MAIN_VIEW_IDS: &[i32] = &[
@@ -109,6 +110,7 @@ const SETTINGS_VIEW_IDS: &[i32] = &[
     IDC_SET_LOGS,
     1044,
     IDC_SET_FRONTEND,
+    IDC_SET_OPEN_OUTPUT,
     1040,
     1020,
     IDC_SET_YTDLP,
@@ -421,6 +423,11 @@ fn populate_settings_fields(dlg: Handle, settings: &Settings) {
             IDC_SET_PLAYLIST_FOLDERS,
             u32::from(settings.playlist_folders),
         );
+        CheckDlgButton(
+            dlg,
+            IDC_SET_OPEN_OUTPUT,
+            u32::from(settings.open_output_dir),
+        );
     }
     populate_combo(
         dlg,
@@ -455,6 +462,7 @@ fn read_settings_form(dlg: Handle, gui_theme: &str) -> Option<SettingsForm> {
             filename_spaces: combo_text(dlg, IDC_SET_SPACES),
             playlist_folders: IsDlgButtonChecked(dlg, IDC_SET_PLAYLIST_FOLDERS) != 0,
             gui_frontend: combo_text(dlg, IDC_SET_FRONTEND),
+            open_output_dir: IsDlgButtonChecked(dlg, IDC_SET_OPEN_OUTPUT) != 0,
         })
     }
 }
@@ -855,6 +863,7 @@ pub fn collect_main_session(
                     filename_spaces: s.session_settings.filename_spaces.as_str().into(),
                     playlist_folders: s.session_settings.playlist_folders,
                     gui_frontend: s.session_settings.gui_frontend.as_str().into(),
+                    open_output_dir: s.session_settings.open_output_dir,
                 })
             } else {
                 None
@@ -1134,7 +1143,10 @@ mod progress_impl {
                 &format!("Download complete!\n\n{}", result.dialog_body()),
                 false,
             );
-            if !result.output_dir.is_empty() {
+            let open_output = quark_core::config::load(true)
+                .map(|s| s.open_output_dir)
+                .unwrap_or(false);
+            if open_output && !result.output_dir.is_empty() {
                 open_url(&result.output_dir);
             }
         } else {

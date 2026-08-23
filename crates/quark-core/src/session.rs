@@ -28,6 +28,7 @@ pub struct SettingsForm {
     pub ffmpeg: String,
     pub gui_download_mode: String,
     pub download_logs: bool,
+    pub open_output_dir: bool,
     pub gui_theme: String,
     pub strip_video_ids: bool,
     pub sanitize_filenames: bool,
@@ -50,6 +51,7 @@ impl SettingsForm {
         filename_spaces: &str,
         playlist_folders: &str,
         gui_frontend: &str,
+        open_output_dir: &str,
     ) -> Self {
         Self {
             download_dir: download_dir.to_string(),
@@ -57,6 +59,7 @@ impl SettingsForm {
             ffmpeg: ffmpeg.to_string(),
             gui_download_mode: gui_download_mode.to_string(),
             download_logs: config::parse_bool(download_logs, "download_logs", true, true),
+            open_output_dir: config::parse_bool(open_output_dir, "open_output_dir", false, true),
             gui_theme: config::parse_gui_theme(gui_theme, true).as_str().into(),
             strip_video_ids: config::parse_bool(strip_video_ids, "strip_video_ids", true, true),
             sanitize_filenames: config::parse_bool(
@@ -90,6 +93,7 @@ impl SettingsForm {
             },
             gui_download_mode: config::parse_gui_download_mode(&self.gui_download_mode, true),
             download_logs: self.download_logs,
+            open_output_dir: self.open_output_dir,
             gui_theme: config::parse_gui_theme(&self.gui_theme, true),
             strip_video_ids: self.strip_video_ids,
             sanitize_filenames: self.sanitize_filenames,
@@ -154,6 +158,7 @@ pub fn build_session_args(default_dir: &str, settings: &Settings) -> Vec<String>
         settings.filename_spaces.as_str().into(),
         settings.playlist_folders.to_string(),
         settings.gui_frontend.as_str().into(),
+        settings.open_output_dir.to_string(),
     ]
 }
 
@@ -243,6 +248,9 @@ fn parse_settings_json(node: Option<&Value>) -> Option<SettingsForm> {
             .map(Value::raw_display)
             .unwrap_or_else(|| "true".into()),
         obj.get_str("gui_frontend").unwrap_or("auto"),
+        &obj.get("open_output_dir")
+            .map(Value::raw_display)
+            .unwrap_or_else(|| "false".into()),
     ))
 }
 
@@ -261,12 +269,13 @@ pub fn emit_json(
     );
     if let Some(settings) = settings {
         out.push_str(&format!(
-            ",\"settings\":{{\"download_dir\":{},\"yt_dlp\":{},\"ffmpeg\":{},\"gui_download_mode\":{},\"download_logs\":{},\"gui_theme\":{},\"strip_video_ids\":{},\"sanitize_filenames\":{},\"filename_spaces\":{},\"playlist_folders\":{},\"gui_frontend\":{}}}",
+            ",\"settings\":{{\"download_dir\":{},\"yt_dlp\":{},\"ffmpeg\":{},\"gui_download_mode\":{},\"download_logs\":{},\"open_output_dir\":{},\"gui_theme\":{},\"strip_video_ids\":{},\"sanitize_filenames\":{},\"filename_spaces\":{},\"playlist_folders\":{},\"gui_frontend\":{}}}",
             json::stringify_str(&settings.download_dir),
             json::stringify_str(&settings.yt_dlp),
             json::stringify_str(&settings.ffmpeg),
             json::stringify_str(&settings.gui_download_mode),
             settings.download_logs,
+            settings.open_output_dir,
             json::stringify_str(&settings.gui_theme),
             settings.strip_video_ids,
             settings.sanitize_filenames,
@@ -368,6 +377,7 @@ fn parse_settings(block: &[&str]) -> Option<SettingsForm> {
             .unwrap_or(FilenameSpaces::Keep.as_str()),
         block.get(9).copied().unwrap_or("true"),
         block.get(10).copied().unwrap_or("auto"),
+        block.get(11).copied().unwrap_or("false"),
     ))
 }
 
@@ -469,6 +479,7 @@ mod tests {
             ffmpeg: ToolSource::Path,
             gui_download_mode: GuiDownloadMode::ExternalCli,
             download_logs: false,
+            open_output_dir: true,
             gui_theme: GuiTheme::Dark,
             strip_video_ids: false,
             sanitize_filenames: true,
@@ -497,6 +508,7 @@ mod tests {
                 "underscore",
                 "false",
                 "qt",
+                "true",
             ]
         );
     }
@@ -555,6 +567,7 @@ mod tests {
         assert!(form.sanitize_filenames);
         assert_eq!(form.filename_spaces, "keep");
         assert!(form.playlist_folders);
+        assert!(!form.open_output_dir);
     }
 
     #[test]
@@ -598,6 +611,7 @@ mod tests {
         let form = result.settings_form.unwrap();
         assert_eq!(form.gui_theme, "dark");
         assert!(!form.download_logs);
+        assert!(!form.open_output_dir);
         match result.action {
             MainAction::Download(p) => {
                 assert_eq!(p.urls, ["https://example.com/a", "https://example.com/b"]);
@@ -634,6 +648,7 @@ mod tests {
             "keep",
             "true",
             "auto",
+            "on",
         );
         let settings = form.to_settings();
         assert_eq!(settings.download_dir, "~/Videos");
@@ -646,6 +661,7 @@ mod tests {
         }
         assert_eq!(settings.gui_download_mode, GuiDownloadMode::ExternalCli);
         assert!(!settings.download_logs);
+        assert!(settings.open_output_dir);
         assert_eq!(settings.gui_theme, GuiTheme::Dark);
     }
 

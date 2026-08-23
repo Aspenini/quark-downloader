@@ -66,6 +66,7 @@ static QJsonObject settingsFromCtx(QQmlContext *ctx)
         {"ffmpeg", "path"},
         {"gui_download_mode", s("guiMode")},
         {"download_logs", b("logs")},
+        {"open_output_dir", b("openOutputDir")},
         {"gui_theme", s("theme")},
         {"strip_video_ids", b("stripIds")},
         {"sanitize_filenames", b("sanitize")},
@@ -114,6 +115,7 @@ extern "C" int qt_ui_run(int argc, char **argv)
     ctx->setContextProperty("spaces", arg(9, QStringLiteral("keep")));
     ctx->setContextProperty("playlistFolders", barg(10, true));
     ctx->setContextProperty("frontend", arg(11, QStringLiteral("auto")));
+    ctx->setContextProperty("openOutputDir", barg(12, false));
     ctx->setContextProperty("outputDir", defaultDir);
 
     const QString qmlName = strcmp(mode, "--progress") == 0

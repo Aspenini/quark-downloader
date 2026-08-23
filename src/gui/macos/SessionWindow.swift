@@ -20,6 +20,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
     var spaces: String
     var playlistFolders: Bool
     var frontend: String
+    var openOutputDir: Bool
     var settingsSaved = false
     var queue: [String] = []
     var updateCheckRunning = false
@@ -46,6 +47,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
     let modePopup = NSPopUpButton()
     let frontendPopup = NSPopUpButton()
     var logsCheck: NSButton!
+    var openOutputCheck: NSButton!
     var updatesButton: NSButton!
 
     init(arguments: [String]) {
@@ -68,6 +70,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         spaces = arg(9, "keep")
         playlistFolders = boolArg(10, true)
         frontend = arg(11, "auto")
+        openOutputDir = boolArg(12, false)
         super.init()
     }
 
@@ -203,7 +206,8 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         logsCheck = NSButton(checkboxWithTitle: "Create download logs", target: nil, action: nil)
         frontendPopup.addItems(withTitles: frontendValues)
         let frontendRow = hStack([NSTextField(labelWithString: "GUI frontend:"), frontendPopup])
-        let downloadsBox = box("Downloads", rows: [modeRow, logsCheck, frontendRow], fullWidth: [])
+        openOutputCheck = NSButton(checkboxWithTitle: "Open output folder when done", target: nil, action: nil)
+        let downloadsBox = box("Downloads", rows: [modeRow, logsCheck, frontendRow, openOutputCheck], fullWidth: [])
 
         updatesButton = NSButton(title: "Check for updates…", target: self, action: #selector(checkUpdates))
         let saveButton = NSButton(title: "Save", target: self, action: #selector(saveSettings))
@@ -231,6 +235,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         select(modePopup, guiMode, from: modeValues)
         logsCheck.state = logs ? .on : .off
         select(frontendPopup, frontend, from: frontendValues)
+        openOutputCheck.state = openOutputDir ? .on : .off
     }
 
     // MARK: - Layout helpers
@@ -440,6 +445,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
         guiMode = modePopup.titleOfSelectedItem ?? "progress"
         logs = logsCheck.state == .on
         frontend = frontendPopup.titleOfSelectedItem ?? "auto"
+        openOutputDir = openOutputCheck.state == .on
         defaultDir = normalizedDir
         settingsSaved = true
         applyTheme(theme)
@@ -531,6 +537,7 @@ final class SessionController: NSObject, NSWindowDelegate, NSTableViewDataSource
             "filename_spaces": spaces,
             "playlist_folders": playlistFolders,
             "gui_frontend": frontend,
+            "open_output_dir": openOutputDir,
         ]
     }
 
