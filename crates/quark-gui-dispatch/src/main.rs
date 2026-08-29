@@ -193,11 +193,6 @@ fn show_completion(result: &DownloadResult) {
     }
     if let Some(fe) = helper_if_available() {
         fe.show_completion(result);
-        return;
-    }
-    #[cfg(windows)]
-    {
-        let _ = result;
     }
 }
 
@@ -414,7 +409,7 @@ fn run_in_macos_terminal(command: &str, args: &[String]) -> i32 {
     quark_core::process::exit_code(status, 1)
 }
 
-#[cfg(not(windows))]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn find_terminal() -> Option<(String, Vec<String>)> {
     const CANDIDATES: &[(&str, &[&str])] = &[
         ("x-terminal-emulator", &["-e"]),
@@ -442,7 +437,7 @@ fn find_terminal() -> Option<(String, Vec<String>)> {
     None
 }
 
-#[cfg(not(windows))]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn run_in_terminal(path: &str, prefix: &[String], command: &str, args: &[String]) -> i32 {
     let mut inner = std::iter::once(command)
         .chain(args.iter().map(String::as_str))

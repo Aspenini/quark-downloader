@@ -64,7 +64,7 @@ fn set_qml_env() {
     }
     let exe_dir = std::env::current_exe()
         .ok()
-        .and_then(|exe| exe.parent().map(Path::to_path_buf));
+        .and_then(|exe| exe.parent().map(|path| path.to_path_buf()));
     if let Some(dir) = exe_dir {
         let qml = dir.join("qml");
         if qml.is_dir() {
