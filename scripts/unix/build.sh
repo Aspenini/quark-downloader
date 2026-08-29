@@ -1,26 +1,43 @@
 #!/usr/bin/env bash
-set -eu
+set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-build_dir="$root/build"
-binary="$build_dir/quark-downloader"
-gui_binary="$build_dir/quark-downloader-gui"
+version="$(awk -F'"' '/^version = / {print $2; exit}' "$root/Cargo.toml")"
+system="$(uname -s)"
+arch="$(uname -m)"
+case "$arch" in
+  amd64) arch="x86_64" ;;
+  arm64) arch="aarch64" ;;
+esac
 
-echo "quark-downloader (Unix build)"
+case "$system" in
+  Darwin) package_dir="$root/target/package/macos-binaries" ;;
+  Linux) package_dir="$root/target/package/quark-downloader-$version-linux-$arch" ;;
+  *) echo "error: unsupported Unix platform: $system" >&2; exit 1 ;;
+esac
+case "$package_dir" in
+  "$root"/target/package/*) ;;
+  *) echo "error: invalid package staging path: $package_dir" >&2; exit 1 ;;
+esac
+
+echo "quark-downloader ($system release build)"
 echo ""
 
-mkdir -p "$build_dir"
+rm -rf "$package_dir"
+mkdir -p "$package_dir"
 
 echo "  Compiling CLI + GUI..."
 (cd "$root" && cargo build --release -p quark-cli -p quark-gui-dispatch)
-cp "$root/target/release/quark-downloader" "$binary"
-cp "$root/target/release/quark-downloader-gui" "$gui_binary"
+cp "$root/target/release/quark-downloader" \
+   "$root/target/release/quark-downloader-gui" \
+   "$root/LICENSE" \
+   "$root/README.md" \
+   "$package_dir/"
 
-if [[ "$(uname -s)" == "Linux" ]]; then
+if [[ "$system" == "Linux" ]]; then
   have_pkg() { command -v pkg-config >/dev/null && pkg-config --exists "$1"; }
-  mkdir -p "$build_dir/qml"
-  cp "$root"/src/gui/qt/*.qml "$build_dir/qml/"
-  echo "  qml/"
+  mkdir -p "$package_dir/qml"
+  cp "$root"/src/gui/qt/*.qml "$package_dir/qml/"
   if ! have_pkg Qt6Quick || ! have_pkg Qt6Qml; then
     echo "  (Qt UI not linked — no Qt6Quick.pc)"
     echo "    Arch:  sudo pacman -S --needed qt6-declarative pkgconf"
@@ -31,22 +48,15 @@ if [[ "$(uname -s)" == "Linux" ]]; then
 fi
 
 echo "  UPX (CLI only)..."
-if [[ "$(uname -s)" == "Darwin" ]]; then
+if [[ "$system" == "Darwin" ]]; then
   echo "  (upx skipped on macOS)"
 elif command -v upx >/dev/null 2>&1; then
-  if upx --best --lzma "$binary"; then
-    :
-  else
-    echo "  (upx failed, skipping)"
-  fi
+  upx --best --lzma "$package_dir/quark-downloader" || echo "  (upx failed, skipping)"
 else
   echo "  (upx not found, skipping)"
 fi
 
 echo ""
-echo "Done:"
-echo "  $binary"
-echo "  $gui_binary"
-if [[ -d "$build_dir/qml" ]]; then
-  echo "  $build_dir/qml"
-fi
+echo "Staged package:"
+echo "  $package_dir"
+echo "Final release files are written only by a platform release command into dist/."

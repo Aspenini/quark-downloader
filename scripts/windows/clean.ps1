@@ -7,8 +7,6 @@ if ((Test-Path -LiteralPath $gradlew) -and (Test-Path -LiteralPath (Join-Path $r
   & $gradlew -p (Join-Path $root "android") --stop | Out-Null
 }
 foreach ($dir in @(
-  (Join-Path $root "build"),
-  (Join-Path $root "packaging\output"),
   (Join-Path $root "target"),
   (Join-Path $root "android\.gradle"),
   (Join-Path $root "android\.cxx"),
@@ -25,4 +23,4 @@ foreach ($dir in @(
   }
 }
 
-Write-Host "Cleaned Rust, desktop packaging, and Android build intermediates (dist/ preserved)"
+Write-Host "Cleaned all build and package intermediates (dist/ preserved)"

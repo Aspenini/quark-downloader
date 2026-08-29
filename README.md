@@ -27,7 +27,7 @@
 
 **Note:** Distro/apt yt-dlp is often too old. Prefer `pipx install yt-dlp` and [Node or Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS). Quark warns on stale versions and passes EJS flags when a JS runtime is on PATH.
 
-**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024); Linux GUI also needs Qt 6 Declarative development files | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS app/DMG: Xcode Command Line Tools + `just dmg` | Android: JDK 17 + NDK, `just android-release` (see [`android/README.md`](android/README.md))
+**Build:** [Rust](https://www.rust-lang.org/) 1.85+ (edition 2024); Linux GUI also needs Qt 6 Declarative development files | [just](https://github.com/casey/just) | Windows installer: [Inno Setup 7](https://jrsoftware.org/isdl.php) + `packaging/quark-downloader.iss` | macOS DMG: Xcode Command Line Tools + `just macos-release` | Android: JDK 17 + NDK, `just android-release` (see [`android/README.md`](android/README.md))
 
 ## Binaries
 
@@ -72,14 +72,18 @@ The download-naming settings are grouped under **Download Naming** in the GUI se
 ```bash
 just run          # cargo run CLI
 just run-gui      # cargo run GUI dispatcher
-just build        # release -> build/ (CLI + GUI; UPX CLI)
-just dmg          # macOS: build "Quark Downloader.app" + DMG into dist/
-just windows-release # Windows: unsigned installer
-just dmg-release     # macOS: ad-hoc signed, unnotarized DMG
+just build        # compile and stage under target/package/ (disposable)
+just windows-release # Windows: portable ZIP + unsigned installer
+just linux-release   # Linux: portable tarball
+just macos-release   # macOS: ad-hoc signed, unnotarized DMG
 just android-release # Android: signed APK using the release keystore
 just test         # cargo test --workspace
 just clean
 ```
+
+Every downloadable release file is written directly to `dist/`; nothing final
+is written to `build/`, `target/`, or `packaging/`. Packaging staging lives under
+`target/package/` and `just clean` removes it without touching `dist/`.
 
 The DMG is ad-hoc signed: after downloading, right-click > Open the first time (or `xattr -dr com.apple.quarantine "Quark Downloader.app"`). On macOS and Linux, install **yt-dlp** and **ffmpeg** yourself (`brew install yt-dlp ffmpeg`, or your distro / `pipx`); Quark does not bundle or auto-download them there. **Do not run with sudo** — that writes config and downloads into root's home.
 
@@ -100,6 +104,14 @@ right-click **Open** on first launch. Android releases use
 `%USERPROFILE%\quark-release.jks` on Windows (or `$HOME/quark-release.jks` on
 Unix) and prompt securely for the password. Preserve that keystore for every
 future Android update.
+
+The release commands produce these consistently named files in `dist/`:
+
+- `quark-downloader-VERSION-windows-portable.zip`
+- `quark-downloader-VERSION-setup.exe`
+- `quark-downloader-VERSION-linux-ARCH.tar.gz`
+- `quark-downloader-VERSION-macos.dmg`
+- `quark-downloader-VERSION-android.apk`
 
 Create a `vVERSION` tag, replace `sha256s=('SKIP')` in `packaging/PKGBUILD`
 with the tagged source archive's SHA-256, run `makepkg --printsrcinfo` to update

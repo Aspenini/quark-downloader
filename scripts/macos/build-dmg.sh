@@ -11,28 +11,30 @@ fi
 
 bash "$root/scripts/unix/build.sh"
 
-if [[ ! -x "$root/build/quark-downloader-gui" ]]; then
+package_dir="$root/target/package/macos-binaries"
+if [[ ! -x "$package_dir/quark-downloader-gui" ]]; then
   echo "error: quark-downloader-gui missing" >&2
   exit 1
 fi
 
 version="$(awk -F'"' '/^version = / {print $2; exit}' "$root/Cargo.toml")"
 dist="$root/dist"
-app="$dist/Quark Downloader.app"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+app="$work/Quark Downloader.app"
 macos_dir="$app/Contents/MacOS"
 resources_dir="$app/Contents/Resources"
 
 echo ""
 echo "Assembling app bundle (v$version)..."
-rm -rf "$dist"
-mkdir -p "$macos_dir" "$resources_dir"
+mkdir -p "$dist" "$macos_dir" "$resources_dir"
 
-cp "$root/build/quark-downloader" \
-   "$root/build/quark-downloader-gui" \
+cp "$package_dir/quark-downloader" \
+   "$package_dir/quark-downloader-gui" \
    "$macos_dir/"
 
 echo "  Generating icon.icns..."
-iconset="$(mktemp -d)/icon.iconset"
+iconset="$work/icon.iconset"
 mkdir -p "$iconset"
 for size in 16 32 64 128 256 512; do
   sips -z "$size" "$size" "$root/icons/icon.png" --out "$iconset/icon_${size}x${size}.png" >/dev/null
@@ -86,12 +88,12 @@ else
 fi
 
 echo "  Creating DMG..."
-staging="$(mktemp -d)"
+staging="$work/dmg"
+mkdir -p "$staging"
 cp -R "$app" "$staging/"
 ln -s /Applications "$staging/Applications"
-dmg="$dist/QuarkDownloader-$version.dmg"
+dmg="$dist/quark-downloader-$version-macos.dmg"
 hdiutil create -volname "Quark Downloader" -srcfolder "$staging" -ov -format UDZO "$dmg" >/dev/null
-rm -rf "$staging"
 
 if [[ "$sign_identity" != "-" ]]; then
   codesign --force --timestamp -s "$sign_identity" "$dmg"
@@ -105,7 +107,6 @@ fi
 
 echo ""
 echo "Done:"
-echo "  $app"
 echo "  $dmg"
 echo ""
 if [[ "$sign_identity" == "-" ]]; then

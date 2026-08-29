@@ -2,11 +2,11 @@
 /bundled-tools/*
 !/bundled-tools/.gitkeep
 
-# Build outputs
-/build/
-/bin/
+# Final release files
 /dist/
-/packaging/output/
+
+# Build and package intermediates
+/bin/
 
 # Runtime tool cache (next to executable)
 /tools/

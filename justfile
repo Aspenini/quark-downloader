@@ -1,10 +1,3 @@
-name := "quark-downloader"
-gui_name := "quark-downloader-gui"
-build_dir := "build"
-exe_ext := if os() == "windows" { ".exe" } else { "" }
-binary := build_dir + "/" + name + exe_ext
-gui_binary := build_dir + "/" + gui_name + exe_ext
-
 set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 set quiet := true
 
@@ -13,30 +6,28 @@ default:
     @just --list
 
 [group('build')]
-[private]
-[windows]
-copy-bundled-tools:
-    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/copy-bundled-tools.ps1
-
-[group('build')]
 [unix]
 build:
     @bash scripts/unix/build.sh
 
 [group('build')]
 [windows]
-build: copy-bundled-tools
+build:
     @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/build.ps1
 
 [group('build')]
-[unix]
-dmg:
-    @bash scripts/macos/build-dmg.sh
+[linux]
+linux-release:
+    @bash scripts/unix/package-release.sh
 
 [group('build')]
 [macos]
-dmg-release:
-    @QUARK_MACOS_SIGN_IDENTITY=- QUARK_MACOS_NOTARY_PROFILE= bash scripts/macos/build-dmg.sh
+macos-release:
+    @bash scripts/macos/build-dmg.sh
+
+[private]
+[macos]
+dmg: macos-release
 
 [group('build')]
 [windows]

@@ -1,9 +1,9 @@
 . (Join-Path $PSScriptRoot "common.ps1")
 
 $root = Get-ProjectRoot
-$buildDir = Initialize-BuildDir $root
-$binary = Join-Path $buildDir "quark-downloader.exe"
-$guiBinary = Join-Path $buildDir "quark-downloader-gui.exe"
+$packageDir = Initialize-WindowsPackageDir $root
+$binary = Join-Path $packageDir "quark-downloader.exe"
+$guiBinary = Join-Path $packageDir "quark-downloader-gui.exe"
 
 Write-Host "quark-downloader (Windows build)"
 Write-Host ""
@@ -18,6 +18,18 @@ try {
 
 Copy-Item (Join-Path $root "target\release\quark-downloader.exe") $binary -Force
 Copy-Item (Join-Path $root "target\release\quark-downloader-gui.exe") $guiBinary -Force
+Copy-Item (Join-Path $root "LICENSE") $packageDir -Force
+Copy-Item (Join-Path $root "README.md") $packageDir -Force
+
+$toolsDir = Join-Path $packageDir "tools"
+$bundled = Join-Path $root "bundled-tools"
+foreach ($tool in @("ffmpeg.exe", "ffprobe.exe", "yt-dlp.exe")) {
+  $source = Join-Path $bundled $tool
+  if (Test-Path -LiteralPath $source -PathType Leaf) {
+    New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
+    Copy-Item $source $toolsDir -Force
+  }
+}
 
 Write-Host "  UPX (CLI only)..."
 if (Get-Command upx -ErrorAction SilentlyContinue) {
@@ -28,5 +40,5 @@ if (Get-Command upx -ErrorAction SilentlyContinue) {
 
 Write-Host ""
 Write-Host "Done:"
-Write-Host "  $binary"
-Write-Host "  $guiBinary"
+Write-Host "  Staged portable package: $packageDir"
+Write-Host "  Run 'just windows-release' for final files in dist/."

@@ -30,7 +30,7 @@
 
 
 
-#define BuildDir        "..\build"
+#define BuildDir        "..\target\package\quark-downloader-" + MyAppVersion + "-windows-portable"
 
 #define BuildSource     BuildDir + "\" + MyAppExeName
 
@@ -51,7 +51,7 @@
 
 #else
 
-  #pragma error "Run `just build` first - expected ..\build\quark-downloader.exe"
+  #pragma error "Run `just build` first - Windows package staging is missing"
 
 #endif
 
@@ -61,7 +61,7 @@
 
 #else
 
-  #pragma error "Run `just build` first - expected ..\build\quark-downloader-gui.exe"
+  #pragma error "Run `just build` first - Windows GUI package staging is missing"
 
 #endif
 
@@ -122,7 +122,7 @@ AllowNoIcons=yes
 
 
 
-OutputDir=output
+OutputDir=..\dist
 
 OutputBaseFilename=quark-downloader-{#MyAppVersion}-setup
 
@@ -238,25 +238,25 @@ Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 ; If missing, your app can download them later into {app}\tools.
 
-#ifexist "..\build\tools\ffmpeg.exe"
+#ifexist BuildDir + "\tools\ffmpeg.exe"
 
-Source: "..\build\tools\ffmpeg.exe"; DestDir: "{app}\tools"; Flags: ignoreversion restartreplace uninsrestartdelete
-
-#endif
-
-
-
-#ifexist "..\build\tools\ffprobe.exe"
-
-Source: "..\build\tools\ffprobe.exe"; DestDir: "{app}\tools"; Flags: ignoreversion restartreplace uninsrestartdelete
+Source: "{#BuildDir}\tools\ffmpeg.exe"; DestDir: "{app}\tools"; Flags: ignoreversion restartreplace uninsrestartdelete
 
 #endif
 
 
 
-#ifexist "..\build\tools\yt-dlp.exe"
+#ifexist BuildDir + "\tools\ffprobe.exe"
 
-Source: "..\build\tools\yt-dlp.exe"; DestDir: "{app}\tools"; Flags: ignoreversion restartreplace uninsrestartdelete
+Source: "{#BuildDir}\tools\ffprobe.exe"; DestDir: "{app}\tools"; Flags: ignoreversion restartreplace uninsrestartdelete
+
+#endif
+
+
+
+#ifexist BuildDir + "\tools\yt-dlp.exe"
+
+Source: "{#BuildDir}\tools\yt-dlp.exe"; DestDir: "{app}\tools"; Flags: ignoreversion restartreplace uninsrestartdelete
 
 #endif
 
