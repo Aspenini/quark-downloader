@@ -72,10 +72,11 @@ pub fn default_output_dir() -> PathBuf {
 }
 
 pub fn stall_timeout_from_env(default: Duration) -> Duration {
-    if let Ok(raw) = std::env::var("QUARK_STALL_TIMEOUT_SEC")
-        && let Ok(secs) = raw.parse::<u64>()
-        && secs > 0
-    {
+    let timeout = std::env::var("QUARK_STALL_TIMEOUT_SEC")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .filter(|secs| *secs > 0);
+    if let Some(secs) = timeout {
         return Duration::from_secs(secs);
     }
     default
@@ -283,10 +284,13 @@ pub fn preflight(
     for url in urls {
         ytdlp::preflight_youtube(url).map_err(|e| e.0)?;
     }
-    if urls.iter().any(|u| ytdlp::youtube_url(u))
-        && let Some(version) = ytdlp::read_version(&ytdlp)
-        && !version_cmp::at_least(&version, ytdlp::MIN_YOUTUBE_YTDLP)
-    {
+    let old_youtube_version = urls
+        .iter()
+        .any(|u| ytdlp::youtube_url(u))
+        .then(|| ytdlp::read_version(&ytdlp))
+        .flatten()
+        .filter(|version| !version_cmp::at_least(version, ytdlp::MIN_YOUTUBE_YTDLP));
+    if let Some(version) = old_youtube_version {
         logs::log_line(&color::yellow(&format!(
             "Warning: yt-dlp {version} is likely too old for YouTube (want >= {}).",
             ytdlp::MIN_YOUTUBE_YTDLP
@@ -743,9 +747,7 @@ fn run_playlist(
             active.as_secs()
         )));
         start = item + 1;
-        if let Some(t) = total
-            && start > t
-        {
+        if total.is_some_and(|t| start > t) {
             break;
         }
     }
@@ -855,19 +857,20 @@ fn poll_child(
             kill_tree(child, pid);
             return child.wait().ok();
         }
-        if let (Some(monitor), Some(active), Some(grace)) = (monitor, active, grace)
-            && monitor.stalled(active, grace)
-        {
-            if monitor.kill_on_stall() {
-                monitor.mark_killed();
-                kill_tree(child, pid);
-                return child.wait().ok();
-            } else if !monitor.warned() {
-                monitor.mark_warned();
-                logs::log_line(&color::yellow(
-                    "\nWarning: no response for a while; still waiting…",
-                ));
+        match (monitor, active, grace) {
+            (Some(monitor), Some(active), Some(grace)) if monitor.stalled(active, grace) => {
+                if monitor.kill_on_stall() {
+                    monitor.mark_killed();
+                    kill_tree(child, pid);
+                    return child.wait().ok();
+                } else if !monitor.warned() {
+                    monitor.mark_warned();
+                    logs::log_line(&color::yellow(
+                        "\nWarning: no response for a while; still waiting…",
+                    ));
+                }
             }
+            _ => {}
         }
         thread::sleep(Duration::from_millis(200));
     }

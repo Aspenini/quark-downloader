@@ -95,15 +95,12 @@ pub fn strip(text: &str) -> String {
             out.push(c);
             continue;
         }
-        match chars.next() {
-            Some('[') => {
-                for x in chars.by_ref() {
-                    if x.is_ascii_alphabetic() {
-                        break;
-                    }
+        if let Some('[') = chars.next() {
+            for x in chars.by_ref() {
+                if x.is_ascii_alphabetic() {
+                    break;
                 }
             }
-            Some(_) | None => {}
         }
     }
     out

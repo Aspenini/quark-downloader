@@ -52,9 +52,7 @@ pub fn reduce(state: &mut UiState, event: UiEvent) -> Vec<UiEffect> {
         UiEvent::AddUrl => add_url_field(state),
         UiEvent::PasteUrls(text) => paste_urls(state, &text),
         UiEvent::RemoveSelected => {
-            if let Some(idx) = state.selected
-                && idx < state.queue.len()
-            {
+            if let Some(idx) = state.selected.filter(|idx| *idx < state.queue.len()) {
                 state.queue.remove(idx);
                 state.selected = None;
             }

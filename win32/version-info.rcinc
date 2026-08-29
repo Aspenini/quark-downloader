@@ -1,0 +1,32 @@
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION QUARK_VERSION_COMMA
+ PRODUCTVERSION QUARK_VERSION_COMMA
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS VS_FF_DEBUG
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Aspenini\0"
+            VALUE "FileDescription", QUARK_FILE_DESCRIPTION "\0"
+            VALUE "FileVersion", QUARK_VERSION_STRING "\0"
+            VALUE "InternalName", QUARK_ORIGINAL_FILENAME "\0"
+            VALUE "LegalCopyright", "Copyright (c) 2026 Aspenini\0"
+            VALUE "OriginalFilename", QUARK_ORIGINAL_FILENAME "\0"
+            VALUE "ProductName", "Quark Downloader\0"
+            VALUE "ProductVersion", QUARK_VERSION_STRING "\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

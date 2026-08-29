@@ -334,10 +334,11 @@ fn with_session<T>(f: impl FnOnce(&mut SessionState) -> T) -> Option<T> {
 }
 
 unsafe extern "system" fn browse_cb(hwnd: Handle, msg: u32, _lparam: isize, _data: isize) -> i32 {
-    if msg == BFFM_INITIALIZED
-        && let Some(initial) = with_session(|s| s.browse_initial.clone())
-        && !initial.is_empty()
-    {
+    let initial = (msg == BFFM_INITIALIZED)
+        .then(|| with_session(|s| s.browse_initial.clone()))
+        .flatten()
+        .filter(|initial| !initial.is_empty());
+    if let Some(initial) = initial {
         let path = wide(&initial);
         unsafe {
             SendMessageW(hwnd, BFFM_SETSELECTIONW, 1, path.as_ptr() as isize);
@@ -977,10 +978,13 @@ mod progress_impl {
             if let Some(idx) = line.find("[download] Downloading item ") {
                 let rest = &line[idx + "[download] Downloading item ".len()..];
                 let mut parts = rest.split_whitespace();
-                if let (Some(item), Some("of"), Some(total)) =
-                    (parts.next(), parts.next(), parts.next())
-                    && let (Ok(item), Ok(total)) = (item.parse::<i32>(), total.parse::<i32>())
-                {
+                let item_progress = match (parts.next(), parts.next(), parts.next()) {
+                    (Some(item), Some("of"), Some(total)) => {
+                        item.parse::<i32>().ok().zip(total.parse::<i32>().ok())
+                    }
+                    _ => None,
+                };
+                if let Some((item, total)) = item_progress {
                     s.item_text = format!("item {item} of {total}");
                     s.download_started = false;
                     s.percent = 0.0;
@@ -1000,9 +1004,10 @@ mod progress_impl {
                 s.percent = progress::display_download_percent(percent);
             } else if let Some(status) = progress::parse_status_line(line) {
                 s.status = status;
-                if !s.download_started
-                    && let Some(setup) = progress::next_setup_progress(s.percent, line)
-                {
+                let setup = (!s.download_started)
+                    .then(|| progress::next_setup_progress(s.percent, line))
+                    .flatten();
+                if let Some(setup) = setup {
                     s.percent = setup;
                 }
             }

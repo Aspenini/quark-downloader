@@ -24,7 +24,7 @@ pub fn invoke(args: &[String]) -> i32 {
 fn run_ui(args: &[String]) -> i32 {
     #[cfg(qt_ui)]
     {
-        return run_embedded(args);
+        run_embedded(args)
     }
     #[cfg(not(qt_ui))]
     {
@@ -62,9 +62,10 @@ fn set_qml_env() {
     if std::env::var_os("QUARK_QT_QML").is_some() {
         return;
     }
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(dir) = exe.parent()
-    {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf));
+    if let Some(dir) = exe_dir {
         let qml = dir.join("qml");
         if qml.is_dir() {
             // Safety: called once before QGuiApplication; no other threads yet.

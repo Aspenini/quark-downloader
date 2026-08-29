@@ -100,6 +100,8 @@ AppVersion={#MyAppVersion}
 
 AppPublisher={#MyAppPublisher}
 
+LicenseFile=..\LICENSE
+
 
 
 SetupIconFile={#AppIcon}
@@ -129,10 +131,6 @@ OutputBaseFilename=quark-downloader-{#MyAppVersion}-setup
 Compression=lzma2/max
 
 SolidCompression=yes
-
-LZMAUseSeparateProcess=yes
-
-
 
 ; Inno Setup 7 dynamic theme.
 
@@ -224,6 +222,10 @@ Source: "{#AppIcon}"; DestDir: "{app}"; DestName: "{#GuiIconName}"; Flags: ignor
 
 Source: "{#CliAppIcon}"; DestDir: "{app}"; DestName: "{#CliIconName}"; Flags: ignoreversion
 
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+
+Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
+
 
 
 ; Native Win32 build — no extra runtime DLLs.
@@ -269,4 +271,3 @@ Name: "{group}\{#MyAppName} (CLI)"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppGuiExeName}"; IconFilename: "{app}\{#GuiIconName}"; WorkingDir: "{app}"; Tasks: gui
 
 Name: "{autodesktop}\{#MyAppName} (CLI)"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#CliIconName}"; WorkingDir: "{app}"; Tasks: cli
-

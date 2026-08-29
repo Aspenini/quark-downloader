@@ -102,9 +102,10 @@ fn lookup_id(id: &str, builtins: &[&str]) -> Option<PathBuf> {
 }
 
 fn lookup_named(name: &str) -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(parent) = exe.parent()
-    {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf));
+    if let Some(parent) = exe_dir {
         let sibling = parent.join(name);
         if is_executable(&sibling) {
             return Some(sibling);
@@ -303,6 +304,9 @@ pub fn last_resort_error(message: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn helper_names() {
@@ -316,7 +320,9 @@ mod tests {
 
     #[test]
     fn env_path_override_missing_is_error() {
-        // SAFETY: test process is single-threaded here.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: every test in this module that reads or writes this variable
+        // holds ENV_LOCK, so the process environment is not mutated concurrently.
         unsafe {
             std::env::set_var("QUARK_GUI_FRONTEND", "/no/such/quark-frontend-binary");
         }
@@ -330,6 +336,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn builtin_id_resolves_to_current_exe() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (id, path) = discover_helper(&["qt"]).unwrap();
         assert_eq!(id, "qt");
         assert_eq!(path, std::env::current_exe().unwrap());
@@ -338,6 +345,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn builtin_id_resolves_to_current_exe() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (id, path) = discover_helper(&["appkit"]).unwrap();
         assert_eq!(id, "appkit");
         assert_eq!(path, std::env::current_exe().unwrap());

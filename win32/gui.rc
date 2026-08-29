@@ -1,4 +1,5 @@
 #include <windows.h>
+#include "quark-version.h"
 
 #define IDI_APP_ICON 1
 #define IDD_MAIN 101
@@ -49,6 +50,10 @@
 #define IDC_SET_RESET 1046
 
 IDI_APP_ICON ICON "../icons/icon.ico"
+
+#define QUARK_FILE_DESCRIPTION "Quark Downloader graphical interface"
+#define QUARK_ORIGINAL_FILENAME "quark-downloader-gui.exe"
+#include "version-info.rcinc"
 
 IDD_MAIN DIALOGEX 0, 0, 360, 336
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU

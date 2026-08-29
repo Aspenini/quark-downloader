@@ -462,9 +462,10 @@ pub fn resolve_cli() -> Option<std::path::PathBuf> {
             return Some(p);
         }
     }
-    if let Ok(gui_exe) = std::env::current_exe()
-        && let Some(parent) = gui_exe.parent()
-    {
+    let gui_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|parent| parent.to_path_buf()));
+    if let Some(parent) = gui_dir {
         let sibling = parent.join(cli_name());
         if sibling.exists() {
             return Some(sibling);

@@ -79,9 +79,10 @@ fn which_path(name: &str) -> Option<PathBuf> {
         }
         #[cfg(windows)]
         {
-            if !name.ends_with(".exe")
-                && let Some(found) = existing_exe(&dir.join(format!("{name}.exe")))
-            {
+            let found = (!name.ends_with(".exe"))
+                .then(|| existing_exe(&dir.join(format!("{name}.exe"))))
+                .flatten();
+            if let Some(found) = found {
                 return Some(found);
             }
         }

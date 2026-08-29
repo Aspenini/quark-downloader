@@ -23,7 +23,7 @@ pub fn invoke(args: &[String]) -> i32 {
 fn run_ui(args: &[String]) -> i32 {
     #[cfg(appkit_ui)]
     {
-        return run_embedded(args);
+        run_embedded(args)
     }
     #[cfg(not(appkit_ui))]
     {

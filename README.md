@@ -37,9 +37,13 @@
 | `quark-downloader-gui` | Qt frontend on Linux; AppKit frontend on macOS; Win32 frontend on Windows |
 | Android APK | Compose app; GitHub Releases only (not Play Store). GPL-3.0 because it links youtubedl-android. |
 
+Android license text, third-party notices, and corresponding-source details are
+in [`android/`](android/README.md). Desktop binaries and reusable shared crates
+remain MIT-licensed.
+
 The GUI queues multiple URLs (Add/Remove list) and downloads them sequentially with combined progress ("URL 2 of 5"). Playlist URLs download every item into a folder named after the playlist (see `playlist_folders`), with per-item progress and a failure summary.
 
-Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop). Linux builds link the Qt 6 frontend when Qt Declarative is present. Qt automatically uses the installed [CuteCosmic](https://github.com/IgKh/cutecosmic) platform theme in a COSMIC session. macOS builds compile the AppKit frontend into `quark-downloader-gui`. Frontends share `quark-gui` (catalog + session reducer + `--script` contract); see [`crates/quark-gui/README.md`](crates/quark-gui/README.md).
+Package maintainers can ship the CLI alone (`quark-downloader` on PATH) and optionally a GUI package that installs `quark-downloader-gui`, [`packaging/quark-downloader-gui.desktop`](packaging/quark-downloader-gui.desktop). Linux builds link the Qt 6 frontend when Qt Declarative is present. Qt automatically uses the installed [CuteCosmic](https://github.com/IgKh/cutecosmic) platform theme in a COSMIC session. macOS builds compile the AppKit frontend into `quark-downloader-gui`. All frontends share the `quark-gui` catalog, reducer, and `--script` contract.
 
 Windows shortcuts from the installer open the GUI; the CLI remains in the install folder as **Quark Downloader (CLI)**. Use **Check for updates** in settings to compare against the latest [GitHub release](https://github.com/Aspenini/quark-downloader/releases) and open the installer download when a newer version is published.
 
@@ -70,6 +74,9 @@ just run          # cargo run CLI
 just run-gui      # cargo run GUI dispatcher
 just build        # release -> build/ (CLI + GUI; UPX CLI)
 just dmg          # macOS: build "Quark Downloader.app" + DMG into dist/
+just windows-release # Windows: unsigned installer
+just dmg-release     # macOS: ad-hoc signed, unnotarized DMG
+just android-release # Android: signed APK using the release keystore
 just test         # cargo test --workspace
 just clean
 ```
@@ -80,7 +87,24 @@ The DMG is ad-hoc signed: after downloading, right-click > Open the first time (
 
 **Stall watchdog:** Playlist items that go silent too long are skipped (`QUARK_STALL_TIMEOUT_SEC`, default ~75s after output starts, ~90s grace before first output). Single-video stalls warn instead of killing.
 
-Build scripts live under [`scripts/`](scripts/README.md), grouped by platform.
+## Release
+
+Before tagging, run formatting, strict Clippy, all tests, a release build, and
+confirm the GitHub Actions Rust, MSRV, Android, and audit jobs are green. Test a
+real audio conversion, video, playlist, cancellation, and update check on each
+supported platform.
+
+Windows artifacts are intentionally unsigned and may trigger SmartScreen.
+macOS releases are ad-hoc signed and unnotarized, so users may need to
+right-click **Open** on first launch. Android releases use
+`%USERPROFILE%\quark-release.jks` on Windows (or `$HOME/quark-release.jks` on
+Unix) and prompt securely for the password. Preserve that keystore for every
+future Android update.
+
+Create a `vVERSION` tag, replace `sha256s=('SKIP')` in `packaging/PKGBUILD`
+with the tagged source archive's SHA-256, run `makepkg --printsrcinfo` to update
+the AUR `.SRCINFO`, and upload assets using the names expected by the in-app
+updater.
 
 ### CLI (non-interactive)
 

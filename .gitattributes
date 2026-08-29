@@ -4,3 +4,4 @@
 *.iss text eol=lf
 *.cr text eol=lf
 justfile text eol=lf
+PKGBUILD text eol=lf

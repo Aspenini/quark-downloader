@@ -31,17 +31,23 @@ impl DestinationTracker {
                 if let Ok(mut count) = self.error_count.lock() {
                     *count += 1;
                 }
-                if let Ok(mut errors) = self.errors.lock()
-                    && !errors.iter().any(|e| e == part)
-                {
+                let new_error = self
+                    .errors
+                    .lock()
+                    .ok()
+                    .filter(|errors| !errors.iter().any(|e| e == part));
+                if let Some(mut errors) = new_error {
                     errors.push(part.to_string());
                 }
                 continue;
             }
-            if let Some(path) = extract_destination(part)
-                && let Ok(mut paths) = self.paths.lock()
-                && !paths.iter().any(|p| p == path)
-            {
+            let Some(path) = extract_destination(part) else {
+                continue;
+            };
+            let Ok(mut paths) = self.paths.lock() else {
+                continue;
+            };
+            if !paths.iter().any(|p| p == path) {
                 paths.push(path.to_string());
             }
         }
@@ -64,8 +70,9 @@ fn extract_destination(part: &str) -> Option<&str> {
     if let Some(rest) = part.strip_prefix("[download] Destination: ") {
         return Some(rest);
     }
-    if let Some(rest) = part.strip_prefix("[Merger] Merging formats into \"")
-        && let Some(path) = rest.strip_suffix('"')
+    if let Some(path) = part
+        .strip_prefix("[Merger] Merging formats into \"")
+        .and_then(|rest| rest.strip_suffix('"'))
     {
         return Some(path);
     }
@@ -78,8 +85,9 @@ fn extract_destination(part: &str) -> Option<&str> {
     if let Some(rest) = part.strip_prefix("[VideoRemuxer] Destination: ") {
         return Some(rest);
     }
-    if let Some(rest) = part.strip_prefix("[download] ")
-        && let Some(path) = rest.strip_suffix(" has already been downloaded")
+    if let Some(path) = part
+        .strip_prefix("[download] ")
+        .and_then(|rest| rest.strip_suffix(" has already been downloaded"))
     {
         return Some(path);
     }

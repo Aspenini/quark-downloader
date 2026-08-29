@@ -135,7 +135,7 @@ pub fn sanitize_file_name(name: &str, ascii_only: bool, spaces: &str) -> Result<
 
 fn jni_string(env: &mut JNIEnv, value: JString) -> Result<String, String> {
     env.get_string(&value)
-        .map(|s| String::from(s))
+        .map(String::from)
         .map_err(|e| e.to_string())
 }
 

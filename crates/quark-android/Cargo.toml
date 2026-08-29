@@ -3,7 +3,7 @@ name = "quark-android"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "GPL-3.0-only"
 description = "JNI bindings for the Android Compose frontend"
 publish = false
 

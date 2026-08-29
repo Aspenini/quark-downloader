@@ -237,14 +237,15 @@ pub fn expand_path(path: &str) -> PathBuf {
 }
 
 pub fn app_dir() -> PathBuf {
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(parent) = exe.parent()
-    {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf));
+    if let Some(parent) = exe_dir {
         let s = parent.to_string_lossy().replace('\\', "/");
         if s.contains("/target/debug") || s.contains("/target/release") {
-            return std::env::current_dir().unwrap_or_else(|_| parent.to_path_buf());
+            return std::env::current_dir().unwrap_or(parent);
         }
-        return parent.to_path_buf();
+        return parent;
     }
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
@@ -495,9 +496,10 @@ fn kde_prefers_dark() -> Option<bool> {
 
 fn gtk_prefers_dark() -> Option<bool> {
     for name in ["gtk-4.0/settings.ini", "gtk-3.0/settings.ini"] {
-        if let Ok(text) = fs::read_to_string(xdg_config_home().join(name))
-            && let Some(v) = parse_gtk_settings(&text)
-        {
+        let preference = fs::read_to_string(xdg_config_home().join(name))
+            .ok()
+            .and_then(|text| parse_gtk_settings(&text));
+        if let Some(v) = preference {
             return Some(v);
         }
     }

@@ -56,9 +56,10 @@ pub fn locate(settings: &Settings) -> Option<(bool, PathBuf)> {
     } else {
         ToolSource::Auto
     };
-    if matches!(source, ToolSource::Path | ToolSource::Auto)
-        && let Some(exe) = path_executable()
-    {
+    let path_exe = matches!(source, ToolSource::Path | ToolSource::Auto)
+        .then(path_executable)
+        .flatten();
+    if let Some(exe) = path_exe {
         return Some((true, exe));
     }
     if quark_platform::allows_bundled_tools()
@@ -195,6 +196,10 @@ fn download_latest() -> Result<(), Error> {
     logs::log_line(&format!("Fetching {name}..."));
     let archive = tools_dir().join(name);
     http::download_file(url, &archive).map_err(|e| Error(e.to_string()))?;
+    if let Err(error) = verify_checksum(&release, name, &archive) {
+        let _ = fs::remove_file(&archive);
+        return Err(error);
+    }
     extract_and_install(&archive, tag)?;
     let _ = fs::remove_file(&archive);
     Ok(())
@@ -225,6 +230,42 @@ fn find_btbn_asset(release: &json::Value) -> Result<&json::Value, Error> {
         .ok_or_else(|| Error(format!("FFmpeg release has no asset named {target}")))
 }
 
+fn find_checksums_asset(release: &json::Value) -> Option<&json::Value> {
+    release
+        .get("assets")
+        .and_then(json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|asset| asset.get_str("name") == Some("checksums.sha256"))
+}
+
+fn verify_checksum(release: &json::Value, archive_name: &str, path: &Path) -> Result<(), Error> {
+    let sums = find_checksums_asset(release)
+        .ok_or_else(|| Error("FFmpeg release is missing checksums.sha256".into()))?;
+    let url = sums
+        .get_str("browser_download_url")
+        .ok_or_else(|| Error("missing FFmpeg checksum URL".into()))?;
+    let body = http::fetch_body(url).map_err(|e| Error(e.to_string()))?;
+    let expected = checksum_for(&body, archive_name)
+        .ok_or_else(|| Error(format!("checksums.sha256 has no entry for {archive_name}")))?;
+    let actual = quark_platform::sha256_hex(path).map_err(|e| Error(e.to_string()))?;
+    if actual.eq_ignore_ascii_case(&expected) {
+        Ok(())
+    } else {
+        Err(Error(format!("Checksum mismatch for {archive_name}")))
+    }
+}
+
+fn checksum_for(body: &str, archive_name: &str) -> Option<String> {
+    body.lines().find_map(|line| {
+        let mut fields = line.split_whitespace();
+        let hash = fields.next()?;
+        let name = fields.next()?.trim_start_matches('*');
+        (name == archive_name && hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit()))
+            .then(|| hash.to_ascii_lowercase())
+    })
+}
+
 fn extract_and_install(archive: &Path, version_label: &str) -> Result<(), Error> {
     let extract_dir = tools_dir().join(".ffmpeg-extract");
     let _ = fs::remove_dir_all(&extract_dir);
@@ -253,12 +294,11 @@ fn extract_archive(archive: &Path, dest: &Path) -> bool {
         let status = std::process::Command::new("powershell")
             .args([
                 "-NoProfile",
+                "-NonInteractive",
                 "-Command",
-                &format!(
-                    "Expand-Archive -LiteralPath '{}' -DestinationPath '{}' -Force",
-                    archive.display(),
-                    dest.display()
-                ),
+                "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
+                &archive.to_string_lossy(),
+                &dest.to_string_lossy(),
             ])
             .status();
         return status.map(|s| s.success()).unwrap_or(false);
@@ -296,4 +336,20 @@ fn install_binary(src: &Path, dest: &Path) -> Result<(), Error> {
     let _ = fs::remove_file(dest);
     fs::copy(src, dest).map_err(|e| Error(e.to_string()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::checksum_for;
+
+    #[test]
+    fn parses_btbn_checksum_lines() {
+        let hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let body = format!("{hash}  ffmpeg-master-latest-win64-gpl.zip\n{hash} *other.zip\n");
+        assert_eq!(
+            checksum_for(&body, "ffmpeg-master-latest-win64-gpl.zip").as_deref(),
+            Some(hash)
+        );
+        assert_eq!(checksum_for(&body, "missing.zip"), None);
+    }
 }

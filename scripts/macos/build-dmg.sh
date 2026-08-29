@@ -70,8 +70,20 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-echo "  Signing (ad-hoc)..."
-codesign --force --deep -s - "$app"
+sign_identity="${QUARK_MACOS_SIGN_IDENTITY:--}"
+notary_profile="${QUARK_MACOS_NOTARY_PROFILE:-}"
+if [[ -n "$notary_profile" && "$sign_identity" == "-" ]]; then
+  echo "error: notarization requires QUARK_MACOS_SIGN_IDENTITY" >&2
+  exit 1
+fi
+
+if [[ "$sign_identity" == "-" ]]; then
+  echo "  Signing (ad-hoc development build)..."
+  codesign --force --deep -s - "$app"
+else
+  echo "  Signing with Developer ID..."
+  codesign --force --deep --options runtime --timestamp -s "$sign_identity" "$app"
+fi
 
 echo "  Creating DMG..."
 staging="$(mktemp -d)"
@@ -81,10 +93,24 @@ dmg="$dist/QuarkDownloader-$version.dmg"
 hdiutil create -volname "Quark Downloader" -srcfolder "$staging" -ov -format UDZO "$dmg" >/dev/null
 rm -rf "$staging"
 
+if [[ "$sign_identity" != "-" ]]; then
+  codesign --force --timestamp -s "$sign_identity" "$dmg"
+fi
+if [[ -n "$notary_profile" ]]; then
+  echo "  Notarizing DMG..."
+  xcrun notarytool submit "$dmg" --keychain-profile "$notary_profile" --wait
+  xcrun stapler staple "$dmg"
+  xcrun stapler validate "$dmg"
+fi
+
 echo ""
 echo "Done:"
 echo "  $app"
 echo "  $dmg"
 echo ""
-echo "Note: the app is ad-hoc signed. Downloaded copies hit Gatekeeper;"
-echo "right-click > Open the first time, or: xattr -dr com.apple.quarantine \"<app>\""
+if [[ "$sign_identity" == "-" ]]; then
+  echo "Note: this release is ad-hoc signed. Downloaded copies may trigger Gatekeeper;"
+  echo "right-click > Open the first time, or: xattr -dr com.apple.quarantine \"<app>\""
+else
+  echo "Developer ID signature and notarization complete."
+fi

@@ -1,2 +1,9 @@
+#include <windows.h>
+#include "quark-version.h"
+
 #define IDI_APP_ICON 1
 IDI_APP_ICON ICON "../icons/icon-cli.ico"
+
+#define QUARK_FILE_DESCRIPTION "Quark Downloader command-line interface"
+#define QUARK_ORIGINAL_FILENAME "quark-downloader.exe"
+#include "version-info.rcinc"

@@ -3,26 +3,21 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 props="$root/android/keystore.properties"
 if [[ ! -f "$props" ]]; then
-  cat >&2 <<'EOF'
-Missing android/keystore.properties — needed to sign a release APK.
-
-Create a keystore (store it somewhere safe, not in git):
-
-  keytool -genkeypair -v \
-    -keystore "$HOME/quark-release.jks" \
-    -alias quark \
-    -keyalg RSA -keysize 2048 -validity 10000
-
-Then write android/keystore.properties (gitignored):
-
-  storeFile=/home/YOU/quark-release.jks
-  storePassword=YOUR_STORE_PASSWORD
-  keyAlias=quark
-  keyPassword=YOUR_KEY_PASSWORD
-
-Copy android/keystore.properties.example to start.
-EOF
-  exit 1
+  store_file="${QUARK_ANDROID_STORE_FILE:-$HOME/quark-release.jks}"
+  [[ -f "$store_file" ]] || {
+    echo "Android release keystore not found. Set QUARK_ANDROID_STORE_FILE or create $HOME/quark-release.jks." >&2
+    exit 1
+  }
+  export QUARK_ANDROID_STORE_FILE="$store_file"
+  if [[ -z "${QUARK_ANDROID_STORE_PASSWORD:-}" ]]; then
+    read -r -s -p "Android keystore password: " QUARK_ANDROID_STORE_PASSWORD
+    echo ""
+    export QUARK_ANDROID_STORE_PASSWORD
+  fi
+  [[ -n "$QUARK_ANDROID_STORE_PASSWORD" ]] || { echo "Android keystore password cannot be empty." >&2; exit 1; }
+  export QUARK_ANDROID_KEY_ALIAS="${QUARK_ANDROID_KEY_ALIAS:-quark}"
+  export QUARK_ANDROID_KEY_PASSWORD="${QUARK_ANDROID_KEY_PASSWORD:-$QUARK_ANDROID_STORE_PASSWORD}"
+  echo "  Using Android keystore: $QUARK_ANDROID_STORE_FILE"
 fi
 
 echo "  Building signed release APK..."
@@ -35,4 +30,11 @@ version="${version:-dev}"
 mkdir -p "$root/dist"
 dest="$root/dist/quark-downloader-${version}-android.apk"
 cp "$apk" "$dest"
+
+sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+[[ -n "$sdk" && -d "$sdk" ]] || { echo "Android SDK not found for APK verification." >&2; exit 1; }
+build_tools="$(find "$sdk/build-tools" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -V | tail -n1)"
+[[ -n "$build_tools" ]] || { echo "Android build-tools not found for APK verification." >&2; exit 1; }
+"$build_tools/apksigner" verify --verbose --print-certs "$dest"
+"$build_tools/zipalign" -c -P 16 -v 4 "$dest"
 echo "  $dest"

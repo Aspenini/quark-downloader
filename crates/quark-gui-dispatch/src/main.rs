@@ -137,7 +137,7 @@ fn collect_session(
 ) -> Result<session::MainSessionResult, String> {
     #[cfg(windows)]
     {
-        return windows::collect_main_session(default_output, settings);
+        windows::collect_main_session(default_output, settings)
     }
     #[cfg(not(windows))]
     {
@@ -175,10 +175,12 @@ fn show_info(message: &str) {
 fn helper_if_available() -> Option<HelperFrontend> {
     #[cfg(not(windows))]
     {
-        return HelperFrontend::discover(&builtin_frontends()).ok();
+        HelperFrontend::discover(&builtin_frontends()).ok()
     }
     #[cfg(windows)]
-    None
+    {
+        None
+    }
 }
 
 #[cfg(not(windows))]
@@ -233,7 +235,7 @@ fn run_download_with_progress(settings: &Settings, command: &str, cmd_args: &[St
     #[cfg(windows)]
     {
         let _ = settings;
-        return windows::run_progress(command, cmd_args);
+        windows::run_progress(command, cmd_args)
     }
     #[cfg(not(windows))]
     {
@@ -328,9 +330,7 @@ fn run_download_with_progress_helper(
         let _ = relay.relay(&line, &mut buf);
         for encoded in String::from_utf8_lossy(&buf).lines() {
             let cmd = decode_progress_line(encoded);
-            if let Some(cmd) = cmd
-                && progress.send(&cmd).is_err()
-            {
+            if cmd.as_ref().is_some_and(|cmd| progress.send(cmd).is_err()) {
                 user_closed = true;
                 let _ = child.kill();
                 break;

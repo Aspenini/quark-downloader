@@ -33,6 +33,16 @@ build: copy-bundled-tools
 dmg:
     @bash scripts/macos/build-dmg.sh
 
+[group('build')]
+[macos]
+dmg-release:
+    @QUARK_MACOS_SIGN_IDENTITY=- QUARK_MACOS_NOTARY_PROFILE= bash scripts/macos/build-dmg.sh
+
+[group('build')]
+[windows]
+windows-release: build
+    @powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/package-release.ps1
+
 [group('dev')]
 run:
     @cargo run -p quark-cli --
@@ -52,12 +62,12 @@ run-gui:
 [group('android')]
 [windows]
 android-debug:
-    @& .\android\gradlew.bat :app:assembleDebug
+    @& .\android\gradlew.bat -p android :app:assembleDebug
 
 [group('android')]
 [unix]
 android-debug:
-    @android/gradlew :app:assembleDebug
+    @android/gradlew -p android :app:assembleDebug
 
 [group('android')]
 [windows]

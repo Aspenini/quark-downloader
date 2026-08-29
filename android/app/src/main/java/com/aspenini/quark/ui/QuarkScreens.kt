@@ -473,8 +473,15 @@ private fun SettingsScreen(
         HorizontalDivider()
         Text("App", style = MaterialTheme.typography.titleSmall)
         Text(
-            "Quark Downloader ${com.aspenini.quark.BuildConfig.VERSION_NAME} (not on Play Store)",
+            "Quark Downloader ${com.aspenini.quark.BuildConfig.VERSION_NAME} · GPL-3.0 · not on Play Store",
             style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "Copyright © 2026 Aspenini. This app comes with no warranty. " +
+                "You may redistribute it under GPLv3. License, notices, and source: " +
+                "github.com/Aspenini/quark-downloader",
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         FilledTonalButton(onClick = onCheckAppUpdate, modifier = Modifier.fillMaxWidth()) {

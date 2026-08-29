@@ -171,7 +171,7 @@ pub fn extra_args_for_runtime(url: &str, runtime: Option<&str>) -> Vec<String> {
     };
     vec![
         "--remote-components".into(),
-        "ejs".into(),
+        "ejs:github".into(),
         "--js-runtimes".into(),
         runtime.to_string(),
     ]
@@ -395,8 +395,9 @@ fn check_and_update_if_needed() {
                 .trim_start_matches('v')
                 .to_string();
             let installed = installed_version();
-            if let Some(installed) = &installed
-                && !version_cmp::newer(&latest, installed)
+            if installed
+                .as_ref()
+                .is_some_and(|installed| !version_cmp::newer(&latest, installed))
             {
                 return;
             }
@@ -442,8 +443,9 @@ fn download_release(release: &json::Value) -> Result<(), Error> {
     let tmp = tools_dir().join(format!("{name}.download"));
     logs::log_line(&format!("Fetching {name} ({tag})..."));
     http::download_file(url, &tmp).map_err(|e| Error(e.to_string()))?;
-    if find_checksums_asset(release).is_some() {
-        verify_checksum(release, name, &tmp)?;
+    if let Err(error) = verify_checksum(release, name, &tmp) {
+        let _ = fs::remove_file(&tmp);
+        return Err(error);
     }
     install_binary(&tmp, &bundled_path())?;
     let _ = fs::write(
@@ -577,7 +579,7 @@ mod tests {
             args,
             [
                 "--remote-components",
-                "ejs",
+                "ejs:github",
                 "--js-runtimes",
                 "quickjs:/data/libqjs.so"
             ]
@@ -585,10 +587,11 @@ mod tests {
     }
 
     fn sample_settings() -> Settings {
-        let mut settings = Settings::default();
-        settings.strip_video_ids = true;
-        settings.sanitize_filenames = true;
-        settings
+        Settings {
+            strip_video_ids: true,
+            sanitize_filenames: true,
+            ..Settings::default()
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

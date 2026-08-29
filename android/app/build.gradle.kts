@@ -7,13 +7,27 @@ plugins {
 }
 
 val repoRoot = rootProject.projectDir.parentFile
+val generatedLicenseAssets = layout.buildDirectory.dir("generated/licenseAssets")
 val isWindows = System.getProperty("os.name").orEmpty().startsWith("Windows")
 val ksFile = rootProject.file("keystore.properties")
 val ks = Properties()
-val hasReleaseKeystore =
-    ksFile.exists().also { exists ->
-        if (exists) ksFile.inputStream().use { ks.load(it) }
+if (ksFile.exists()) ksFile.inputStream().use { ks.load(it) }
+
+fun signingValue(property: String, environment: String): String? =
+    ks.getProperty(property)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(environment)?.takeIf { it.isNotBlank() }
+
+val releaseStorePath = signingValue("storeFile", "QUARK_ANDROID_STORE_FILE")
+val releaseStoreFile =
+    releaseStorePath?.let { path ->
+        File(path).let { if (it.isAbsolute) it else rootProject.file(it) }
     }
+val releaseStorePassword = signingValue("storePassword", "QUARK_ANDROID_STORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "QUARK_ANDROID_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "QUARK_ANDROID_KEY_PASSWORD")
+val hasReleaseKeystore =
+    releaseStoreFile?.isFile == true &&
+        listOf(releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { it != null }
 
 fun pythonCmd(): List<String> =
     if (isWindows) listOf("py", "-3") else listOf("python3")
@@ -22,10 +36,10 @@ fun alignSoTree(dir: File) {
     if (!dir.exists()) return
     val script = File(repoRoot, "scripts/align_elf_16k.py")
     if (!script.exists()) return
-    exec {
+    providers.exec {
         commandLine(pythonCmd() + listOf(script.absolutePath, dir.absolutePath))
         isIgnoreExitValue = true
-    }
+    }.result.get()
 }
 
 android {
@@ -46,11 +60,10 @@ android {
     signingConfigs {
         if (hasReleaseKeystore) {
             create("release") {
-                val store = File(ks.getProperty("storeFile"))
-                storeFile = if (store.isAbsolute) store else rootProject.file(store)
-                storePassword = ks.getProperty("storePassword")
-                keyAlias = ks.getProperty("keyAlias")
-                keyPassword = ks.getProperty("keyPassword")
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
             }
         }
     }
@@ -106,6 +119,14 @@ val cargoJni =
         }
     }
 tasks.named("preBuild").configure { dependsOn(cargoJni) }
+
+val copyLicenseNotices =
+    tasks.register<Copy>("copyLicenseNotices") {
+        from(rootProject.file("LICENSE"), rootProject.file("APACHE-2.0"), rootProject.file("THIRD_PARTY_NOTICES.md"))
+        into(generatedLicenseAssets.map { it.dir("licenses") })
+    }
+android.sourceSets.getByName("main").assets.srcDir(generatedLicenseAssets)
+tasks.named("preBuild").configure { dependsOn(copyLicenseNotices) }
 
 afterEvaluate {
     listOf(
