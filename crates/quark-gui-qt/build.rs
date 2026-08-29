@@ -33,12 +33,17 @@ mod linux {
 
         let qml = src.canonicalize().unwrap_or(src.clone());
         let qml_define = format!("\"{}\"", qml.display());
+        // cc applies CFLAGS/CXXFLAGS after builder flags, so makepkg's
+        // -flto=auto would override -fno-lto and emit GCC LTO objects that
+        // rust-lld cannot extract qt_ui_run from.
+        strip_env_lto();
         let mut build = cc::Build::new();
         build
             .cpp(true)
             .file(&cpp)
             .flag_if_supported("-std=c++17")
             .flag_if_supported("-fPIC")
+            .flag_if_supported("-fno-lto")
             .define("QUARK_QT_AS_LIBRARY", None)
             .define("QUARK_QT_QML", qml_define.as_str())
             .warnings(false)
@@ -72,6 +77,25 @@ mod linux {
             }
             Err(e) => {
                 println!("cargo:warning=failed to compile Qt UI with system Qt: {e}");
+            }
+        }
+    }
+
+    fn strip_env_lto() {
+        for key in ["CFLAGS", "CXXFLAGS"] {
+            let Ok(val) = std::env::var(key) else {
+                continue;
+            };
+            let mut flags: Vec<&str> = val
+                .split_whitespace()
+                .filter(|flag| *flag != "-flto" && !flag.starts_with("-flto="))
+                .collect();
+            if !flags.iter().any(|flag| *flag == "-fno-lto") {
+                flags.push("-fno-lto");
+            }
+            // Safety: build script is single-threaded.
+            unsafe {
+                std::env::set_var(key, flags.join(" "));
             }
         }
     }

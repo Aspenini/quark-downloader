@@ -50,8 +50,8 @@ android {
         applicationId = "com.Aspenini.QuarkDownloader"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.0.0"
+        versionCode = 9
+        versionName = "1.0.1"
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }

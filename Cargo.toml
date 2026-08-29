@@ -15,7 +15,7 @@ members = [
 [workspace.package]
 edition = "2024"
 rust-version = "1.85"
-version = "1.0.0"
+version = "1.0.1"
 license = "MIT"
 repository = "https://github.com/Aspenini/quark-downloader"
 homepage = "https://github.com/Aspenini/quark-downloader"
