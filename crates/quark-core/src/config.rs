@@ -516,11 +516,11 @@ fn macos_prefers_dark() -> Option<bool> {
         if !out.status.success() {
             return Some(false);
         }
-        return Some(
+        Some(
             String::from_utf8_lossy(&out.stdout)
                 .to_ascii_lowercase()
                 .contains("dark"),
-        );
+        )
     }
     #[cfg(not(target_os = "macos"))]
     {

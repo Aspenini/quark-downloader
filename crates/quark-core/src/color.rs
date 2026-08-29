@@ -165,7 +165,7 @@ mod tests {
         assert!(painted.contains("oops"), "{painted:?}");
         assert_eq!(strip(&painted), "oops");
         assert_eq!(strip("plain"), "plain");
-        assert_eq!(title("Quark"), format!("\x1b[1;36mQuark\x1b[0m"));
+        assert_eq!(title("Quark"), "\x1b[1;36mQuark\x1b[0m");
     }
 
     #[test]

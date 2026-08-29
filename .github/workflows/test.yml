@@ -19,7 +19,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -41,7 +41,7 @@ jobs:
   msrv:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@1.85.0
       - name: Check declared minimum Rust version
         run: cargo check --workspace --locked
@@ -49,12 +49,12 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,x86_64-linux-android
@@ -65,7 +65,7 @@ jobs:
       - name: Build debug APK
         run: ./android/gradlew -p android :app:assembleDebug
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quark-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
@@ -73,7 +73,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
