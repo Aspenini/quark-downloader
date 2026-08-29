@@ -90,7 +90,7 @@ mod linux {
                 .split_whitespace()
                 .filter(|flag| *flag != "-flto" && !flag.starts_with("-flto="))
                 .collect();
-            if !flags.iter().any(|flag| *flag == "-fno-lto") {
+            if !flags.contains(&"-fno-lto") {
                 flags.push("-fno-lto");
             }
             // Safety: build script is single-threaded.
