@@ -31,13 +31,6 @@ foreach ($tool in @("ffmpeg.exe", "ffprobe.exe", "yt-dlp.exe")) {
   }
 }
 
-Write-Host "  UPX (CLI only)..."
-if (Get-Command upx -ErrorAction SilentlyContinue) {
-  & upx --best --lzma $binary
-} else {
-  Write-Host "  (upx not found, skipping)"
-}
-
 Write-Host ""
 Write-Host "Done:"
 Write-Host "  Staged portable package: $packageDir"

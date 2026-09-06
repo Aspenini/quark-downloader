@@ -47,15 +47,6 @@ if [[ "$system" == "Linux" ]]; then
   fi
 fi
 
-echo "  UPX (CLI only)..."
-if [[ "$system" == "Darwin" ]]; then
-  echo "  (upx skipped on macOS)"
-elif command -v upx >/dev/null 2>&1; then
-  upx --best --lzma "$package_dir/quark-downloader" || echo "  (upx failed, skipping)"
-else
-  echo "  (upx not found, skipping)"
-fi
-
 echo ""
 echo "Staged package:"
 echo "  $package_dir"

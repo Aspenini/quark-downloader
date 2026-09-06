@@ -305,7 +305,7 @@ fn set_view_visible(dlg: Handle, ids: &[i32], visible: bool) {
 
 fn resource_error(err: u32, stage: &str) -> String {
     format!(
-        "Could not open the download dialog ({stage}, Windows error {err}).\n\nFix:\n  1. just clean\n  2. just build\n  3. Run build\\quark-downloader-gui.exe\n\nDo not UPX quark-downloader-gui.exe."
+        "Could not open the download dialog ({stage}, Windows error {err}).\n\nFix:\n  1. just clean\n  2. just build\n  3. Run build\\quark-downloader-gui.exe."
     )
 }
 
